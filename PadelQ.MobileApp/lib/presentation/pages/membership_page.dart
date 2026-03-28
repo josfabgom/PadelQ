@@ -24,6 +24,10 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
   Widget build(BuildContext context) {
     final qrState = ref.watch(membershipQrProvider);
     final authState = ref.watch(authProvider);
+    
+    final membershipColor = _parseHexColor(authState.user?['membershipHexColor'] ?? authState.user?['MembershipHexColor']);
+    final balance = (authState.user?['balance'] ?? authState.user?['Balance'] ?? 0.0);
+    final hasDebt = balance > 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -32,6 +36,16 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          if (hasDebt)
+            Padding(
+              padding: EdgeInsets.only(right: 16.w),
+              child: Tooltip(
+                message: 'Tienes un saldo pendiente',
+                child: Icon(LucideIcons.alertTriangle, color: Colors.orange, size: 20.sp),
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(24.w),
@@ -41,9 +55,22 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
             Container(
               padding: EdgeInsets.all(24.w),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.blue.shade800, Colors.blue.shade600]),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    membershipColor,
+                    membershipColor.withOpacity(0.8),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(24.r),
-                boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+                boxShadow: [
+                  BoxShadow(
+                    color: membershipColor.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  )
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,7 +83,7 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
                         decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12.r)),
                         child: Text(
-                          'ACTIVO',
+                          authState.user?['isActive'] == false ? 'INACTIVO' : 'ACTIVO',
                           style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -69,15 +96,15 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                   ),
                   SizedBox(height: 8.h),
                   Text(
-                    authState.user?['membershipName'] ?? 'Socio PadelQ',
-                    style: TextStyle(color: Colors.white70, fontSize: 14.sp),
+                    authState.user?['membershipName'] ?? authState.user?['MembershipName'] ?? 'Socio PadelQ',
+                    style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.w500),
                   ),
                   Divider(color: Colors.white24, height: 32.h),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _InfoTile(label: 'ID SOCIO', value: '#${authState.user?['sub']?.toString().substring(0, 8) ?? '0001'}'),
-                      _InfoTile(label: 'DESCUENTO', value: '${authState.user?['discountPercentage'] ?? '15'}%'),
+                      _InfoTile(label: 'SALDO', value: '\$${balance.toStringAsFixed(2)}'),
+                      _InfoTile(label: 'BENEFICIO', value: '${authState.user?['discountPercentage'] ?? authState.user?['DiscountPercentage'] ?? '0'}% OFF'),
                     ],
                   ),
                 ],
@@ -146,6 +173,16 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
         ),
       ),
     );
+  }
+
+  Color _parseHexColor(String? hexString) {
+    if (hexString == null || hexString.isEmpty) return const Color(0xFF1E40AF); // Default deep blue
+    try {
+      final hexCode = hexString.replaceAll('#', '');
+      return Color(int.parse('FF$hexCode', radix: 16));
+    } catch (e) {
+      return const Color(0xFF1E40AF);
+    }
   }
 }
 

@@ -23,6 +23,11 @@ namespace PadelQ.Infrastructure.Persistence
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            builder.Entity<ApplicationUser>()
+                .HasIndex(u => u.Dni)
+                .IsUnique()
+                .HasFilter("[Dni] IS NOT NULL");
         }
     }
 }

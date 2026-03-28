@@ -6,9 +6,10 @@ import {
 } from 'recharts';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, TrendingDown, 
-  Layout, Settings, CreditCard, X, QrCode
+  Layout, Settings, CreditCard, X, QrCode, LogOut
 } from 'lucide-react';
 import Calendar from '../components/Calendar';
+import Header from '../components/Header';
 
 const Dashboard = () => {
   const [stats, setStats] = useState([]);
@@ -43,6 +44,7 @@ const Dashboard = () => {
 
   return (
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
+      <Header />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Panel de Control</h1>

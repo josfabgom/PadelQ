@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users as UsersIcon, Mail, Phone, Calendar, Search, Filter, X, CreditCard } from 'lucide-react';
+import { Users as UsersIcon, Mail, Phone, Calendar, Search, Filter, X, CreditCard, ArrowLeft, Edit2, Trash2, Power, ShieldAlert, UserPlus, MapPin, Hash, Image as ImageIcon, DollarSign, ArrowRight } from 'lucide-react';
+import Header from '../components/Header';
 
 interface User {
   id: string;
   fullName: string;
   email: string;
   phoneNumber?: string;
+  dni?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  photoUrl?: string;
   balance: number;
   membershipName?: string;
+  membershipHexColor?: string;
+  isActive: boolean;
 }
 
 const UsersPage = () => {
@@ -17,7 +25,24 @@ const UsersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userTransactions, setUserTransactions] = useState<any[]>([]);
+  
+  // Form state
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [dni, setDni] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [password, setPassword] = useState('');
+
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDescription, setPaymentDescription] = useState('');
   const [memberships, setMemberships] = useState<any[]>([]);
@@ -52,6 +77,19 @@ const UsersPage = () => {
     fetchMemberships();
   }, []);
 
+  const resetForm = () => {
+    setFullName('');
+    setEmail('');
+    setPhone('');
+    setDni('');
+    setAddress('');
+    setCity('');
+    setProvince('');
+    setPhotoUrl('');
+    setIsActive(true);
+    setPassword('');
+  };
+
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
@@ -78,17 +116,122 @@ const UsersPage = () => {
     }
   };
 
+  const fetchUserTransactions = async (userId: string) => {
+    try {
+      const response = await axios.get(`http://localhost:5041/api/transaction/user/${userId}`, config);
+      setUserTransactions(response.data);
+    } catch (err) {
+      console.error("Error al cargar transacciones", err);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post('http://localhost:5041/api/users', {
+        fullName,
+        email,
+        password,
+        dni,
+        phoneNumber: phone
+      }, config);
+      setIsCreateModalOpen(false);
+      resetForm();
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Error al crear usuario", err);
+      const errorData = err.response?.data;
+      const errorMsg = typeof errorData === 'string' ? errorData : errorData?.title || errorData?.detail || JSON.stringify(errorData || "Error desconocido");
+      
+      if (errorMsg.includes('DNI_ALREADY_EXISTS')) {
+        alert("Error: El DNI ya se encuentra registrado para otro cliente.");
+      } else if (errorMsg.includes('DuplicateEmail') || errorMsg.includes('DuplicateUserName')) {
+        alert("Error: El Email ya se encuentra registrado.");
+      } else {
+        alert("Error al crear usuario: " + errorMsg);
+      }
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    try {
+      await axios.put(`http://localhost:5041/api/users/${selectedUser.id}`, {
+        fullName,
+        email,
+        phoneNumber: phone,
+        isActive,
+        dni,
+        address,
+        city,
+        province,
+        photoUrl
+      }, config);
+      setIsEditModalOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Error al actualizar usuario", err);
+      const errorData = err.response?.data;
+      const errorMsg = typeof errorData === 'string' ? errorData : errorData?.title || errorData?.detail || JSON.stringify(errorData || "Error desconocido");
+      
+      if (errorMsg.includes('DNI_ALREADY_EXISTS')) {
+        alert("Error: El DNI ya se encuentra registrado para otro cliente.");
+      } else if (errorMsg.includes('DuplicateEmail') || errorMsg.includes('DuplicateUserName')) {
+        alert("Error: El Email ya se encuentra registrado.");
+      } else {
+        alert("Error al actualizar usuario: " + errorMsg);
+      }
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!window.confirm("¿Está seguro de que desea eliminar este usuario?")) return;
+    try {
+      await axios.delete(`http://localhost:5041/api/users/${id}`, config);
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Error al eliminar usuario", err);
+      alert(err.response?.data || "No se pudo eliminar el usuario.");
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setFullName(user.fullName);
+    setEmail(user.email);
+    setPhone(user.phoneNumber || '');
+    setDni(user.dni || '');
+    setAddress(user.address || '');
+    setCity(user.city || '');
+    setProvince(user.province || '');
+    setPhotoUrl(user.photoUrl || '');
+    setIsActive(user.isActive);
+    setIsEditModalOpen(true);
+  };
+
   const filteredUsers = users.filter(user => 
     user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.dni && user.dni.includes(searchTerm))
   );
 
   return (
-    <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Gestión de Clientes</h1>
-          <p className="text-slate-500">LISTADO DE USUARIOS REGISTRADOS EN PADELQ</p>
+    <div className="p-8 bg-slate-50 min-h-screen font-outfit">
+      <Header />
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => window.history.back()}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span>Volver</span>
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Gestión de Clientes</h1>
+            <p className="text-slate-500 text-xs uppercase tracking-widest font-bold">Listado de usuarios registrados</p>
+          </div>
         </div>
         
         <div className="flex gap-4 w-full md:w-auto">
@@ -96,15 +239,18 @@ const UsersPage = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input 
               type="text" 
-              placeholder="Buscar por nombre o email..." 
+              placeholder="Buscar por nombre, email o DNI..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm"
             />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            <Filter className="w-4 h-4" />
-            <span>Filtros</span>
+          <button 
+            onClick={() => { resetForm(); setIsCreateModalOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Nuevo Cliente</span>
           </button>
         </div>
       </div>
@@ -123,7 +269,7 @@ const UsersPage = () => {
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Contacto</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membresía</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Saldo (Deuda)</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
+                  <th className="px-6 py-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -131,29 +277,45 @@ const UsersPage = () => {
                   <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-                          {user.fullName.charAt(0)}
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold overflow-hidden border-2 border-white shadow-sm">
+                          {user.photoUrl ? (
+                            <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            user.fullName.charAt(0)
+                          )}
                         </div>
                         <div>
-                          <div className="font-bold text-slate-900">{user.fullName}</div>
-                          <div className="text-xs text-slate-500">ID: {user.id.substring(0, 8)}...</div>
+                          <div className="flex items-center gap-2">
+                            <div className="font-bold text-slate-900">{user.fullName}</div>
+                            {!user.isActive && (
+                              <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-full uppercase">Inactivo</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono uppercase">DNI: {user.dni || '---'}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm text-slate-600">
-                          <Mail className="w-3 h-3" />
+                          <Mail className="w-3 h-3 text-slate-400" />
                           <span>{user.email}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-slate-600">
-                          <Phone className="w-3 h-3" />
-                          <span>{user.phoneNumber || 'No registrado'}</span>
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          <span>{user.phoneNumber || '---'}</span>
                         </div>
                       </div>
                     </td>
-                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 text-xs font-bold rounded-full ${user.membershipName ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                    <td className="px-6 py-4">
+                      <span 
+                        className={`px-3 py-1 text-xs font-bold rounded-full border shadow-sm`}
+                        style={{ 
+                          backgroundColor: user.membershipHexColor ? `${user.membershipHexColor}20` : '#f1f5f9',
+                          color: user.membershipHexColor || '#64748b',
+                          borderColor: user.membershipHexColor ? `${user.membershipHexColor}40` : '#e2e8f0'
+                        }}
+                      >
                         {user.membershipName || 'Sin Plan'}
                       </span>
                     </td>
@@ -165,23 +327,46 @@ const UsersPage = () => {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => { setSelectedUser(user); setIsPaymentModalOpen(true); }}
-                          className="text-emerald-600 hover:text-emerald-800 text-xs font-bold border border-emerald-200 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors"
+                          onClick={() => { setSelectedUser(user); fetchUserTransactions(user.id); setIsHistoryModalOpen(true); }}
+                          className="p-2 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-slate-100 shadow-sm"
+                          title="Ver Cta Cte / Historial"
                         >
-                          Cobrar/Pago
+                          <Calendar className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => { setSelectedUser(user); setPaymentAmount(user.balance > 0 ? user.balance : 0); setIsPaymentModalOpen(true); }}
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100 shadow-sm"
+                          title="Registrar Pago"
+                        >
+                          <DollarSign className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => { setSelectedUser(user); setIsMembershipModalOpen(true); }}
-                          className="text-indigo-600 hover:text-indigo-800 text-xs font-bold border border-indigo-200 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-100 shadow-sm"
+                          title="Asignar Plan"
                         >
-                          Plan
+                          <CreditCard className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => openEditModal(user)}
+                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-100 shadow-sm"
+                          title="Editar Datos"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100 shadow-sm"
+                          title="Eliminar Cliente"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
                       No se encontraron usuarios que coincidan con la búsqueda.
                     </td>
                   </tr>
@@ -192,27 +377,33 @@ const UsersPage = () => {
         </div>
       )}
 
-      {/* Modal Cobro/Pago */}
+      {/* MODAL COBRO/PAGO */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">Registrar Pago - {selectedUser?.fullName}</h2>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 font-outfit">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-900">Registrar Pago</h2>
+                <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">{selectedUser?.fullName}</p>
+              </div>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="text-emerald-400 hover:text-emerald-600 p-2 hover:bg-emerald-100 rounded-full transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
             <form onSubmit={handleRecordPayment} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Monto del Pago ($)</label>
-                <input 
-                  type="number" 
-                  required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  placeholder="0.00"
-                />
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input 
+                    type="number" 
+                    required
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value))}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-bold text-lg"
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Concepto/Descripción</label>
@@ -220,23 +411,23 @@ const UsersPage = () => {
                   type="text" 
                   value={paymentDescription}
                   onChange={(e) => setPaymentDescription(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  placeholder="Ej: Pago efectivo Marzo"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                  placeholder="Ej: Pago cuota mensual"
                 />
               </div>
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all"
+                  className="flex-1 px-4 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
                 >
-                  Registrar Pago
+                  Confirmar Pago
                 </button>
               </div>
             </form>
@@ -244,24 +435,168 @@ const UsersPage = () => {
         </div>
       )}
 
-      {/* Modal Asignar Plan */}
+      {/* MODAL NUEVO CLIENTE */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 font-outfit">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+              <div>
+                <h2 className="text-xl font-bold text-indigo-900">Nuevo Cliente</h2>
+                <p className="text-xs text-indigo-500 font-bold uppercase tracking-widest">Crear cuenta de acceso</p>
+              </div>
+              <button onClick={() => setIsCreateModalOpen(false)} className="text-indigo-400 hover:text-indigo-600 p-2 hover:bg-indigo-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Nombre Completo</label>
+                  <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">DNI (Clave Única)</label>
+                  <input type="text" required value={dni} onChange={(e) => setDni(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Contraseña Inicial</label>
+                  <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Teléfono</label>
+                  <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-3 border rounded-xl font-bold text-slate-600">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100">Crear Cliente</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR CLIENTE */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 font-outfit max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10 shadow-sm">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Editar Perfil de Cliente</h2>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Información detallada del usuario</p>
+              </div>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateUser} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-indigo-600 flex items-center gap-2">
+                    <UsersIcon className="w-4 h-4" /> Datos Personales
+                  </h3>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Nombre Completo</label>
+                    <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">DNI</label>
+                    <input type="text" required value={dni} onChange={(e) => setDni(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Email</label>
+                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                  </div>
+                   <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Teléfono</label>
+                    <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-indigo-600 flex items-center gap-2">
+                    <MapPin className="w-4 h-4" /> Ubicación
+                  </h3>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Dirección</label>
+                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Localidad</label>
+                      <input type="text" value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Provincia</label>
+                      <input type="text" value={province} onChange={(e) => setProvince(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">URL de Foto</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                         <input type="text" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://..." className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm" />
+                      </div>
+                      {photoUrl && (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border">
+                          <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isActive ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                    <Power className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Estado de la cuenta</div>
+                    <div className="text-xs text-slate-500">{isActive ? 'La cuenta está ACTIVA' : 'La cuenta está INACTIVA'}</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsActive(!isActive)}
+                  className={`w-14 h-7 rounded-full transition-all relative shadow-inner ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-md ${isActive ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              <div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-slate-50">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 px-4 py-4 border rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-colors">Guardar Cambios</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ASIGNAR PLAN */}
       {isMembershipModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">Asignar Membresía</h2>
-              <button onClick={() => setIsMembershipModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+              <h2 className="text-xl font-bold text-indigo-900">Asignar Plan</h2>
+              <button onClick={() => setIsMembershipModalOpen(false)} className="text-indigo-400 hover:text-indigo-600 p-2">
                 <X className="w-6 h-6" />
               </button>
             </div>
             <form onSubmit={handleAssignMembership} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Seleccionar Plan</label>
+               <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Plan de Membresía</label>
                 <select 
                   required
                   value={selectedMembershipId}
                   onChange={(e) => setSelectedMembershipId(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 >
                   <option value="">-- Seleccione un plan --</option>
                   {memberships.map(m => (
@@ -270,21 +605,82 @@ const UsersPage = () => {
                 </select>
               </div>
               <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setIsMembershipModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
-                >
-                  Asignar Plan
-                </button>
+                <button type="button" onClick={() => setIsMembershipModalOpen(false)} className="flex-1 px-4 py-3 border rounded-xl font-bold text-slate-600">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200">Asignar</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CTA CTE / HISTORIAL */}
+      {isHistoryModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-outfit">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-600" /> Cuenta Corriente
+                </h2>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{selectedUser?.fullName}</p>
+              </div>
+              <button onClick={() => setIsHistoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {userTransactions.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                    <span className="text-sm font-bold text-indigo-900 uppercase">Saldo Actual</span>
+                    <span className={`text-xl font-black ${selectedUser?.balance! > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      ${selectedUser?.balance.toFixed(2)}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Movimientos Recientes</h3>
+                    {userTransactions.map((t) => (
+                      <div key={t.id} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${t.type === 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {t.type === 0 ? <ArrowLeft className="w-4 h-4 rotate-180" /> : <ArrowLeft className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-slate-800">{t.description || (t.type === 0 ? 'Cargo' : 'Pago')}</div>
+                            <div className="text-[10px] text-slate-400">{new Date(t.date).toLocaleDateString()}</div>
+                          </div>
+                        </div>
+                        <div className={`font-bold ${t.type === 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {t.type === 0 ? '+' : '-'}${t.amount.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="w-8 h-8" />
+                  </div>
+                  <p>No hay movimientos registrados para este cliente.</p>
+                </div>
+              )}
+            </div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+               <button 
+                onClick={() => { setIsHistoryModalOpen(false); setPaymentAmount(selectedUser?.balance! > 0 ? selectedUser?.balance! : 0); setIsPaymentModalOpen(true); }}
+                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+              >
+                <DollarSign className="w-4 h-4" /> Registrar Pago
+              </button>
+              <button 
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -68,6 +68,7 @@ builder.Services.AddScoped<ICourtService, CourtService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IQrService, QrService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
 
 
  builder.Services.AddControllers()

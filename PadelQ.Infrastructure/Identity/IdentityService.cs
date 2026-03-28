@@ -32,20 +32,30 @@ namespace PadelQ.Infrastructure.Identity
             _context = context;
         }
 
-        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string fullName, string email, string password)
+        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string userName, string email, string password, string fullName, string? dni, string? phoneNumber)
         {
+            if (!string.IsNullOrEmpty(dni))
+            {
+                var existingUser = await _userManager.Users.AnyAsync(u => u.Dni == dni);
+                if (existingUser) return (false, "DNI_ALREADY_EXISTS");
+            }
+
             var user = new ApplicationUser
             {
-                UserName = email,
+                UserName = userName,
                 Email = email,
-                FullName = fullName
+                FullName = fullName,
+                Dni = dni,
+                PhoneNumber = phoneNumber,
+                IsActive = true
             };
 
             var result = await _userManager.CreateAsync(user, password);
-            return (result.Succeeded, user.Id);
+            if (!result.Succeeded) return (false, result.Errors.FirstOrDefault()?.Code ?? "UNKNOWN_ERROR");
+            return (true, user.Id);
         }
 
-        public async Task<string?> LoginAsync(string emailOrUser, string password)
+        public async Task<(string Token, string FullName, string Email)?> LoginAsync(string emailOrUser, string password)
         {
             var user = await _userManager.FindByEmailAsync(emailOrUser);
             if (user == null)
@@ -66,7 +76,8 @@ namespace PadelQ.Infrastructure.Identity
                 return null;
             }
 
-            return await GenerateJwtTokenAsync(user);
+            var token = await GenerateJwtTokenAsync(user);
+            return (token, user.FullName ?? "", user.Email ?? "");
         }
 
         public async Task<bool> IsEmailUniqueAsync(string email)
@@ -94,7 +105,6 @@ namespace PadelQ.Infrastructure.Identity
                     .Include(um => um.Membership)
                     .Where(um => um.UserId == u.Id && um.IsActive)
                     .OrderByDescending(um => um.StartDate)
-                    .Select(um => um.Membership!.Name)
                     .FirstOrDefault();
 
                 dtos.Add(new PadelQ.Application.Common.Models.UserDto
@@ -103,8 +113,16 @@ namespace PadelQ.Infrastructure.Identity
                     FullName = u.FullName ?? "",
                     Email = u.Email ?? "",
                     PhoneNumber = u.PhoneNumber,
+                    Dni = u.Dni,
+                    Address = u.Address,
+                    City = u.City,
+                    Province = u.Province,
+                    PhotoUrl = u.PhotoUrl,
                     Balance = charges - payments,
-                    MembershipName = activeMembership
+                    MembershipName = activeMembership?.Membership?.Name,
+                    DiscountPercentage = activeMembership?.Membership?.DiscountPercentage ?? 0,
+                    MembershipHexColor = activeMembership?.Membership?.HexColor,
+                    IsActive = u.IsActive
                 });
             }
 
@@ -128,7 +146,6 @@ namespace PadelQ.Infrastructure.Identity
                 .Include(um => um.Membership)
                 .Where(um => um.UserId == user.Id && um.IsActive)
                 .OrderByDescending(um => um.StartDate)
-                .Select(um => um.Membership!.Name)
                 .FirstOrDefault();
 
             return new PadelQ.Application.Common.Models.UserDto
@@ -137,28 +154,57 @@ namespace PadelQ.Infrastructure.Identity
                 FullName = user.FullName ?? "",
                 Email = user.Email ?? "",
                 PhoneNumber = user.PhoneNumber,
+                Dni = user.Dni,
+                Address = user.Address,
+                City = user.City,
+                Province = user.Province,
+                PhotoUrl = user.PhotoUrl,
                 Balance = charges - payments,
-                MembershipName = activeMembership
+                MembershipName = activeMembership?.Membership?.Name,
+                DiscountPercentage = activeMembership?.Membership?.DiscountPercentage ?? 0,
+                MembershipHexColor = activeMembership?.Membership?.HexColor,
+                IsActive = user.IsActive
             };
         }
 
-        public async Task<bool> UpdateUserAsync(string userId, string fullName, string email)
+        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl)
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return false;
+            if (!string.IsNullOrEmpty(dni))
+            {
+                var existingUser = await _userManager.Users.AnyAsync(u => u.Dni == dni && u.Id != userId);
+                if (existingUser) return (false, "DNI_ALREADY_EXISTS");
+            }
 
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return (false, "USER_NOT_FOUND");
+ 
             user.FullName = fullName;
             user.Email = email;
             user.UserName = email;
-
+            user.PhoneNumber = phoneNumber;
+            user.IsActive = isActive;
+            user.Dni = dni;
+            user.Address = address;
+            user.City = city;
+            user.Province = province;
+            user.PhotoUrl = photoUrl;
+ 
             var result = await _userManager.UpdateAsync(user);
-            return result.Succeeded;
+            if (!result.Succeeded) return (false, result.Errors.FirstOrDefault()?.Code ?? "UNKNOWN_ERROR");
+            return (true, "SUCCESS");
         }
 
         public async Task<bool> DeleteUserAsync(string userId)
         {
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return false;
+
+            // Constraint: No se puede borrar si ya tiene pagos registrados
+            var hasPayments = await _context.Transactions.AnyAsync(t => t.UserId == userId && t.Type == TransactionType.Payment);
+            if (hasPayments)
+            {
+                throw new InvalidOperationException("No se puede eliminar un cliente con historial de pagos. Considere desactivarlo.");
+            }
 
             var result = await _userManager.DeleteAsync(user);
             return result.Succeeded;

@@ -18,8 +18,10 @@ const LoginPage = () => {
         password
       });
       
-      const { token } = response.data;
+      const { token, fullName, email: userEmail } = response.data;
       localStorage.setItem('padelq_token', token);
+      localStorage.setItem('padelq_user_name', fullName);
+      localStorage.setItem('padelq_user_email', userEmail);
       
       // Redirect to dashboard
       window.location.href = '/dashboard';

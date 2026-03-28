@@ -16,7 +16,7 @@ namespace PadelQ.Api
             var log = "--- USER DIAGNOSTIC ---\n";
             foreach (var user in users)
             {
-                log += $"User: {user.UserName}, Email: {user.Email}, Name: {user.FullName}\n";
+                log += $"User: {user.UserName}, Email: {user.Email}, Name: {user.FullName}, DNI: {user.Dni}\n";
             }
             log += "------------------------\n";
             System.IO.File.WriteAllText("user_diag.txt", log);

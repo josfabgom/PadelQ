@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users } from 'lucide-react';
+import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users, LogOut } from 'lucide-react';
+import Header from '../components/Header';
 
 interface ActivitySchedule {
   id?: number;
@@ -127,6 +128,7 @@ const ActivitiesPage = () => {
 
   return (
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
+      <Header />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Actividades y Clases</h1>

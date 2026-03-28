@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using PadelQ.Application.Common.Interfaces;
 
 namespace PadelQ.Api.Controllers
 {
@@ -108,6 +109,18 @@ namespace PadelQ.Api.Controllers
             };
 
             _context.UserMemberships.Add(userMembership);
+            
+            // Generate initial charge
+            var transaction = new Transaction
+            {
+                UserId = userId,
+                Amount = membership.MonthlyPrice,
+                Date = DateTime.UtcNow,
+                Type = TransactionType.Charge,
+                Description = $"Cuota Mensual - {membership.Name} (Inicial)"
+            };
+            _context.Transactions.Add(transaction);
+
             await _context.SaveChangesAsync();
 
             return Ok(userMembership);
@@ -170,6 +183,14 @@ namespace PadelQ.Api.Controllers
                 Discount = membership.Membership?.DiscountPercentage ?? 0,
                 Status = "Active"
             });
+        }
+
+        [HttpPost("run-billing")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RunBilling([FromServices] IBillingService billingService)
+        {
+            var count = await billingService.GenerateMonthlyChargesAsync();
+            return Ok(new { Message = "Billing run completed", ChargesGenerated = count });
         }
     }
 }

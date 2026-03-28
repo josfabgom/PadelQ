@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { CreditCard, Plus, Trash2, Edit3, Save, X } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Edit3, Save, X, RefreshCw, LogOut } from 'lucide-react';
+import Header from '../components/Header';
 
 interface Membership {
   id?: number;
@@ -8,11 +9,13 @@ interface Membership {
   monthlyPrice?: number;
   discountPercentage?: number;
   description?: string;
+  hexColor?: string;
   // Fallback for API response (temp)
   Name?: string;
   MonthlyPrice?: number;
   DiscountPercentage?: number;
   Description?: string;
+  HexColor?: string;
 }
 
 const MembershipsPage = () => {
@@ -24,7 +27,8 @@ const MembershipsPage = () => {
     name: '',
     monthlyPrice: 0,
     discountPercentage: 0,
-    description: ''
+    description: '',
+    hexColor: '#6366f1'
   });
 
   const getHeaderConfig = () => {
@@ -71,7 +75,8 @@ const MembershipsPage = () => {
         name: formData.name,
         monthlyPrice: formData.monthlyPrice,
         discountPercentage: formData.discountPercentage,
-        description: formData.description
+        description: formData.description,
+        hexColor: formData.hexColor
       };
 
       if (editingMembership) {
@@ -81,7 +86,7 @@ const MembershipsPage = () => {
       }
       setIsModalOpen(false);
       setEditingMembership(null);
-      setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '' });
+      setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '', hexColor: '#6366f1' });
       fetchMemberships();
     } catch (err: any) {
       console.error("Error al guardar membresía", err);
@@ -104,7 +109,8 @@ const MembershipsPage = () => {
       name: membership.name || membership.Name || '',
       monthlyPrice: membership.monthlyPrice || membership.MonthlyPrice || 0,
       discountPercentage: membership.discountPercentage ?? membership.DiscountPercentage ?? 0,
-      description: membership.description || membership.Description || ''
+      description: membership.description || membership.Description || '',
+      hexColor: membership.hexColor || membership.HexColor || '#6366f1'
     });
     setIsModalOpen(true);
   };
@@ -125,22 +131,43 @@ const MembershipsPage = () => {
 
   return (
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
+      <Header />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Planes de Membresía</h1>
           <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Configura los beneficios para tus clientes</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingMembership(null);
-            setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '' });
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Plan
-        </button>
+        <div className="flex gap-4">
+          <button 
+            onClick={async () => {
+              if(!window.confirm("¿Desea generar las cuotas mensuales para todos los socios activos?")) return;
+              try {
+                const config = getHeaderConfig();
+                if (!config) return;
+                const res = await axios.post('http://localhost:5041/api/membership/run-billing', {}, config);
+                alert(`Proceso completado: ${res.data.chargesGenerated} cuotas generadas.`);
+              } catch (err) {
+                console.error(err);
+                alert("Error al ejecutar la facturación.");
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Facturación Mensual
+          </button>
+          <button 
+            onClick={() => {
+              setEditingMembership(null);
+              setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '', hexColor: '#6366f1' });
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+          >
+            <Plus className="w-5 h-5" />
+            Nuevo Plan
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -152,7 +179,7 @@ const MembershipsPage = () => {
           {memberships.map((membership) => (
             <div key={membership.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                <div className="p-3 rounded-xl" style={{ backgroundColor: `${membership.hexColor || membership.HexColor || '#6366f1'}20`, color: membership.hexColor || membership.HexColor || '#6366f1' }}>
                   <CreditCard className="w-6 h-6" />
                 </div>
                 <div className="flex gap-2">
@@ -245,6 +272,23 @@ const MembershipsPage = () => {
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0"
                 />
+              </div>
+               <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Color del Plan</label>
+                <div className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <input 
+                    type="color" 
+                    value={formData.hexColor}
+                    onChange={(e) => setFormData({...formData, hexColor: e.target.value})}
+                    className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <input 
+                    type="text" 
+                    value={formData.hexColor}
+                    onChange={(e) => setFormData({...formData, hexColor: e.target.value})}
+                    className="flex-1 bg-transparent border-0 outline-none font-mono text-sm uppercase"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Descripción</label>

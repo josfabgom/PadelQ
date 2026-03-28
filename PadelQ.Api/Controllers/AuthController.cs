@@ -21,7 +21,7 @@ namespace PadelQ.Api.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            var (succeeded, userId) = await _identityService.CreateUserAsync(request.FullName, request.Email, request.Password);
+            var (succeeded, userId) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, null, null);
             if (!succeeded) return BadRequest("Registration failed.");
 
             return Ok(new { UserId = userId });
@@ -30,10 +30,15 @@ namespace PadelQ.Api.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var token = await _identityService.LoginAsync(request.Email, request.Password);
-            if (token == null) return Unauthorized("Invalid credentials.");
-
-            return Ok(new { Token = token });
+            var result = await _identityService.LoginAsync(request.Email, request.Password);
+            if (result == null) return Unauthorized("Invalid credentials.");
+ 
+            return Ok(new 
+            { 
+                Token = result.Value.Token,
+                FullName = result.Value.FullName,
+                Email = result.Value.Email
+            });
         }
 
         [HttpGet("whoami")]

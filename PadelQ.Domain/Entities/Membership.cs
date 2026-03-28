@@ -22,6 +22,7 @@ namespace PadelQ.Domain.Entities
         public decimal DiscountPercentage { get; set; } = 0;
 
         public string? Description { get; set; }
+        public string? HexColor { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

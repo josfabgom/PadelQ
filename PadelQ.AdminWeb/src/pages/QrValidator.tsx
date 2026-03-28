@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { QrCode, User, Award, Percent, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { QrCode, User, Award, Percent, CheckCircle, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import Header from '../components/Header';
 
 const QrValidator = () => {
     const [token, setToken] = useState('');
@@ -38,6 +39,7 @@ const QrValidator = () => {
 
     return (
         <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
+            <Header />
             <div className="max-w-2xl mx-auto">
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-900">Validador de Membresía</h1>

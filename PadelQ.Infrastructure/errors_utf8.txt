@@ -1,0 +1,19 @@
+﻿  Determinando los proyectos que se van a restaurar...
+  Todos los proyectos están actualizados para la restauración.
+  PadelQ.Domain -> D:\Antigravity Proyectos\PadelQ\PadelQ.Domain\bin\Debug\net9.0\PadelQ.Domain.dll
+  PadelQ.Application -> D:\Antigravity Proyectos\PadelQ\PadelQ.Application\bin\Debug\net9.0\PadelQ.Application.dll
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(108,42): error CS0266: No se puede convertir implícitamente el tipo 'decimal' en 'int'. Ya existe una conversión explícita (compruebe si le falta una conversión) [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(79,75): warning CS1998: El método asincrónico carece de operadores "await" y se ejecutará de forma sincrónica. Puede usar el operador 'await' para esperar llamadas API que no sean de bloqueo o 'await Task.Run(...)' para hacer tareas enlazadas a la CPU en un subproceso en segundo plano. [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(143,38): error CS0266: No se puede convertir implícitamente el tipo 'decimal' en 'int'. Ya existe una conversión explícita (compruebe si le falta una conversión) [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+
+ERROR al compilar.
+
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(79,75): warning CS1998: El método asincrónico carece de operadores "await" y se ejecutará de forma sincrónica. Puede usar el operador 'await' para esperar llamadas API que no sean de bloqueo o 'await Task.Run(...)' para hacer tareas enlazadas a la CPU en un subproceso en segundo plano. [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(108,42): error CS0266: No se puede convertir implícitamente el tipo 'decimal' en 'int'. Ya existe una conversión explícita (compruebe si le falta una conversión) [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\Identity\IdentityService.cs(143,38): error CS0266: No se puede convertir implícitamente el tipo 'decimal' en 'int'. Ya existe una conversión explícita (compruebe si le falta una conversión) [D:\Antigravity Proyectos\PadelQ\PadelQ.Infrastructure\PadelQ.Infrastructure.csproj]
+    1 Advertencia(s)
+    2 Errores
+
+Tiempo transcurrido 00:00:01.60
+
+Hay actualizaciones de carga de trabajo disponibles. Ejecute "dotnet workload list" para obtener más información.
