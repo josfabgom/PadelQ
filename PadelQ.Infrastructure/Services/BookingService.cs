@@ -88,17 +88,39 @@ namespace PadelQ.Infrastructure.Services
                 var court = await _context.Courts.FindAsync(courtId);
                 var effectivePricePerHour = court?.PricePerHour ?? pricePerHour;
 
+                // Aplicar descuento por membresía activa
+                var membershipDiscount = await _context.UserMemberships
+                    .Include(um => um.Membership)
+                    .Where(um => um.UserId == userId && um.IsActive)
+                    .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
+                    .FirstOrDefaultAsync();
+
+                var basePrice = (decimal)(durationMinutes / 60.0) * effectivePricePerHour;
+                var finalPrice = basePrice * (1 - (membershipDiscount / 100m));
+
                 var booking = new Booking
                 {
                     UserId = userId,
                     CourtId = courtId,
                     StartTime = startTime,
                     EndTime = endTime,
-                    Price = (decimal)(durationMinutes / 60.0) * effectivePricePerHour,
+                    Price = finalPrice,
                     Status = BookingStatus.Confirmed
                 };
 
                 _context.Bookings.Add(booking);
+
+                // Crear cargo en la cuenta del usuario para la reserva
+                var transactionEntry = new Transaction
+                {
+                    UserId = userId,
+                    Amount = finalPrice,
+                    Type = TransactionType.Charge,
+                    Date = DateTime.UtcNow,
+                    Description = $"Reserva de Cancha: {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : "")
+                };
+                _context.Transactions.Add(transactionEntry);
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 

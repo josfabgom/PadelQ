@@ -44,11 +44,11 @@ const MembershipsPage = () => {
     e.preventDefault();
     try {
       const payload = {
-        Id: editingMembership?.id || 0,
-        Name: formData.Name || formData.name,
-        MonthlyPrice: formData.MonthlyPrice || formData.monthlyPrice,
-        DiscountPercentage: formData.DiscountPercentage ?? formData.discountPercentage ?? 0,
-        Description: formData.Description || formData.description
+        id: editingMembership?.id || 0,
+        name: formData.name || formData.Name,
+        monthlyPrice: formData.monthlyPrice || formData.MonthlyPrice,
+        discountPercentage: formData.discountPercentage ?? formData.DiscountPercentage ?? 0,
+        description: formData.description || formData.Description
       };
 
       if (editingMembership) {
@@ -145,6 +145,9 @@ const MembershipsPage = () => {
                 </span>
                 <span className="text-slate-400 text-sm font-medium">/mes</span>
               </div>
+              <div className="mt-2 text-emerald-600 font-bold text-sm">
+                Benefit: {membership.discountPercentage ?? membership.DiscountPercentage ?? 0}% off everything
+              </div>
             </div>
           ))}
           {memberships.length === 0 && (
@@ -188,24 +191,26 @@ const MembershipsPage = () => {
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Precio Mensual ($)</label>
+                <p className="text-xs text-slate-500 mb-2">Costo que el usuario paga por el plan</p>
                 <input 
                   type="number" 
                   required
-                  value={formData.MonthlyPrice || formData.monthlyPrice || 0}
-                  onChange={(e) => setFormData({...formData, MonthlyPrice: parseFloat(e.target.value)})}
+                  value={formData.monthlyPrice || formData.MonthlyPrice || 0}
+                  onChange={(e) => setFormData({...formData, monthlyPrice: parseFloat(e.target.value)})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0.00"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Porcentaje de Descuento (%)</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Beneficio de Descuento (%)</label>
+                <p className="text-xs text-slate-500 mb-2">Descuento aplicado a alquileres y actividades</p>
                 <input 
                   type="number" 
                   required
                   min="0"
                   max="100"
-                  value={formData.DiscountPercentage ?? formData.discountPercentage ?? 0}
-                  onChange={(e) => setFormData({...formData, DiscountPercentage: parseFloat(e.target.value)})}
+                  value={formData.discountPercentage ?? formData.DiscountPercentage ?? 0}
+                  onChange={(e) => setFormData({...formData, discountPercentage: parseFloat(e.target.value)})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0"
                 />

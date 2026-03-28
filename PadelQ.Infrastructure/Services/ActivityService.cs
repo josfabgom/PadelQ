@@ -101,6 +101,29 @@ namespace PadelQ.Infrastructure.Services
             };
 
             _context.ActivitySignups.Add(signup);
+
+            // Crear cargo en la cuenta del usuario si la actividad tiene precio
+            if (activity.Price > 0)
+            {
+                var membershipDiscount = await _context.UserMemberships
+                    .Include(um => um.Membership)
+                    .Where(um => um.UserId == userId && um.IsActive)
+                    .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
+                    .FirstOrDefaultAsync();
+
+                var finalPrice = activity.Price * (1 - (membershipDiscount / 100m));
+
+                var transaction = new Transaction
+                {
+                    UserId = userId,
+                    Amount = finalPrice,
+                    Type = TransactionType.Charge,
+                    Date = DateTime.UtcNow,
+                    Description = $"Inscripción a actividad: {activity.Name} (Descuento membresía aplicado)"
+                };
+                _context.Transactions.Add(transaction);
+            }
+
             await _context.SaveChangesAsync();
 
             return (true, "Inscripción exitosa.");
