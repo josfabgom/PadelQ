@@ -1,0 +1,68 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+import 'package:padelq_mobile/presentation/pages/login_page.dart';
+import 'package:padelq_mobile/presentation/pages/home_page.dart';
+import 'package:padelq_mobile/presentation/pages/users_page.dart';
+import 'package:padelq_mobile/presentation/pages/register_page.dart';
+import 'package:padelq_mobile/presentation/pages/booking_page.dart';
+import 'package:padelq_mobile/presentation/pages/admin_settings_page.dart';
+import 'package:padelq_mobile/presentation/pages/activities_page.dart';
+import 'package:padelq_mobile/presentation/pages/membership_page.dart';
+
+
+void main() {
+  runApp(const ProviderScope(child: MyApp()));
+}
+
+final _router = GoRouter(
+  initialLocation: '/login',
+  routes: [
+    GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+    GoRoute(path: '/register', builder: (context, state) => const RegisterPage()),
+    GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+    GoRoute(path: '/users', builder: (context, state) => const UsersPage()),
+    GoRoute(path: '/booking', builder: (context, state) => const BookingPage()),
+    GoRoute(path: '/admin-settings', builder: (context, state) => const AdminSettingsPage()),
+    GoRoute(path: '/activities', builder: (context, state) => const ActivitiesPage()),
+    GoRoute(path: '/membership', builder: (context, state) => const MembershipPage()),
+
+  ],
+);
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenUtilInit(
+      designSize: const Size(390, 844),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return MaterialApp.router(
+          title: 'PadelQ',
+          debugShowCheckedModeBanner: false,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('es', ''),
+            Locale('en', ''),
+          ],
+          locale: const Locale('es', ''),
+          theme: ThemeData(
+            useMaterial3: true,
+            colorSchemeSeed: const Color(0xFF1E88E5),
+            fontFamily: 'Outfit',
+          ),
+          routerConfig: _router,
+        );
+      },
+    );
+  }
+}

@@ -1,0 +1,4 @@
+--- USER DIAGNOSTIC ---
+User: josfabgom@gmail.com, Email: josfabgom@gmail.com, Name: fabian
+User: Admin, Email: admin@padelq.com, Name: Administrador Sistema
+------------------------
