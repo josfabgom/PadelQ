@@ -6,10 +6,12 @@ interface Membership {
   id?: number;
   name?: string;
   monthlyPrice?: number;
+  discountPercentage?: number;
   description?: string;
   // Support both casings from API
   Name?: string;
   MonthlyPrice?: number;
+  DiscountPercentage?: number;
   Description?: string;
 }
 
@@ -18,7 +20,7 @@ const MembershipsPage = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
-  const [formData, setFormData] = useState<any>({ Name: '', MonthlyPrice: 0, Description: '' });
+  const [formData, setFormData] = useState<any>({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
 
   const token = localStorage.getItem('padelq_token');
   const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -45,6 +47,7 @@ const MembershipsPage = () => {
         Id: editingMembership?.id || 0,
         Name: formData.Name || formData.name,
         MonthlyPrice: formData.MonthlyPrice || formData.monthlyPrice,
+        DiscountPercentage: formData.DiscountPercentage ?? formData.discountPercentage ?? 0,
         Description: formData.Description || formData.description
       };
 
@@ -55,7 +58,7 @@ const MembershipsPage = () => {
       }
       setIsModalOpen(false);
       setEditingMembership(null);
-      setFormData({ Name: '', MonthlyPrice: 0, Description: '' });
+      setFormData({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
       fetchMemberships();
     } catch (err: any) {
       console.error("Error al guardar membresía", err);
@@ -72,6 +75,7 @@ const MembershipsPage = () => {
       Id: membership.id,
       Name: membership.name || membership.Name,
       MonthlyPrice: membership.monthlyPrice || membership.MonthlyPrice,
+      DiscountPercentage: membership.discountPercentage ?? membership.DiscountPercentage ?? 0,
       Description: membership.description || membership.Description
     });
     setIsModalOpen(true);
@@ -163,7 +167,7 @@ const MembershipsPage = () => {
                 onClick={() => {
                   setIsModalOpen(false);
                   setEditingMembership(null);
-                  setFormData({ Name: '', MonthlyPrice: 0, Description: '' });
+                  setFormData({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
                 }} 
                 className="text-slate-400 hover:text-slate-600"
               >
@@ -191,6 +195,19 @@ const MembershipsPage = () => {
                   onChange={(e) => setFormData({...formData, MonthlyPrice: parseFloat(e.target.value)})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Porcentaje de Descuento (%)</label>
+                <input 
+                  type="number" 
+                  required
+                  min="0"
+                  max="100"
+                  value={formData.DiscountPercentage ?? formData.discountPercentage ?? 0}
+                  onChange={(e) => setFormData({...formData, DiscountPercentage: parseFloat(e.target.value)})}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="0"
                 />
               </div>
               <div>
