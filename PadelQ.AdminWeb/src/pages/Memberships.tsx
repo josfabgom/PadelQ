@@ -20,17 +20,37 @@ const MembershipsPage = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
-  const [formData, setFormData] = useState<any>({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    monthlyPrice: 0,
+    discountPercentage: 0,
+    description: ''
+  });
 
-  const token = localStorage.getItem('padelq_token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const getHeaderConfig = () => {
+    const token = localStorage.getItem('padelq_token');
+    if (!token) {
+      console.error("No se encontró el token en localStorage");
+      return null;
+    }
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
 
   const fetchMemberships = async () => {
+    const config = getHeaderConfig();
+    if (!config) {
+        window.location.href = '/login';
+        return;
+    }
     try {
       const response = await axios.get('http://localhost:5041/api/membership', config);
       setMemberships(response.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al cargar membresías", err);
+      if (err.response?.status === 401) {
+        alert("Sesión expirada o no autorizada. Por favor, inicia sesión de nuevo.");
+        window.location.href = '/login';
+      }
     } finally {
       setLoading(false);
     }
@@ -42,13 +62,16 @@ const MembershipsPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const config = getHeaderConfig();
+    if (!config) return;
+
     try {
       const payload = {
         id: editingMembership?.id || 0,
-        name: formData.name || formData.Name,
-        monthlyPrice: formData.monthlyPrice || formData.MonthlyPrice,
-        discountPercentage: formData.discountPercentage ?? formData.DiscountPercentage ?? 0,
-        description: formData.description || formData.Description
+        name: formData.name,
+        monthlyPrice: formData.monthlyPrice,
+        discountPercentage: formData.discountPercentage,
+        description: formData.description
       };
 
       if (editingMembership) {
@@ -58,31 +81,39 @@ const MembershipsPage = () => {
       }
       setIsModalOpen(false);
       setEditingMembership(null);
-      setFormData({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
+      setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '' });
       fetchMemberships();
     } catch (err: any) {
       console.error("Error al guardar membresía", err);
-      const errorMsg = err.response?.data?.errors 
-        ? JSON.stringify(err.response.data.errors) 
-        : (err.response?.data || err.message);
-      alert(`Error al guardar la membresía: ${errorMsg}`);
+      const status = err.response?.status;
+      const data = err.response?.data;
+      
+      let msg = `Error ${status}: `;
+      if (status === 401) msg += "No estás autenticado o la sesión expiró.";
+      else if (status === 403) msg += "No tienes permisos de Administrador para realizar esta acción.";
+      else msg += typeof data === 'string' ? data : JSON.stringify(data || err.message);
+      
+      alert(msg);
+      if (status === 401) window.location.href = '/login';
     }
   };
 
   const handleEdit = (membership: Membership) => {
     setEditingMembership(membership);
     setFormData({
-      Id: membership.id,
-      Name: membership.name || membership.Name,
-      MonthlyPrice: membership.monthlyPrice || membership.MonthlyPrice,
-      DiscountPercentage: membership.discountPercentage ?? membership.DiscountPercentage ?? 0,
-      Description: membership.description || membership.Description
+      name: membership.name || membership.Name || '',
+      monthlyPrice: membership.monthlyPrice || membership.MonthlyPrice || 0,
+      discountPercentage: membership.discountPercentage ?? membership.DiscountPercentage ?? 0,
+      description: membership.description || membership.Description || ''
     });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar este plan?")) return;
+    const config = getHeaderConfig();
+    if (!config) return;
+
     try {
       await axios.delete(`http://localhost:5041/api/membership/${id}`, config);
       fetchMemberships();
@@ -97,10 +128,14 @@ const MembershipsPage = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Planes de Membresía</h1>
-          <p className="text-slate-500">CONFIGURA LOS PLANES MENSUALES PARA TUS CLIENTES</p>
+          <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Configura los beneficios para tus clientes</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingMembership(null);
+            setFormData({ name: '', monthlyPrice: 0, discountPercentage: 0, description: '' });
+            setIsModalOpen(true);
+          }}
           className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
         >
           <Plus className="w-5 h-5" />
@@ -146,7 +181,7 @@ const MembershipsPage = () => {
                 <span className="text-slate-400 text-sm font-medium">/mes</span>
               </div>
               <div className="mt-2 text-emerald-600 font-bold text-sm">
-                Benefit: {membership.discountPercentage ?? membership.DiscountPercentage ?? 0}% off everything
+                Descuento en Alquiler/Actividades: {membership.discountPercentage ?? membership.DiscountPercentage ?? 0}%
               </div>
             </div>
           ))}
@@ -167,11 +202,7 @@ const MembershipsPage = () => {
                 {editingMembership ? 'Editar Plan de Membresía' : 'Nuevo Plan de Membresía'}
               </h2>
               <button 
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingMembership(null);
-                  setFormData({ Name: '', MonthlyPrice: 0, DiscountPercentage: 0, Description: '' });
-                }} 
+                onClick={() => setIsModalOpen(false)} 
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-6 h-6" />
@@ -183,10 +214,10 @@ const MembershipsPage = () => {
                 <input 
                   type="text" 
                   required
-                  value={formData.Name || formData.name || ''}
-                  onChange={(e) => setFormData({...formData, Name: e.target.value})}
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  placeholder="Ej: Plan Mensual Pro"
+                  placeholder="Ej: Socio Oro"
                 />
               </div>
               <div>
@@ -195,7 +226,7 @@ const MembershipsPage = () => {
                 <input 
                   type="number" 
                   required
-                  value={formData.monthlyPrice || formData.MonthlyPrice || 0}
+                  value={formData.monthlyPrice}
                   onChange={(e) => setFormData({...formData, monthlyPrice: parseFloat(e.target.value)})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0.00"
@@ -209,7 +240,7 @@ const MembershipsPage = () => {
                   required
                   min="0"
                   max="100"
-                  value={formData.discountPercentage ?? formData.DiscountPercentage ?? 0}
+                  value={formData.discountPercentage}
                   onChange={(e) => setFormData({...formData, discountPercentage: parseFloat(e.target.value)})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="0"
@@ -218,8 +249,8 @@ const MembershipsPage = () => {
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Descripción</label>
                 <textarea 
-                  value={formData.Description || formData.description || ''}
-                  onChange={(e) => setFormData({...formData, Description: e.target.value})}
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-24 resize-none"
                   placeholder="Describe los beneficios..."
                 />
@@ -232,12 +263,12 @@ const MembershipsPage = () => {
                 >
                   Cancelar
                 </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
-                  >
-                    {editingMembership ? 'Actualizar Plan' : 'Crear Plan'}
-                  </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
+                >
+                  {editingMembership ? 'Actualizar Plan' : 'Crear Plan'}
+                </button>
               </div>
             </form>
           </div>
