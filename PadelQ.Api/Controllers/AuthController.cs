@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using PadelQ.Application.Common.Interfaces;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using System.Linq;
 
 namespace PadelQ.Api.Controllers
 {
@@ -31,6 +34,19 @@ namespace PadelQ.Api.Controllers
             if (token == null) return Unauthorized("Invalid credentials.");
 
             return Ok(new { Token = token });
+        }
+
+        [HttpGet("whoami")]
+        [Authorize]
+        public IActionResult WhoAmI()
+        {
+            return Ok(new
+            {
+                UserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
+                Email = User.FindFirstValue(ClaimTypes.Email),
+                Roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value),
+                Claims = User.Claims.Select(c => new { c.Type, c.Value })
+            });
         }
     }
 

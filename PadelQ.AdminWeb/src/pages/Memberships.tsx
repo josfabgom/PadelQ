@@ -8,7 +8,7 @@ interface Membership {
   monthlyPrice?: number;
   discountPercentage?: number;
   description?: string;
-  // Support both casings from API
+  // Fallback for API response (temp)
   Name?: string;
   MonthlyPrice?: number;
   DiscountPercentage?: number;
