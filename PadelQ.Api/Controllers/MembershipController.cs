@@ -127,7 +127,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet("user/{userId}")]
-        public async Task<ActionResult<UserMembership>> GetUserMembership(string userId)
+        public async Task<IActionResult> GetUserMembership(string userId)
         {
             var userMembership = await _context.UserMemberships
                 .Include(um => um.Membership)
@@ -137,7 +137,22 @@ namespace PadelQ.Api.Controllers
 
             if (userMembership == null) return NotFound("No active membership found");
 
-            return userMembership;
+            var expiryDate = await CalculateExpiryDate(userId, userMembership.StartDate);
+            var isExpired = DateTime.UtcNow > expiryDate;
+
+            return Ok(new
+            {
+                userMembership.Id,
+                userMembership.UserId,
+                userMembership.MembershipId,
+                userMembership.StartDate,
+                userMembership.IsActive,
+                Membership = userMembership.Membership,
+                ExpiryDate = expiryDate,
+                IsExpired = isExpired,
+                // Override discount if expired
+                ActualDiscount = isExpired ? 0 : (userMembership.Membership?.DiscountPercentage ?? 0)
+            });
         }
 
         [HttpGet("generate-qr")]
@@ -152,8 +167,8 @@ namespace PadelQ.Api.Controllers
 
             if (!hasActiveMembership) return BadRequest("Se requiere una membresía activa para generar el código QR.");
 
-            var token = _qrService.GenerateToken(userId);
-            return Ok(new { token });
+            var (token, shortCode) = _qrService.GenerateToken(userId);
+            return Ok(new { token, shortCode });
         }
 
         [HttpPost("validate-qr")]
@@ -176,12 +191,17 @@ namespace PadelQ.Api.Controllers
                 return BadRequest("El usuario ya no tiene una membresía activa.");
             }
 
+            var expiryDate = await CalculateExpiryDate(userId, membership.StartDate);
+            var isExpired = DateTime.UtcNow > expiryDate;
+
             return Ok(new
             {
                 UserName = user?.FullName ?? "Usuario Desconocido",
                 MembershipName = membership.Membership?.Name,
-                Discount = membership.Membership?.DiscountPercentage ?? 0,
-                Status = "Active"
+                Discount = isExpired ? 0 : (membership.Membership?.DiscountPercentage ?? 0),
+                ExpiryDate = expiryDate,
+                IsExpired = isExpired,
+                Status = isExpired ? "Expired" : "Active"
             });
         }
 
@@ -191,6 +211,19 @@ namespace PadelQ.Api.Controllers
         {
             var count = await billingService.GenerateMonthlyChargesAsync();
             return Ok(new { Message = "Billing run completed", ChargesGenerated = count });
+        }
+
+        private async Task<DateTime> CalculateExpiryDate(string userId, DateTime startDate)
+        {
+            // Find last payment
+            var lastPayment = await _context.Transactions
+                .Where(t => t.UserId == userId && t.Type == TransactionType.Payment)
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefaultAsync();
+
+            // Expiry is 30 days after last payment, or 30 days after membership start if no payment
+            var baseDate = lastPayment?.Date ?? startDate;
+            return baseDate.AddDays(30);
         }
     }
 }

@@ -7,14 +7,16 @@ final membershipServiceProvider = Provider((ref) => MembershipService());
 class MembershipQrState {
   final bool isLoading;
   final String? qrToken;
+  final String? shortCode;
   final String? error;
 
-  MembershipQrState({this.isLoading = false, this.qrToken, this.error});
+  MembershipQrState({this.isLoading = false, this.qrToken, this.shortCode, this.error});
 
-  MembershipQrState copyWith({bool? isLoading, String? qrToken, String? error}) {
+  MembershipQrState copyWith({bool? isLoading, String? qrToken, String? shortCode, String? error}) {
     return MembershipQrState(
       isLoading: isLoading ?? this.isLoading,
       qrToken: qrToken ?? this.qrToken,
+      shortCode: shortCode ?? this.shortCode,
       error: error ?? this.error,
     );
   }
@@ -32,9 +34,13 @@ class MembershipQrNotifier extends StateNotifier<MembershipQrState> {
 
   Future<void> fetchQrToken() async {
     state = state.copyWith(isLoading: true, error: null);
-    final token = await _membershipService.generateQrToken();
-    if (token != null) {
-      state = state.copyWith(isLoading: false, qrToken: token);
+    final data = await _membershipService.generateQrToken();
+    if (data != null) {
+      state = state.copyWith(
+        isLoading: false, 
+        qrToken: data['token'],
+        shortCode: data['shortCode']
+      );
       _startRefreshTimer();
     } else {
       state = state.copyWith(isLoading: false, error: 'Error al generar código QR');

@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
+import '../../config/api_config.dart';
 import 'auth_service.dart';
 
 class BookingService {
-  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://localhost:5041/api'));
+  final Dio _dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
   final AuthService _authService = AuthService();
 
   Future<Options> _getOptions() async {

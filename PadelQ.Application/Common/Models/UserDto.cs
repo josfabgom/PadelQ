@@ -16,5 +16,7 @@ namespace PadelQ.Application.Common.Models
         public decimal DiscountPercentage { get; set; }
         public string? MembershipHexColor { get; set; }
         public bool IsActive { get; set; } = true;
+        public DateTime? ExpiryDate { get; set; }
+        public bool IsExpired { get; set; }
     }
 }

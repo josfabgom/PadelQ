@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:intl/intl.dart';
 import '../providers/membership_provider.dart';
 import '../providers/auth_provider.dart';
 
@@ -28,6 +29,11 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
     final membershipColor = _parseHexColor(authState.user?['membershipHexColor'] ?? authState.user?['MembershipHexColor']);
     final balance = (authState.user?['balance'] ?? authState.user?['Balance'] ?? 0.0);
     final hasDebt = balance > 0;
+    
+    final expiryDateRaw = authState.user?['expiryDate'] ?? authState.user?['ExpiryDate'];
+    final expiryDate = expiryDateRaw != null ? DateTime.parse(expiryDateRaw) : null;
+    final isExpired = authState.user?['isExpired'] ?? authState.user?['IsExpired'] ?? false;
+    final discount = authState.user?['discountPercentage'] ?? authState.user?['DiscountPercentage'] ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -81,9 +87,13 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                       Icon(LucideIcons.award, color: Colors.white, size: 32.sp),
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12.r)),
+                        decoration: BoxDecoration(
+                          color: isExpired ? Colors.red.withOpacity(0.8) : Colors.white24, 
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: isExpired ? Border.all(color: Colors.white, width: 1) : null,
+                        ),
                         child: Text(
-                          authState.user?['isActive'] == false ? 'INACTIVO' : 'ACTIVO',
+                          isExpired ? 'VENCIDO' : (authState.user?['isActive'] == false ? 'INACTIVO' : 'ACTIVO'),
                           style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -100,13 +110,25 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                     style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.w500),
                   ),
                   Divider(color: Colors.white24, height: 32.h),
-                  Row(
+                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _InfoTile(label: 'SALDO', value: '\$${balance.toStringAsFixed(2)}'),
-                      _InfoTile(label: 'BENEFICIO', value: '${authState.user?['discountPercentage'] ?? authState.user?['DiscountPercentage'] ?? '0'}% OFF'),
+                      _InfoTile(label: 'BENEFICIO', value: '${discount}% OFF'),
                     ],
                   ),
+                  if (expiryDate != null) ...[
+                    SizedBox(height: 16.h),
+                    Text(
+                      'VALIDEZ HASTA: ${DateFormat('dd/MM/yyyy').format(expiryDate.toLocal())}',
+                      style: TextStyle(
+                        color: isExpired ? Colors.yellow.shade200 : Colors.white70, 
+                        fontSize: 11.sp, 
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -152,11 +174,40 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                       ),
                     )
                   else if (qrState.qrToken != null)
-                    QrImageView(
-                      data: qrState.qrToken!,
-                      version: QrVersions.auto,
-                      size: 200.w,
-                      backgroundColor: Colors.white,
+                    Column(
+                      children: [
+                        QrImageView(
+                          data: qrState.qrToken!,
+                          version: QrVersions.auto,
+                          size: 200.w,
+                          backgroundColor: Colors.white,
+                        ),
+                        if (qrState.shortCode != null) ...[
+                          SizedBox(height: 24.h),
+                          Text(
+                            'O utiliza el código numérico:',
+                            style: TextStyle(fontSize: 12.sp, color: Colors.grey.shade500),
+                          ),
+                          SizedBox(height: 12.h),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(16.r),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Text(
+                              qrState.shortCode!,
+                              style: TextStyle(
+                                fontSize: 32.sp,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 8,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     )
                   else
                      const Text('No se pudo generar el código QR'),

@@ -4,7 +4,7 @@ namespace PadelQ.Domain.Interfaces
 {
     public interface IQrService
     {
-        string GenerateToken(string userId);
+        (string Token, string ShortCode) GenerateToken(string userId);
         bool ValidateToken(string token, out string userId);
     }
 }

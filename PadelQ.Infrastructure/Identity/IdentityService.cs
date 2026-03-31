@@ -107,6 +107,21 @@ namespace PadelQ.Infrastructure.Identity
                     .OrderByDescending(um => um.StartDate)
                     .FirstOrDefault();
 
+                var expiryDate = activeMembership == null ? null : (DateTime?)(
+                    (_context.Transactions
+                        .Where(t => t.UserId == u.Id && t.Type == TransactionType.Payment)
+                        .OrderByDescending(t => t.Date)
+                        .Select(t => t.Date)
+                        .FirstOrDefault() == default ? activeMembership.StartDate : 
+                        _context.Transactions
+                            .Where(t => t.UserId == u.Id && t.Type == TransactionType.Payment)
+                            .OrderByDescending(t => t.Date)
+                            .Select(t => t.Date)
+                            .FirstOrDefault()).AddDays(30)
+                );
+
+                var isExpired = expiryDate != null && DateTime.UtcNow > expiryDate;
+
                 dtos.Add(new PadelQ.Application.Common.Models.UserDto
                 {
                     Id = u.Id,
@@ -120,9 +135,11 @@ namespace PadelQ.Infrastructure.Identity
                     PhotoUrl = u.PhotoUrl,
                     Balance = charges - payments,
                     MembershipName = activeMembership?.Membership?.Name,
-                    DiscountPercentage = activeMembership?.Membership?.DiscountPercentage ?? 0,
+                    DiscountPercentage = isExpired ? 0 : (activeMembership?.Membership?.DiscountPercentage ?? 0),
                     MembershipHexColor = activeMembership?.Membership?.HexColor,
-                    IsActive = u.IsActive
+                    IsActive = u.IsActive,
+                    ExpiryDate = expiryDate,
+                    IsExpired = isExpired
                 });
             }
 
@@ -148,6 +165,21 @@ namespace PadelQ.Infrastructure.Identity
                 .OrderByDescending(um => um.StartDate)
                 .FirstOrDefault();
 
+            var expiryDate = activeMembership == null ? null : (DateTime?)(
+                (_context.Transactions
+                    .Where(t => t.UserId == user.Id && t.Type == TransactionType.Payment)
+                    .OrderByDescending(t => t.Date)
+                    .Select(t => t.Date)
+                    .FirstOrDefault() == default ? activeMembership.StartDate : 
+                    _context.Transactions
+                        .Where(t => t.UserId == user.Id && t.Type == TransactionType.Payment)
+                        .OrderByDescending(t => t.Date)
+                        .Select(t => t.Date)
+                        .FirstOrDefault()).AddDays(30)
+            );
+
+            var isExpired = expiryDate != null && DateTime.UtcNow > expiryDate;
+
             return new PadelQ.Application.Common.Models.UserDto
             {
                 Id = user.Id,
@@ -161,9 +193,11 @@ namespace PadelQ.Infrastructure.Identity
                 PhotoUrl = user.PhotoUrl,
                 Balance = charges - payments,
                 MembershipName = activeMembership?.Membership?.Name,
-                DiscountPercentage = activeMembership?.Membership?.DiscountPercentage ?? 0,
+                DiscountPercentage = isExpired ? 0 : (activeMembership?.Membership?.DiscountPercentage ?? 0),
                 MembershipHexColor = activeMembership?.Membership?.HexColor,
-                IsActive = user.IsActive
+                IsActive = user.IsActive,
+                ExpiryDate = expiryDate,
+                IsExpired = isExpired
             };
         }
 

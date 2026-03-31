@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: padelq_db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - padelq_network
+
+  padelq_api:
+    build:
+      context: ./
+      dockerfile: PadelQ.Api/Dockerfile
+    container_name: padelq_api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Server=db;Database=PadelQ;User Id=SA;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
+      - Jwt__Key=${JWT_SECRET}
+      - Jwt__Issuer=PadelQ.Api
+      - Jwt__Audience=PadelQ.Clients
+    depends_on:
+      - db
+    networks:
+      - padelq_network
+
+  admin_web:
+    build:
+      context: ./PadelQ.AdminWeb
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+    container_name: admin_web
+    networks:
+      - padelq_network
+
+  mobile_app:
+    build:
+      context: ./PadelQ.MobileApp
+      args:
+        - API_URL=${API_URL}
+    container_name: mobile_app
+    networks:
+      - padelq_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: padelq_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - padelq_api
+      - admin_web
+      - mobile_app
+    networks:
+      - padelq_network
+
+networks:
+  padelq_network:
+    driver: bridge
+
+volumes:
+  mssql_data:
