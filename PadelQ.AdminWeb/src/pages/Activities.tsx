@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users, LogOut } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -36,9 +36,7 @@ const ActivitiesPage = () => {
     schedules: []
   });
 
-  const token = localStorage.getItem('padelq_token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
-  const API_URL = 'http://localhost:5041/api/activities';
+  const config = getAuthConfig();
 
   useEffect(() => {
     fetchActivities();
@@ -46,7 +44,7 @@ const ActivitiesPage = () => {
 
   const fetchActivities = async () => {
     try {
-      const response = await axios.get(API_URL, config);
+      const response = await api.get('/api/activities', config);
       setActivities(response.data);
     } catch (err) {
       console.error("Error al cargar actividades", err);
@@ -78,9 +76,9 @@ const ActivitiesPage = () => {
     e.preventDefault();
     try {
       if (editingActivity) {
-        await axios.put(`${API_URL}/${editingActivity.id}`, formData, config);
+        await api.put(`/api/activities/${editingActivity.id}`, formData, config);
       } else {
-        await axios.post(API_URL, formData, config);
+        await api.post('/api/activities', formData, config);
       }
       setIsModalOpen(false);
       fetchActivities();
@@ -92,7 +90,7 @@ const ActivitiesPage = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de eliminar esta actividad?')) {
       try {
-        await axios.delete(`${API_URL}/${id}`, config);
+        await api.delete(`/api/activities/${id}`, config);
         fetchActivities();
       } catch (err) {
         console.error("Error al eliminar actividad", err);

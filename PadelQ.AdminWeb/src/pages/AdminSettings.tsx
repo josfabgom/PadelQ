@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -14,9 +14,7 @@ const AdminSettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  const token = localStorage.getItem('padelq_token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
-  const API_URL = 'http://localhost:5041/api/systemsettings';
+  const config = getAuthConfig();
 
   useEffect(() => {
     fetchSettings();
@@ -24,7 +22,7 @@ const AdminSettingsPage = () => {
 
   const fetchSettings = async () => {
     try {
-      const response = await axios.get(API_URL, config);
+      const response = await api.get('/api/systemsettings', config);
       setSettings(response.data);
     } catch (err) {
       console.error("Error al cargar settings", err);
@@ -43,7 +41,7 @@ const AdminSettingsPage = () => {
 
     setSaving(true);
     try {
-      await axios.put(API_URL, setting, config);
+      await api.put('/api/systemsettings', setting, config);
       setMessage({ text: `Configuración "${key}" guardada correctamente.`, type: 'success' });
       setTimeout(() => setMessage({ text: '', type: '' }), 3000);
     } catch (err) {

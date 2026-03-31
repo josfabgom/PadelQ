@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, AreaChart, Area 
@@ -21,14 +21,13 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('padelq_token');
-        const config = { headers: { Authorization: `Bearer ${token}` } };
+        const config = getAuthConfig();
         
         const [revRes, sumRes, detailRes, courtsRes] = await Promise.all([
-          axios.get('http://localhost:5041/api/reports/revenue-stats', config),
-          axios.get('http://localhost:5041/api/reports/summary', config),
-          axios.get('http://localhost:5041/api/reports/bookings-detailed', config),
-          axios.get('http://localhost:5041/api/courts', config)
+          api.get('/api/reports/revenue-stats', config),
+          api.get('/api/reports/summary', config),
+          api.get('/api/reports/bookings-detailed', config),
+          api.get('/api/courts', config)
         ]);
         
         setStats(revRes.data);

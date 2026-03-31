@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { Users as UsersIcon, Mail, Phone, Calendar, Search, Filter, X, CreditCard, ArrowLeft, Edit2, Trash2, Power, ShieldAlert, UserPlus, MapPin, Hash, Image as ImageIcon, DollarSign, ArrowRight } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -48,13 +48,12 @@ const UsersPage = () => {
   const [memberships, setMemberships] = useState<any[]>([]);
   const [selectedMembershipId, setSelectedMembershipId] = useState<number | string>('');
 
-  const token = localStorage.getItem('padelq_token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = getAuthConfig();
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5041/api/users', config);
+      const response = await api.get('/api/users', config);
       setUsers(response.data);
     } catch (err) {
       console.error("Error al cargar usuarios", err);
@@ -65,7 +64,7 @@ const UsersPage = () => {
 
   const fetchMemberships = async () => {
     try {
-      const response = await axios.get('http://localhost:5041/api/membership', config);
+      const response = await api.get('/api/membership', config);
       setMemberships(response.data);
     } catch (err) {
       console.error("Error al cargar membresías", err);
@@ -94,7 +93,7 @@ const UsersPage = () => {
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      await axios.post(`http://localhost:5041/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDescription}`, {}, config);
+      await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDescription}`, {}, config);
       setIsPaymentModalOpen(false);
       setPaymentAmount(0);
       setPaymentDescription('');
@@ -108,7 +107,7 @@ const UsersPage = () => {
     e.preventDefault();
     if (!selectedUser || !selectedMembershipId) return;
     try {
-      await axios.post(`http://localhost:5041/api/membership/subscribe?userId=${selectedUser.id}&membershipId=${selectedMembershipId}`, {}, config);
+      await api.post(`/api/membership/subscribe?userId=${selectedUser.id}&membershipId=${selectedMembershipId}`, {}, config);
       setIsMembershipModalOpen(false);
       fetchUsers();
     } catch (err) {
@@ -118,7 +117,7 @@ const UsersPage = () => {
 
   const fetchUserTransactions = async (userId: string) => {
     try {
-      const response = await axios.get(`http://localhost:5041/api/transaction/user/${userId}`, config);
+      const response = await api.get(`/api/transaction/user/${userId}`, config);
       setUserTransactions(response.data);
     } catch (err) {
       console.error("Error al cargar transacciones", err);
@@ -128,7 +127,7 @@ const UsersPage = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5041/api/users', {
+      await api.post('/api/users', {
         fullName,
         email,
         password,
@@ -157,7 +156,7 @@ const UsersPage = () => {
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      await axios.put(`http://localhost:5041/api/users/${selectedUser.id}`, {
+      await api.put(`/api/users/${selectedUser.id}`, {
         fullName,
         email,
         phoneNumber: phone,
@@ -188,7 +187,7 @@ const UsersPage = () => {
   const handleDeleteUser = async (id: string) => {
     if (!window.confirm("¿Está seguro de que desea eliminar este usuario?")) return;
     try {
-      await axios.delete(`http://localhost:5041/api/users/${id}`, config);
+      await api.delete(`/api/users/${id}`, config);
       fetchUsers();
     } catch (err: any) {
       console.error("Error al eliminar usuario", err);

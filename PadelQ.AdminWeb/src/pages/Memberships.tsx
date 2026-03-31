@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { CreditCard, Plus, Trash2, Edit3, Save, X, RefreshCw, LogOut } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -31,23 +31,14 @@ const MembershipsPage = () => {
     hexColor: '#6366f1'
   });
 
-  const getHeaderConfig = () => {
-    const token = localStorage.getItem('padelq_token');
-    if (!token) {
-      console.error("No se encontró el token en localStorage");
-      return null;
-    }
-    return { headers: { Authorization: `Bearer ${token}` } };
-  };
-
   const fetchMemberships = async () => {
-    const config = getHeaderConfig();
-    if (!config) {
+    const config = getAuthConfig();
+    if (!config.headers.Authorization) {
         window.location.href = '/login';
         return;
     }
     try {
-      const response = await axios.get('http://localhost:5041/api/membership', config);
+      const response = await api.get('/api/membership', config);
       setMemberships(response.data);
     } catch (err: any) {
       console.error("Error al cargar membresías", err);
@@ -66,8 +57,8 @@ const MembershipsPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const config = getHeaderConfig();
-    if (!config) return;
+    const config = getAuthConfig();
+    if (!config.headers.Authorization) return;
 
     try {
       const payload = {
@@ -80,9 +71,9 @@ const MembershipsPage = () => {
       };
 
       if (editingMembership) {
-        await axios.put(`http://localhost:5041/api/membership/${editingMembership.id}`, payload, config);
+        await api.put(`/api/membership/${editingMembership.id}`, payload, config);
       } else {
-        await axios.post('http://localhost:5041/api/membership', payload, config);
+        await api.post('/api/membership', payload, config);
       }
       setIsModalOpen(false);
       setEditingMembership(null);
@@ -117,11 +108,11 @@ const MembershipsPage = () => {
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar este plan?")) return;
-    const config = getHeaderConfig();
+    const config = getAuthConfig();
     if (!config) return;
 
     try {
-      await axios.delete(`http://localhost:5041/api/membership/${id}`, config);
+      await api.delete(`/api/membership/${id}`, config);
       fetchMemberships();
     } catch (err: any) {
       console.error("Error al eliminar membresía", err);
@@ -142,9 +133,9 @@ const MembershipsPage = () => {
             onClick={async () => {
               if(!window.confirm("¿Desea generar las cuotas mensuales para todos los socios activos?")) return;
               try {
-                const config = getHeaderConfig();
-                if (!config) return;
-                const res = await axios.post('http://localhost:5041/api/membership/run-billing', {}, config);
+                const config = getAuthConfig();
+                if (!config.headers.Authorization) return;
+                const res = await api.post('/api/membership/run-billing', {}, config);
                 alert(`Proceso completado: ${res.data.chargesGenerated} cuotas generadas.`);
               } catch (err) {
                 console.error(err);

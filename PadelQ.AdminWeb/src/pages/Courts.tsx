@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { getAuthConfig } from '../api/api';
 import { Layout, Plus, Edit2, Trash2, Check, X, Shield, MapPin, DollarSign, LogOut } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -25,9 +25,7 @@ const CourtsPage = () => {
     isActive: true
   });
 
-  const token = localStorage.getItem('padelq_token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
-  const API_URL = 'http://localhost:5041/api/courts';
+  const config = getAuthConfig();
 
   useEffect(() => {
     fetchCourts();
@@ -35,7 +33,7 @@ const CourtsPage = () => {
 
   const fetchCourts = async () => {
     try {
-      const response = await axios.get(API_URL, config);
+      const response = await api.get('/api/courts', config);
       setCourts(response.data);
     } catch (err) {
       console.error("Error al cargar canchas", err);
@@ -59,9 +57,9 @@ const CourtsPage = () => {
     e.preventDefault();
     try {
       if (editingCourt) {
-        await axios.put(`${API_URL}/${editingCourt.id}`, formData, config);
+        await api.put(`/api/courts/${editingCourt.id}`, formData, config);
       } else {
-        await axios.post(API_URL, formData, config);
+        await api.post('/api/courts', formData, config);
       }
       setIsModalOpen(false);
       fetchCourts();
@@ -73,7 +71,7 @@ const CourtsPage = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de eliminar esta cancha?')) {
       try {
-        await axios.delete(`${API_URL}/${id}`, config);
+        await api.delete(`/api/courts/${id}`, config);
         fetchCourts();
       } catch (err) {
         console.error("Error al eliminar cancha", err);

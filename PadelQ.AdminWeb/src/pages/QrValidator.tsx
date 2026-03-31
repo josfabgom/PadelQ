@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import { QrCode, User, Award, Percent, CheckCircle, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import api, { getAuthConfig } from '../api/api';
+import { QrCode, User, Award, Percent, CheckCircle, AlertCircle, RefreshCw, Calendar } from 'lucide-react';
 import Header from '../components/Header';
 
 const QrValidator = () => {
@@ -18,12 +18,12 @@ const QrValidator = () => {
         setResult(null);
 
         try {
-            const padelqToken = localStorage.getItem('padelq_token');
-            const response = await axios.post('http://localhost:5041/api/membership/validate-qr', 
+            const config = getAuthConfig();
+            const response = await api.post('/api/membership/validate-qr', 
                 JSON.stringify(token),
                 { 
                     headers: { 
-                        'Authorization': `Bearer ${padelqToken}`,
+                        ...config.headers,
                         'Content-Type': 'application/json'
                     } 
                 }
@@ -43,19 +43,20 @@ const QrValidator = () => {
             <div className="max-w-2xl mx-auto">
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-900">Validador de Membresía</h1>
-                    <p className="text-slate-500">INGRESA EL TOKEN O ESCANEA EL CÓDIGO QR DEL SOCIO</p>
+                    <p className="text-slate-500">INGRESA EL CÓDIGO DE 4 DÍGITOS O EL TOKEN DEL QR</p>
                 </div>
 
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                     <form onSubmit={handleValidate} className="space-y-4">
-                        <label className="block text-sm font-medium text-slate-700">Token de Validación</label>
+                        <label className="block text-sm font-medium text-slate-700">Token o Código de 4 Dígitos</label>
                         <div className="relative">
                             <input 
                                 type="text"
                                 value={token}
                                 onChange={(e) => setToken(e.target.value)}
-                                placeholder="Pega el token aquí..."
+                                placeholder="Escribe el código de 4 dígitos o pega el token..."
                                 className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
+                                maxLength={500}
                                 autoFocus
                             />
                             <QrCode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
@@ -77,10 +78,10 @@ const QrValidator = () => {
                     )}
 
                     {result && (
-                        <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-                            <div className="flex items-center gap-3 text-emerald-700">
-                                <CheckCircle className="w-6 h-6" />
-                                <h3 className="text-lg font-bold">Membresía Válida</h3>
+                        <div className={`p-6 ${result.isExpired ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'} rounded-2xl space-y-6 animate-in fade-in slide-in-from-top-4 duration-300`}>
+                            <div className={`flex items-center gap-3 ${result.isExpired ? 'text-rose-700' : 'text-emerald-700'}`}>
+                                {result.isExpired ? <AlertCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}
+                                <h3 className="text-lg font-bold">{result.isExpired ? 'Membresía Vencida' : 'Membresía Válida'}</h3>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -99,10 +100,15 @@ const QrValidator = () => {
                                     label="Descuento"
                                     value={`${result.discount}%`}
                                 />
-                                <div className="p-4 bg-white rounded-xl border border-emerald-100">
+                                <InfoCard 
+                                    icon={<Calendar className="w-5 h-5" />}
+                                    label="Vencimiento"
+                                    value={new Date(result.expiryDate).toLocaleDateString()}
+                                />
+                                <div className={`p-4 bg-white rounded-xl border ${result.isExpired ? 'border-rose-100' : 'border-emerald-100'}`}>
                                     <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Estado</p>
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                                        Activo
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${result.isExpired ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                        {result.isExpired ? 'Vencido' : 'Activo'}
                                     </span>
                                 </div>
                             </div>
