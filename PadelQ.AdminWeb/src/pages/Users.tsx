@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Users as UsersIcon, Mail, Phone, Calendar, Search, Filter, X, CreditCard, ArrowLeft, Edit2, Trash2, Power, ShieldAlert, UserPlus, MapPin, Hash, Image as ImageIcon, DollarSign, ArrowRight } from 'lucide-react';
+import { Users as UsersIcon, Mail, Phone, Calendar, Search, Filter, X, CreditCard, ArrowLeft, Edit2, Trash2, Power, ShieldAlert, UserPlus, MapPin, Hash, Image as ImageIcon, DollarSign, ArrowRight, Key } from 'lucide-react';
 import Header from '../components/Header';
 
 interface User {
@@ -28,6 +28,7 @@ const UsersPage = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userTransactions, setUserTransactions] = useState<any[]>([]);
   
@@ -42,6 +43,8 @@ const UsersPage = () => {
   const [photoUrl, setPhotoUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [role, setRole] = useState('User');
 
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDescription, setPaymentDescription] = useState('');
@@ -87,6 +90,8 @@ const UsersPage = () => {
     setPhotoUrl('');
     setIsActive(true);
     setPassword('');
+    setNewPassword('');
+    setRole('User');
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
@@ -132,7 +137,8 @@ const UsersPage = () => {
         email,
         password,
         dni,
-        phoneNumber: phone
+        phoneNumber: phone,
+        role
       }, config);
       setIsCreateModalOpen(false);
       resetForm();
@@ -181,6 +187,20 @@ const UsersPage = () => {
       } else {
         alert("Error al actualizar usuario: " + errorMsg);
       }
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !newPassword) return;
+    try {
+      await api.post(`/api/users/${selectedUser.id}/change-password`, { newPassword }, config);
+      setIsPasswordModalOpen(false);
+      setNewPassword('');
+      alert("Contraseña actualizada correctamente.");
+    } catch (err: any) {
+      console.error("Error al cambiar contraseña", err);
+      alert("Error al cambiar contraseña: " + (err.response?.data || "Error desconocido"));
     }
   };
 
@@ -354,6 +374,13 @@ const UsersPage = () => {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button 
+                          onClick={() => { setSelectedUser(user); setIsPasswordModalOpen(true); }}
+                          className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg transition-colors border border-violet-100 shadow-sm"
+                          title="Cambiar Contraseña"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
+                        <button 
                           onClick={() => handleDeleteUser(user.id)}
                           className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100 shadow-sm"
                           title="Eliminar Cliente"
@@ -468,6 +495,17 @@ const UsersPage = () => {
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Teléfono</label>
                   <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Rol de Usuario</label>
+                  <select 
+                    value={role} 
+                    onChange={(e) => setRole(e.target.value)} 
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-indigo-600"
+                  >
+                    <option value="User">Cliente (Solo App Móvil)</option>
+                    <option value="Admin">Administrador (Acceso Total)</option>
+                  </select>
                 </div>
               </div>
               <div className="pt-4 flex gap-3">
@@ -680,6 +718,55 @@ const UsersPage = () => {
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CAMBIAR CONTRASEÑA */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-outfit">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-violet-50">
+              <div>
+                <h2 className="text-xl font-bold text-violet-900">Cambiar Contraseña</h2>
+                <p className="text-xs text-violet-600 font-bold uppercase tracking-widest">{selectedUser?.fullName}</p>
+              </div>
+              <button onClick={() => setIsPasswordModalOpen(false)} className="text-violet-400 hover:text-violet-600 p-2 hover:bg-violet-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Nueva Contraseña</label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input 
+                    type="password" 
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none transition-all font-bold"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 italic">⚠️ Por razones de seguridad, el administrador puede resetear la contraseña del cliente sin conocer la anterior.</p>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-violet-600 text-white font-bold rounded-xl hover:bg-violet-700 transition-all shadow-lg shadow-violet-100"
+                >
+                  Actualizar Contraseña
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

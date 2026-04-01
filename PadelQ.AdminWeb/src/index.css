@@ -2,9 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'OakSans';
+  src: url('/fonts/OakSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OakSans';
+  src: url('/fonts/OakSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
 @layer base {
   body {
-    @apply antialiased text-slate-900 bg-slate-50;
-    font-family: 'Outfit', sans-serif;
+    @apply font-oak text-slate-900 bg-[#f8f9fa];
   }
+}
+
+:root {
+  --brand-black: #000000;
+  --brand-white: #ffffff;
+  --brand-grey: #f4f4f4;
+  --brand-accent: #e5e5e5;
 }

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - padelq_network
+
+  padelq_api:
+    build:
+      context: .
+      dockerfile: PadelQ.Api/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=db;Database=PadelQDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
+      - Jwt__Key=${JWT_SECRET}
+      - Jwt__Issuer=PadelQ.Api
+      - Jwt__Audience=PadelQ.Clients
+    depends_on:
+      - db
+    networks:
+      - padelq_network
+
+  admin_web:
+    image: nginx:alpine
+    volumes:
+      - ./dist:/usr/share/nginx/html
+      - ./frontend.nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - padelq_network
+
+  mobile_app:
+    image: nginx:alpine
+    volumes:
+      - ./build/web:/usr/share/nginx/html
+      - ./frontend.nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - padelq_network
+
+  padelq_proxy:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - padelq_api
+      - admin_web
+      - mobile_app
+    networks:
+      - padelq_network
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - padelq_network
+
+networks:
+  padelq_network:
+    driver: bridge
+
+volumes:
+  mssql_data:

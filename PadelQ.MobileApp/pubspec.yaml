@@ -38,4 +38,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - assets/icons/
+    - assets/fonts/
+
+  fonts:
+    - family: OakSans
+      fonts:
+        - asset: assets/fonts/OakSans-Regular.ttf
+        - asset: assets/fonts/OakSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/OakSans-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/OakSans-Italic.ttf
+          style: italic

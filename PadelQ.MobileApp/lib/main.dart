@@ -57,8 +57,20 @@ class MyApp extends StatelessWidget {
           locale: const Locale('es', ''),
           theme: ThemeData(
             useMaterial3: true,
-            colorSchemeSeed: const Color(0xFF1E88E5),
-            fontFamily: 'Outfit',
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.black,
+              primary: Colors.black,
+              secondary: Colors.black87,
+              surface: Colors.white,
+              background: const Color(0xFFFAFAFA),
+            ),
+            fontFamily: 'OakSans',
+            textTheme: const TextTheme(
+              displayLarge: TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
+              headlineMedium: TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
+              titleLarge: TextStyle(fontWeight: FontWeight.w800, color: Colors.black),
+              bodyLarge: TextStyle(fontWeight: FontWeight.w500, color: Colors.black87),
+            ),
           ),
           routerConfig: _router,
         );

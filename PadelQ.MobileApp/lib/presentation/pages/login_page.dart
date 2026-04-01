@@ -29,7 +29,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al iniciar sesión')),
+          const SnackBar(
+            backgroundColor: Color(0xFFE11D48),
+            content: Text('Error al iniciar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
         );
       }
     }
@@ -40,63 +43,107 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authState = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24.w),
-          child: Column(
-            children: [
-              SizedBox(height: 120.h),
-              // App Logo placeholder
-              Container(
-                height: 100, width: 100,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade400]),
-                  borderRadius: BorderRadius.circular(24.r),
-                ),
-                child: const Icon(Icons.sports_tennis, color: Colors.white, size: 50),
-              ),
-              SizedBox(height: 24.h),
-              Text(
-                'PadelQ',
-                style: TextStyle(fontSize: 32.sp, fontWeight: FontWeight.bold, color: Colors.blue.shade600),
-              ),
-              Text(
-                'Accede a tu cancha favorita',
-                style: TextStyle(fontSize: 14.sp, color: Colors.grey.shade500),
-              ),
-              SizedBox(height: 48.h),
-              
-              _AuthInputField(controller: _emailController, label: 'Email', icon: Icons.email_outlined),
-              SizedBox(height: 16.h),
-              _AuthInputField(controller: _passwordController, label: 'Contraseña', icon: Icons.lock_outline, isPassword: true),
-              
-              SizedBox(height: 32.h),
-              
-              SizedBox(
-                width: double.infinity,
-                height: 56.h,
-                child: ElevatedButton(
-                  onPressed: authState.isLoading ? null : _handleLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                    elevation: 4,
-                  ),
-                  child: authState.isLoading 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text('Entrar', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              SizedBox(height: 20.h),
-              TextButton(
-                onPressed: () => context.go('/register'),
-                child: const Text('¿No tienes cuenta? Regístrate aquí'),
-              ),
-            ],
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Background accents
+          Positioned(
+            top: -100, right: -100,
+            child: Container(
+              width: 300, height: 300,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
+            ),
           ),
-        ),
+          
+          SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32.w),
+              child: Column(
+                children: [
+                  SizedBox(height: 140.h),
+                  
+                  Image.asset(
+                    'assets/images/logo-full-white.png', 
+                    height: 120.h,
+                  ),
+                  
+                  SizedBox(height: 12.h),
+                  Text(
+                    'SISTEMA DE GESTIÓN PREMIUM',
+                    style: TextStyle(
+                      fontSize: 10.sp, 
+                      fontWeight: FontWeight.w900, 
+                      color: Colors.grey.withOpacity(0.6),
+                      letterSpacing: 4.w,
+                    ),
+                  ),
+                  
+                  SizedBox(height: 80.h),
+                  
+                  _AuthInputField(
+                    controller: _emailController, 
+                    label: 'USUARIO', 
+                    hint: 'tu@email.com',
+                  ),
+                  SizedBox(height: 24.h),
+                  _AuthInputField(
+                    controller: _passwordController, 
+                    label: 'CONTRASEÑA', 
+                    hint: '••••••••',
+                    isPassword: true,
+                  ),
+                  
+                  SizedBox(height: 48.h),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    height: 64.h,
+                    child: ElevatedButton(
+                      onPressed: authState.isLoading ? null : _handleLogin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+                        elevation: 0,
+                      ),
+                      child: authState.isLoading 
+                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                        : Text(
+                            'INICIAR SESIÓN', 
+                            style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, letterSpacing: 2.w),
+                          ),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 40.h),
+                  TextButton(
+                    onPressed: () => context.go('/register'),
+                    child: Text(
+                      '¿NO TIENES CUENTA? REGÍSTRATE AQUÍ',
+                      style: TextStyle(
+                        fontSize: 10.sp, 
+                        color: Colors.white.withOpacity(0.4),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.w,
+                      ),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 40.h),
+                  Text(
+                    'COPYRIGHT © 2026 BLACK MARCA GRÁFICA',
+                    style: TextStyle(
+                      fontSize: 8.sp, 
+                      color: Colors.white.withOpacity(0.2),
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2.w,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -105,28 +152,59 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 class _AuthInputField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
-  final IconData icon;
+  final String hint;
   final bool isPassword;
 
   const _AuthInputField({
     required this.controller,
     required this.label,
-    required this.icon,
+    required this.hint,
     this.isPassword = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      obscureText: isPassword,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16.r), borderSide: BorderSide.none),
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: 4.w, bottom: 8.h),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.sp, 
+              fontWeight: FontWeight.w900, 
+              color: Colors.white.withOpacity(0.8),
+              letterSpacing: 2.w,
+            ),
+          ),
+        ),
+        TextField(
+          controller: controller,
+          obscureText: isPassword,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          cursorColor: Colors.white,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 13.sp),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20.r), 
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20.r), 
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20.r), 
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+            ),
+            filled: true,
+            fillColor: Colors.white.withOpacity(0.05),
+            contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+          ),
+        ),
+      ],
     );
   }
 }

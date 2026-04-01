@@ -7,7 +7,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    // [Authorize(Roles = "Admin")] // Optional: protect this endpoint
+    [Authorize(Roles = "Admin")]
     public class UsersController : ControllerBase
     {
         private readonly IIdentityService _identityService;
@@ -35,7 +35,7 @@ namespace PadelQ.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
-            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber);
+            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber, request.Role ?? "User");
             if (!succeeded) return BadRequest(result ?? "No se pudo crear el usuario.");
             return Ok(new { Id = result });
         }
@@ -62,8 +62,17 @@ namespace PadelQ.Api.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpPost("{id}/change-password")]
+        public async Task<IActionResult> ChangePassword(string id, [FromBody] ChangePasswordRequest request)
+        {
+            var (succeeded, message) = await _identityService.ChangePasswordAsync(id, request.NewPassword);
+            if (!succeeded) return BadRequest(message);
+            return Ok(new { Message = "Contraseña actualizada correctamente" });
+        }
     }
 
-    public record CreateUserRequest(string FullName, string Email, string Password, string? Dni, string? PhoneNumber);
+    public record CreateUserRequest(string FullName, string Email, string Password, string? Dni, string? PhoneNumber, string? Role);
     public record UpdateUserRequest(string FullName, string Email, string? PhoneNumber, bool IsActive, string? Dni, string? Address, string? City, string? Province, string? PhotoUrl);
+    public record ChangePasswordRequest(string NewPassword);
 }

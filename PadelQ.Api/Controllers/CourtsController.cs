@@ -9,6 +9,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Admin")]
     public class CourtsController : ControllerBase
     {
         private readonly ICourtService _courtService;

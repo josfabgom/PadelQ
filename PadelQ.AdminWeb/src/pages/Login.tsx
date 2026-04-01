@@ -18,12 +18,20 @@ const LoginPage = () => {
         password
       });
       
-      const { token, fullName, email: userEmail } = response.data;
+      const { token, fullName, email: userEmail, roles } = response.data;
+      
+      // Strict Check for ADMIN role in this panel
+      if (!roles || !roles.includes('Admin')) {
+        setError('No tienes permisos de Administrador para acceder a este panel.');
+        setLoading(false);
+        return;
+      }
+
       localStorage.setItem('padelq_token', token);
       localStorage.setItem('padelq_user_name', fullName);
       localStorage.setItem('padelq_user_email', userEmail);
+      localStorage.setItem('padelq_user_roles', JSON.stringify(roles));
       
-      // Redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.response?.data || 'Error al iniciar sesión');
@@ -33,48 +41,72 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-950 flex items-center justify-center p-4 font-outfit">
-      <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-8 shadow-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">PadelQ</h1>
-          <p className="text-slate-400 mt-2 italic text-sm">"Gestiona tu club, domina la cancha"</p>
+    <div className="min-h-screen bg-black flex items-center justify-center p-6 font-oak overflow-hidden relative">
+      {/* Decorative Elements */}
+      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-white/20 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[30%] h-[30%] bg-white/10 blur-[100px] rounded-full"></div>
+      </div>
+
+      <div className="w-full max-w-md bg-zinc-900/50 backdrop-blur-2xl border border-white/5 rounded-[40px] p-12 shadow-[0_0_80px_rgba(0,0,0,0.5)] z-10 transition-all duration-700 hover:border-white/10">
+        <div className="text-center mb-16">
+          <img 
+            src="/images/logo-full-white.png" 
+            alt="BLACK Logo" 
+            className="h-32 mx-auto mb-8 transform hover:scale-105 transition-transform duration-500"
+          />
+          <h1 className="text-[10px] uppercase tracking-[0.4em] font-bold text-zinc-500">
+            Premium Management System
+          </h1>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Usuario / Email</label>
-            <input 
-              type="text" 
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 text-white placeholder-slate-500 focus:outline-none transition-all"
-              placeholder="Admin / tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+        <form onSubmit={handleLogin} className="space-y-8">
+          <div className="space-y-4">
+            <div className="group">
+              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-widest pl-1 mb-2 group-focus-within:text-white transition-colors">Usuario</label>
+              <input 
+                type="text" 
+                className="w-full px-6 py-4 bg-zinc-800/50 border border-white/5 rounded-2xl focus:ring-1 focus:ring-white/20 text-white placeholder-zinc-600 focus:outline-none transition-all duration-300 hover:bg-zinc-800/80"
+                placeholder="Ingresa tu email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="group">
+              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-widest pl-1 mb-2 group-focus-within:text-white transition-colors">Contraseña</label>
+              <input 
+                type="password" 
+                className="w-full px-6 py-4 bg-zinc-800/50 border border-white/5 rounded-2xl focus:ring-1 focus:ring-white/20 text-white placeholder-zinc-600 focus:outline-none transition-all duration-300 hover:bg-zinc-800/80"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Contraseña</label>
-            <input 
-              type="password" 
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 text-white placeholder-slate-500 focus:outline-none transition-all"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error && <div className="text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg">{error}</div>}
+          {error && (
+            <div className="text-rose-400 text-xs font-medium text-center bg-rose-500/10 py-3 rounded-xl border border-rose-500/20 animate-pulse">
+              {error}
+            </div>
+          )}
 
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transform hover:-translate-y-0.5 transition-all disabled:opacity-50"
+            className="w-full py-5 bg-white hover:bg-zinc-200 text-black text-sm uppercase tracking-[0.2em] font-black rounded-2xl shadow-xl transform active:scale-[0.98] transition-all duration-300 disabled:opacity-50"
           >
-            {loading ? 'Cargando...' : 'Entrar'}
+            {loading ? 'Validando...' : 'Iniciar Sesión'}
           </button>
         </form>
+
+        <div className="mt-12 text-center">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">
+                Copyright © 2026 BLACK MARCA GRÁFICA
+            </p>
+        </div>
       </div>
     </div>
   );

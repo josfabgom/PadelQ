@@ -33,11 +33,14 @@ namespace PadelQ.Api.Controllers
             var result = await _identityService.LoginAsync(request.Email, request.Password);
             if (result == null) return Unauthorized("Invalid credentials.");
  
+            var (token, fullName, email, roles) = result.Value;
+
             return Ok(new 
             { 
-                Token = result.Value.Token,
-                FullName = result.Value.FullName,
-                Email = result.Value.Email
+                Token = token,
+                FullName = fullName,
+                Email = email,
+                Roles = roles
             });
         }
 

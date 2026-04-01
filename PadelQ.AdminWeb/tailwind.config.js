@@ -7,8 +7,16 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        outfit: ['Outfit', 'sans-serif'],
+        oak: ['OakSans', 'sans-serif'],
       },
+      colors: {
+        brand: {
+          black: '#000000',
+          white: '#ffffff',
+          grey: '#f4f4f4',
+          accent: '#e5e5e5',
+        }
+      }
     },
   },
   plugins: [],

@@ -150,5 +150,13 @@ namespace PadelQ.Infrastructure.Services
             await _context.SaveChangesAsync();
             return true;
         }
+
+        public async Task<IEnumerable<Booking>> GetAllAsync()
+        {
+            return await _context.Bookings
+                .Include(b => b.Court)
+                .OrderByDescending(b => b.StartTime)
+                .ToListAsync();
+        }
     }
 }

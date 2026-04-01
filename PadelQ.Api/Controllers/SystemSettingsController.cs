@@ -11,6 +11,7 @@ namespace PadelQ.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Admin")]
     public class SystemSettingsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;

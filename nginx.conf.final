@@ -1,0 +1,89 @@
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    keepalive_timeout  65;
+
+    # Dominio Principal y Subdominios: Redirección de HTTP a HTTPS
+    server {
+        listen 80;
+        server_name blackclubdepadel.com.ar www.blackclubdepadel.com.ar admin.blackclubdepadel.com.ar api.blackclubdepadel.com.ar;
+
+        # Necesario para el desafío de Certbot
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # Admin Web Dashboard (HTTPS)
+    server {
+        listen 443 ssl;
+        server_name admin.blackclubdepadel.com.ar;
+
+        ssl_certificate /etc/letsencrypt/live/blackclubdepadel.com.ar/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/blackclubdepadel.com.ar/privkey.pem;
+
+        location / {
+            proxy_pass http://admin_web:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # API Backend (HTTPS)
+    server {
+        listen 443 ssl;
+        server_name api.blackclubdepadel.com.ar;
+
+        ssl_certificate /etc/letsencrypt/live/blackclubdepadel.com.ar/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/blackclubdepadel.com.ar/privkey.pem;
+
+        location / {
+            proxy_pass http://padelq_api:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # Mobile App (Main Domain) (HTTPS)
+    server {
+        listen 443 ssl;
+        server_name blackclubdepadel.com.ar www.blackclubdepadel.com.ar;
+
+        ssl_certificate /etc/letsencrypt/live/blackclubdepadel.com.ar/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/blackclubdepadel.com.ar/privkey.pem;
+
+        location / {
+            proxy_pass http://mobile_app:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}

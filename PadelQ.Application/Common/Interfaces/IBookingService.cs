@@ -12,5 +12,6 @@ namespace PadelQ.Application.Common.Interfaces
         Task<(bool Success, string Message, Guid BookingId)> CreateBooking(string userId, int courtId, DateTime startTime, int durationMinutes);
         Task<bool> CancelBooking(Guid bookingId);
         Task<bool> IsAvailable(int courtId, DateTime start, DateTime end);
+        Task<IEnumerable<Booking>> GetAllAsync();
     }
 }

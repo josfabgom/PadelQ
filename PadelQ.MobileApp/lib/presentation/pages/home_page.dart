@@ -27,16 +27,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     final authState = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
-        title: Text('PadelQ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22.sp, color: Colors.blue.shade700)),
-        centerTitle: false,
+        title: Image.asset('assets/images/logo-full-black.png', height: 28.h),
+        centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.white,
         actions: [
           if (authState.isAdmin)
-            IconButton(icon: const Icon(LucideIcons.settings), onPressed: () => context.push('/admin-settings')),
-          IconButton(icon: const Icon(LucideIcons.logOut), onPressed: () async {
+            IconButton(icon: const Icon(LucideIcons.settings, color: Colors.black, size: 20), onPressed: () => context.push('/admin-settings')),
+          IconButton(icon: const Icon(LucideIcons.logOut, color: Colors.black, size: 20), onPressed: () async {
             await ref.read(authProvider.notifier).logout();
             if (mounted) context.go('/login');
           }),
@@ -46,58 +46,74 @@ class _HomePageState extends ConsumerState<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: EdgeInsets.all(20.w),
+            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 32.h),
             color: Colors.white,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '¡Hola ${authState.user?['fullName'] ?? authState.user?['FullName'] ?? 'Jugador'}!',
-                  style: TextStyle(fontSize: 26.sp, fontWeight: FontWeight.bold),
+                Row(
+                  children: [
+                    Text(
+                      'HOLA, ',
+                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.normal, color: Colors.black),
+                    ),
+                    Text(
+                      (authState.user?['fullName'] ?? authState.user?['FullName'] ?? 'JUGADOR').toString().toUpperCase(),
+                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
+                    ),
+                  ],
                 ),
                 SizedBox(height: 4.h),
                 Text(
-                  '¿Qué cancha vas a reservar hoy?',
-                  style: TextStyle(fontSize: 14.sp, color: Colors.grey.shade500),
+                  'RESERVA TU EXPERIENCIA PREMIUM HOY',
+                  style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.w900, letterSpacing: 2.w),
                 ),
-                SizedBox(height: 16.h),
+                SizedBox(height: 32.h),
                 
                 // Balance and Membership Card
                 GestureDetector(
                   onTap: () => context.push('/membership'),
                   child: Container(
-                    padding: EdgeInsets.all(20.w),
+                    padding: EdgeInsets.all(32.w),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [Colors.blue.shade800, Colors.blue.shade600]),
-                      borderRadius: BorderRadius.circular(20.r),
-                      boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(32.r),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 30, offset: const Offset(0, 15))],
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Stack(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('MI SALDO', style: TextStyle(color: Colors.white70, fontSize: 10.sp, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                            SizedBox(height: 4.h),
-                            Text(
-                              '\$${(authState.user?['balance'] ?? 0.0).toString()}',
-                              style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        Positioned(
+                            right: -20, bottom: -20,
+                            child: Icon(LucideIcons.award, color: Colors.white.withOpacity(0.05), size: 100),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('MEMBRESÍA', style: TextStyle(color: Colors.white70, fontSize: 10.sp, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                            SizedBox(height: 4.h),
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8.r)),
-                              child: Text(
-                                authState.user?['membershipName'] ?? 'Sin Plan',
-                                style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.bold),
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('SALDO DISPONIBLE', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                SizedBox(height: 8.h),
+                                Text(
+                                  '\$${(authState.user?['balance'] ?? 0.0).toString()}',
+                                  style: TextStyle(color: Colors.white, fontSize: 28.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('ESTADO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                SizedBox(height: 8.h),
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16.r), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                                  child: Text(
+                                    (authState.user?['membershipName'] ?? 'SIN PLAN').toString().toUpperCase(),
+                                    style: TextStyle(color: Colors.white, fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -109,40 +125,56 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
           
+          Padding(
+            padding: EdgeInsets.fromLTRB(24.w, 32.h, 24.w, 0),
+            child: Text(
+                'CANCHAS DISPONIBLES',
+                style: TextStyle(fontSize: 11.sp, fontStyle: FontStyle.italic, fontWeight: FontWeight.w900, letterSpacing: 2.w, color: Colors.black54),
+            ),
+          ),
+
           Expanded(
             child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 20.h),
+              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
               children: [
                 _BookingCard(
-                  name: "Cancha 1", 
-                  type: "Vidrio - Interior", 
+                  name: "CANCHA 01", 
+                  type: "CRISTAL PANORÁMICO", 
                   imageUrl: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=2070&auto=format&fit=crop",
-                  price: "30€/hr",
+                  price: "\$3.500",
                 ),
-                SizedBox(height: 16.h),
+                SizedBox(height: 24.h),
                 _BookingCard(
-                  name: "Cancha 2", 
-                  type: "Muro - Exterior", 
+                  name: "CANCHA 02", 
+                  type: "MURO PROFESIONAL", 
                   imageUrl: "https://images.unsplash.com/photo-1592910129881-892b7b392e81?q=80&w=2070&auto=format&fit=crop",
-                  price: "25€/hr",
+                  price: "\$3.000",
                 ),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue.shade700,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.calendar), label: 'Alquiler'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.activity), label: 'Actividades'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.users), label: 'Usuarios'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: _onItemTapped,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: Colors.black,
+          unselectedItemColor: Colors.grey.shade400,
+          selectedLabelStyle: TextStyle(fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+          unselectedLabelStyle: TextStyle(fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(LucideIcons.home, size: 20), label: 'HOME'),
+            BottomNavigationBarItem(icon: Icon(LucideIcons.calendar, size: 20), label: 'RESERVA'),
+            BottomNavigationBarItem(icon: Icon(LucideIcons.activity, size: 20), label: 'PLAY'),
+            BottomNavigationBarItem(icon: Icon(LucideIcons.users, size: 20), label: 'SOCIAL'),
+          ],
+        ),
       ),
     );
   }
@@ -166,34 +198,49 @@ class _BookingCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24.r),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(32.r),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
+        border: Border.all(color: Colors.black.withOpacity(0.03)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-            child: Image.network(imageUrl, height: 180.h, width: double.infinity, fit: BoxFit.cover),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
+            child: Stack(
+              children: [
+                Image.network(imageUrl, height: 180.h, width: double.infinity, fit: BoxFit.cover),
+                Positioned(
+                    top: 20, right: 20,
+                    child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                        decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16.r)),
+                        child: Text(price, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10.sp)),
+                    ),
+                ),
+              ],
+            ),
           ),
           Padding(
-            padding: EdgeInsets.all(16.w),
+            padding: EdgeInsets.all(24.w),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold)),
+                    Text(
+                        name, 
+                        style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.black)
+                    ),
                     SizedBox(height: 4.h),
-                    Text(type, style: TextStyle(color: Colors.grey.shade500, fontSize: 13.sp)),
+                    Text(
+                        type, 
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)
+                    ),
                   ],
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                  decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12.r)),
-                  child: Text(price, style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
-                ),
+                Icon(LucideIcons.chevronRight, size: 20, color: Colors.black.withOpacity(0.1)),
               ],
             ),
           ),

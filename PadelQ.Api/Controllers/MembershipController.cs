@@ -14,7 +14,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public class MembershipController : ControllerBase
     {
         private readonly ApplicationDbContext _context;

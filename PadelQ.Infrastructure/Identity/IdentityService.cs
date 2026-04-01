@@ -19,20 +19,23 @@ namespace PadelQ.Infrastructure.Identity
     public class IdentityService : IIdentityService
     {
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
         private readonly ApplicationDbContext _context;
 
         public IdentityService(
             UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
             IConfiguration configuration,
             ApplicationDbContext context)
         {
             _userManager = userManager;
+            _roleManager = roleManager;
             _configuration = configuration;
             _context = context;
         }
 
-        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string userName, string email, string password, string fullName, string? dni, string? phoneNumber)
+        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string userName, string email, string password, string fullName, string? dni, string? phoneNumber, string? role = "User")
         {
             if (!string.IsNullOrEmpty(dni))
             {
@@ -52,10 +55,21 @@ namespace PadelQ.Infrastructure.Identity
 
             var result = await _userManager.CreateAsync(user, password);
             if (!result.Succeeded) return (false, result.Errors.FirstOrDefault()?.Code ?? "UNKNOWN_ERROR");
+
+            // Assign role
+            if (!string.IsNullOrEmpty(role))
+            {
+                if (!await _roleManager.RoleExistsAsync(role))
+                {
+                    await _roleManager.CreateAsync(new IdentityRole(role));
+                }
+                await _userManager.AddToRoleAsync(user, role);
+            }
+
             return (true, user.Id);
         }
 
-        public async Task<(string Token, string FullName, string Email)?> LoginAsync(string emailOrUser, string password)
+        public async Task<(string Token, string FullName, string Email, List<string> Roles)?> LoginAsync(string emailOrUser, string password)
         {
             var user = await _userManager.FindByEmailAsync(emailOrUser);
             if (user == null)
@@ -76,8 +90,9 @@ namespace PadelQ.Infrastructure.Identity
                 return null;
             }
 
+            var roles = (await _userManager.GetRolesAsync(user)).ToList();
             var token = await GenerateJwtTokenAsync(user);
-            return (token, user.FullName ?? "", user.Email ?? "");
+            return (token, user.FullName ?? "", user.Email ?? "", roles);
         }
 
         public async Task<bool> IsEmailUniqueAsync(string email)
@@ -139,7 +154,8 @@ namespace PadelQ.Infrastructure.Identity
                     MembershipHexColor = activeMembership?.Membership?.HexColor,
                     IsActive = u.IsActive,
                     ExpiryDate = expiryDate,
-                    IsExpired = isExpired
+                    IsExpired = isExpired,
+                    Role = (await _userManager.GetRolesAsync(u)).FirstOrDefault()
                 });
             }
 
@@ -197,7 +213,8 @@ namespace PadelQ.Infrastructure.Identity
                 MembershipHexColor = activeMembership?.Membership?.HexColor,
                 IsActive = user.IsActive,
                 ExpiryDate = expiryDate,
-                IsExpired = isExpired
+                IsExpired = isExpired,
+                Role = (await _userManager.GetRolesAsync(user)).FirstOrDefault()
             };
         }
 
@@ -242,6 +259,20 @@ namespace PadelQ.Infrastructure.Identity
 
             var result = await _userManager.DeleteAsync(user);
             return result.Succeeded;
+        }
+
+        public async Task<(bool Succeeded, string Message)> ChangePasswordAsync(string userId, string newPassword)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return (false, "USER_NOT_FOUND");
+
+            var removeResult = await _userManager.RemovePasswordAsync(user);
+            if (!removeResult.Succeeded) return (false, removeResult.Errors.FirstOrDefault()?.Description ?? "ERROR_REMOVING_PASSWORD");
+
+            var addResult = await _userManager.AddPasswordAsync(user, newPassword);
+            if (!addResult.Succeeded) return (false, addResult.Errors.FirstOrDefault()?.Description ?? "ERROR_ADDING_PASSWORD");
+
+            return (true, "PASSWORD_CHANGED_SUCCESSFULLY");
         }
 
         private async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
