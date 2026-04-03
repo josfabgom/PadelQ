@@ -8,6 +8,12 @@ import ActivitiesPage from './pages/Activities';
 import AdminSettingsPage from './pages/AdminSettings';
 import MembershipsPage from './pages/Memberships';
 import QrValidator from './pages/QrValidator';
+import CtaCtePage from './pages/CtaCte';
+import PaymentMethodsPage from './pages/PaymentMethods';
+import ReportsPage from './pages/Reports';
+
+
+
 
 
 function App() {
@@ -45,6 +51,21 @@ function App() {
           path="/validate" 
           element={isAuthenticated ? <QrValidator /> : <Navigate to="/login" />} 
         />
+        <Route 
+          path="/ctacte" 
+          element={isAuthenticated ? <CtaCtePage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/payment-methods" 
+          element={isAuthenticated ? <PaymentMethodsPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/reports" 
+          element={isAuthenticated ? <ReportsPage /> : <Navigate to="/login" />} 
+        />
+
+
+
 
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

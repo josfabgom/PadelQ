@@ -143,7 +143,32 @@ const AdminSettingsPage = () => {
               />
             </div>
           </div>
+          {/* Facturación Card */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                <Settings className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Automatización de Cuotas</h2>
+                <p className="text-sm text-slate-500">Configura la generación automática de deuda</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <SettingInput 
+                label="Días de Anticipación para Cuotas" 
+                value={getSettingValue('BillingToleranceDays', '5')} 
+                onChange={(val) => handleChange('BillingToleranceDays', val)}
+                onSave={() => handleSave('BillingToleranceDays')}
+                icon={<Clock className="w-4 h-4" />}
+                suffix="días antes"
+                type="number"
+              />
+            </div>
+          </div>
         </div>
+
       )}
     </div>
   );

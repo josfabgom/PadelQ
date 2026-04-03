@@ -1,4 +1,4 @@
 --- USER DIAGNOSTIC ---
-User: josfabgom@gmail.com, Email: josfabgom@gmail.com, Name: fabian, DNI: 28675910
-User: admin@padelq.com, Email: admin@padelq.com, Name: Administrador Sistema, DNI: 
+User: Admin, Email: admin@padelq.com, Name: Administrador Sistema, DNI: 
+User: marce@padelq.com, Email: marce@padelq.com, Name: Marcelo Mercado, DNI: 12233564
 ------------------------

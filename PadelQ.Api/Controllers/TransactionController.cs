@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+
+
 
 namespace PadelQ.Api.Controllers
 {
@@ -16,10 +19,12 @@ namespace PadelQ.Api.Controllers
     public class TransactionController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IBillingService _billingService;
 
-        public TransactionController(ApplicationDbContext context)
+        public TransactionController(ApplicationDbContext context, IBillingService billingService)
         {
             _context = context;
+            _billingService = billingService;
         }
 
         [HttpGet("user/{userId}")]
@@ -36,27 +41,31 @@ namespace PadelQ.Api.Controllers
         {
             var charges = await _context.Transactions
                 .Where(t => t.UserId == userId && t.Type == TransactionType.Charge)
-                .SumAsync(t => t.Amount);
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
 
             var payments = await _context.Transactions
                 .Where(t => t.UserId == userId && t.Type == TransactionType.Payment)
-                .SumAsync(t => t.Amount);
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
 
             return charges - payments;
         }
 
         [HttpPost("payment")]
         [Authorize(Roles = "Admin")]
-        public async Task<ActionResult<Transaction>> RecordPayment(string userId, decimal amount, string? description)
+        public async Task<ActionResult<Transaction>> RecordPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description)
         {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
             var transaction = new Transaction
             {
                 UserId = userId,
                 Amount = amount,
-                Type = TransactionType.Payment,
                 Date = DateTime.UtcNow,
-                Description = description ?? "Payment received"
+                Type = TransactionType.Payment,
+                Description = description
             };
+
 
             _context.Transactions.Add(transaction);
             await _context.SaveChangesAsync();
@@ -64,44 +73,38 @@ namespace PadelQ.Api.Controllers
             return Ok(transaction);
         }
 
+        [HttpGet("report/payments-by-method")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult> GetPaymentsByMethodReport([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var start = startDate ?? DateTime.UtcNow.Date.AddDays(-30);
+            var end = endDate ?? DateTime.UtcNow;
+
+            var report = await _context.Transactions
+                .Where(t => t.Type == TransactionType.Payment && t.Date >= start && t.Date <= end)
+                .GroupBy(t => new { t.PaymentMethodId, MethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Sin Especificar", Color = t.PaymentMethod != null ? t.PaymentMethod.HexColor : "#888888" })
+                .Select(g => new
+                {
+                    MethodId = g.Key.PaymentMethodId,
+                    MethodName = g.Key.MethodName,
+                    Color = g.Key.Color,
+                    Total = g.Sum(t => t.Amount),
+                    Count = g.Count()
+                })
+                .OrderByDescending(x => x.Total)
+                .ToListAsync();
+
+            return Ok(report);
+        }
+
         [HttpPost("generate-monthly-charges")]
+
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GenerateMonthlyCharges()
         {
-            var activeUserMemberships = await _context.UserMemberships
-                .Include(um => um.Membership)
-                .Where(um => um.IsActive)
-                .ToListAsync();
-
-            int chargesCreated = 0;
-            foreach (var um in activeUserMemberships)
-            {
-                // Check if already charged this month
-                var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-                var alreadyCharged = await _context.Transactions
-                    .AnyAsync(t => t.UserId == um.UserId 
-                                && t.Type == TransactionType.Charge 
-                                && t.Date >= startOfMonth
-                                && t.Description != null 
-                                && t.Description.Contains("Monthly charge"));
-
-                if (!alreadyCharged && um.Membership != null)
-                {
-                    var charge = new Transaction
-                    {
-                        UserId = um.UserId,
-                        Amount = um.Membership.MonthlyPrice,
-                        Type = TransactionType.Charge,
-                        Date = DateTime.UtcNow,
-                        Description = $"Monthly charge - {um.Membership.Name} - {DateTime.UtcNow:MMMM yyyy}"
-                    };
-                    _context.Transactions.Add(charge);
-                    chargesCreated++;
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return Ok(new { message = $"Created {chargesCreated} monthly charges." });
+            var chargesCreated = await _billingService.GenerateMonthlyChargesAsync();
+            return Ok(new { message = $"Se generaron {chargesCreated} nuevas cuotas." });
         }
+
     }
 }

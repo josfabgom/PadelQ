@@ -9,6 +9,7 @@ using PadelQ.Domain.Interfaces;
 using PadelQ.Infrastructure.Identity;
 using PadelQ.Infrastructure.Persistence;
 using PadelQ.Infrastructure.Services;
+using PadelQ.Infrastructure.BackgroundServices;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -17,6 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 // DB Context
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 
 // Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -69,6 +71,7 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IQrService, QrService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddHostedService<BillingBackgroundService>();
 builder.Services.AddMemoryCache();
 
 

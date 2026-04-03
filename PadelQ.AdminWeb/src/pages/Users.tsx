@@ -17,6 +17,7 @@ interface User {
   membershipName?: string;
   membershipHexColor?: string;
   isActive: boolean;
+  role?: string;
 }
 
 const UsersPage = () => {
@@ -171,7 +172,8 @@ const UsersPage = () => {
         address,
         city,
         province,
-        photoUrl
+        photoUrl,
+        role
       }, config);
       setIsEditModalOpen(false);
       fetchUsers();
@@ -226,6 +228,7 @@ const UsersPage = () => {
     setProvince(user.province || '');
     setPhotoUrl(user.photoUrl || '');
     setIsActive(user.isActive);
+    setRole(user.role || 'User');
     setIsEditModalOpen(true);
   };
 
@@ -264,6 +267,13 @@ const UsersPage = () => {
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm"
             />
           </div>
+          <a 
+            href="/ctacte"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Cuentas Corrientes</span>
+          </a>
           <button 
             onClick={() => { resetForm(); setIsCreateModalOpen(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
@@ -271,6 +281,7 @@ const UsersPage = () => {
             <UserPlus className="w-4 h-4" />
             <span>Nuevo Cliente</span>
           </button>
+
         </div>
       </div>
 
@@ -605,6 +616,28 @@ const UsersPage = () => {
                 >
                   <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-md ${isActive ? 'right-1' : 'left-1'}`} />
                 </button>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-indigo-600 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4" /> Nivel de Acceso
+                </h3>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Perfil del Usuario</label>
+                  <select 
+                    value={role} 
+                    onChange={(e) => setRole(e.target.value)} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 transition-all font-outfit"
+                  >
+                    <option value="User">Cliente (Solo App Móvil)</option>
+                    <option value="Admin">Administrador (Acceso Total)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    {role === 'Admin' 
+                      ? '⚠️ El Administrador puede gestionar canchas, precios, usuarios y ver reportes.' 
+                      : 'El Usuario solo tiene acceso a sus propias reservas y actividad en la App Móvil.'}
+                  </p>
+                </div>
               </div>
 
               <div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-slate-50">

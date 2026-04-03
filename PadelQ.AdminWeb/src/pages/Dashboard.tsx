@@ -6,8 +6,9 @@ import {
 } from 'recharts';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, TrendingDown, 
-  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus
+  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck
 } from 'lucide-react';
+
 import Calendar from '../components/Calendar';
 import Header from '../components/Header';
 
@@ -54,9 +55,15 @@ const Dashboard = () => {
         <div className="flex flex-wrap gap-2">
           <NavButton href="/courts" icon={<Layout className="w-4 h-4" />} label="Canchas" />
           <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />
+          <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />
           <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />
+
           <NavButton href="/memberships" icon={<CreditCard className="w-4 h-4" />} label="Membresías" />
+          <NavButton href="/payment-methods" icon={<ShieldCheck className="w-4 h-4" />} label="Pagos" />
+          <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />
           <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />
+
+
           <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />
         </div>
       </div>

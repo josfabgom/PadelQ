@@ -46,100 +46,97 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Background accents
+          // Decorative background accents
           Positioned(
             top: -100, right: -100,
             child: Container(
-              width: 300, height: 300,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
+              width: 400, height: 400,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), shape: BoxShape.circle),
             ),
           ),
           
-          SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.w),
-              child: Column(
-                children: [
-                  SizedBox(height: 140.h),
-                  
-                  Image.asset(
-                    'assets/images/logo-full-white.png', 
-                    height: 120.h,
-                  ),
-                  
-                  SizedBox(height: 12.h),
-                  Text(
-                    'SISTEMA DE GESTIÓN PREMIUM',
-                    style: TextStyle(
-                      fontSize: 10.sp, 
-                      fontWeight: FontWeight.w900, 
-                      color: Colors.grey.withOpacity(0.6),
-                      letterSpacing: 4.w,
-                    ),
-                  ),
-                  
-                  SizedBox(height: 80.h),
-                  
-                  _AuthInputField(
-                    controller: _emailController, 
-                    label: 'USUARIO', 
-                    hint: 'tu@email.com',
-                  ),
-                  SizedBox(height: 24.h),
-                  _AuthInputField(
-                    controller: _passwordController, 
-                    label: 'CONTRASEÑA', 
-                    hint: '••••••••',
-                    isPassword: true,
-                  ),
-                  
-                  SizedBox(height: 48.h),
-                  
-                  SizedBox(
+          Center(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400.0),
+                  child: Container(
                     width: double.infinity,
-                    height: 64.h,
-                    child: ElevatedButton(
-                      onPressed: authState.isLoading ? null : _handleLogin,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                        elevation: 0,
-                      ),
-                      child: authState.isLoading 
-                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
-                        : Text(
-                            'INICIAR SESIÓN', 
-                            style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, letterSpacing: 2.w),
+                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 60.0),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF18181B).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(40.0),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, offset: const Offset(0, 20))
+                      ]
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset('assets/images/logo-full-white.png', height: 120.0),
+                        
+                        const SizedBox(height: 16.0),
+                        Text(
+                          'SISTEMA DE GESTIÓN',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12.0, 
+                            fontWeight: FontWeight.w900, 
+                            color: Colors.white.withOpacity(0.4),
+                            letterSpacing: 4.0,
                           ),
+                        ),
+                        
+                        const SizedBox(height: 50.0),
+                        
+                        _AuthInputField(
+                          controller: _emailController, 
+                          label: 'USUARIO', 
+                          hint: 'Ingresa tu email',
+                        ),
+                        const SizedBox(height: 24.0),
+                        _AuthInputField(
+                          controller: _passwordController, 
+                          label: 'CONTRASEÑA', 
+                          hint: '••••••••',
+                          isPassword: true,
+                        ),
+                        
+                        const SizedBox(height: 50.0),
+                        
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60.0,
+                          child: ElevatedButton(
+                            onPressed: authState.isLoading ? null : _handleLogin,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+                              elevation: 0,
+                            ),
+                            child: authState.isLoading 
+                              ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                              : const Text('INICIAR SESIÓN', style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w900, letterSpacing: 2.0)),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 40.0),
+                        Text(
+                          'COPYRIGHT © 2026 BLACK MARCA GRÁFICA',
+                          style: TextStyle(
+                            fontSize: 10.0, 
+                            color: Colors.white.withOpacity(0.2),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  
-                  SizedBox(height: 40.h),
-                  TextButton(
-                    onPressed: () => context.go('/register'),
-                    child: Text(
-                      '¿NO TIENES CUENTA? REGÍSTRATE AQUÍ',
-                      style: TextStyle(
-                        fontSize: 10.sp, 
-                        color: Colors.white.withOpacity(0.4),
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.w,
-                      ),
-                    ),
-                  ),
-                  
-                  SizedBox(height: 40.h),
-                  Text(
-                    'COPYRIGHT © 2026 BLACK MARCA GRÁFICA',
-                    style: TextStyle(
-                      fontSize: 8.sp, 
-                      color: Colors.white.withOpacity(0.2),
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2.w,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -155,12 +152,7 @@ class _AuthInputField extends StatelessWidget {
   final String hint;
   final bool isPassword;
 
-  const _AuthInputField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    this.isPassword = false,
-  });
+  const _AuthInputField({required this.controller, required this.label, required this.hint, this.isPassword = false});
 
   @override
   Widget build(BuildContext context) {
@@ -168,15 +160,10 @@ class _AuthInputField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: 4.w, bottom: 8.h),
+          padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 10.sp, 
-              fontWeight: FontWeight.w900, 
-              color: Colors.white.withOpacity(0.8),
-              letterSpacing: 2.w,
-            ),
+            style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(0.5), letterSpacing: 2.0),
           ),
         ),
         TextField(
@@ -186,22 +173,13 @@ class _AuthInputField extends StatelessWidget {
           cursorColor: Colors.white,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 13.sp),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20.r), 
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20.r), 
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20.r), 
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-            ),
+            hintStyle: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 14.0),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide(color: Colors.white.withOpacity(0.2))),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.05),
-            contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+            fillColor: const Color(0xFF27272A).withOpacity(0.5),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 18.0),
           ),
         ),
       ],

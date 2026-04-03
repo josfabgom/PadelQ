@@ -11,3 +11,4 @@ Login Failed: User josfabgom@gmail.com found, but password invalid.
 Login Failed: User josfabgom@gmail.com found, but password invalid.
 Login Failed: User  admin@padelq.com not found.
 Login Failed: User  admin@padelq.com not found.
+Login Failed: User admin found, but password invalid.

@@ -218,14 +218,14 @@ namespace PadelQ.Infrastructure.Identity
             };
         }
 
-        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl)
+        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role)
         {
             if (!string.IsNullOrEmpty(dni))
             {
                 var existingUser = await _userManager.Users.AnyAsync(u => u.Dni == dni && u.Id != userId);
                 if (existingUser) return (false, "DNI_ALREADY_EXISTS");
             }
-
+ 
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return (false, "USER_NOT_FOUND");
  
@@ -242,6 +242,18 @@ namespace PadelQ.Infrastructure.Identity
  
             var result = await _userManager.UpdateAsync(user);
             if (!result.Succeeded) return (false, result.Errors.FirstOrDefault()?.Code ?? "UNKNOWN_ERROR");
+
+            // Update Role
+            if (!string.IsNullOrEmpty(role))
+            {
+                var currentRoles = await _userManager.GetRolesAsync(user);
+                if (!currentRoles.Contains(role))
+                {
+                    await _userManager.RemoveFromRolesAsync(user, currentRoles);
+                    await _userManager.AddToRoleAsync(user, role);
+                }
+            }
+
             return (true, "SUCCESS");
         }
 

@@ -19,6 +19,8 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<Membership> Memberships { get; set; } = null!;
         public DbSet<UserMembership> UserMemberships { get; set; } = null!;
         public DbSet<Transaction> Transactions { get; set; } = null!;
+        public DbSet<PaymentMethod> PaymentMethods { get; set; } = null!;
+
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
