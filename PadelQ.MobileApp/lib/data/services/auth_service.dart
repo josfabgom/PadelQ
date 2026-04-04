@@ -55,6 +55,8 @@ class AuthService {
         return response.data;
       }
       return null;
+    } catch (e) {
+      return null;
     }
   }
 
