@@ -16,7 +16,7 @@ namespace PadelQ.Infrastructure.Persistence
             var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
  
-            context.Database.Migrate();
+            await context.Database.MigrateAsync();
 
             // 1. Roles
             string[] roles = { "Admin", "User" };
