@@ -15,6 +15,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/transaction")]
     [Authorize]
     public class TransactionController : ControllerBase
     {
