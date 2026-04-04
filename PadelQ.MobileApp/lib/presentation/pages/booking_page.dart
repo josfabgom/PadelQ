@@ -204,7 +204,7 @@ class _BookingPageState extends ConsumerState<BookingPage> {
             child: GestureDetector(
               onTap: () => setState(() => _selectedDuration = d),
               child: Container(
-                margin: EdgeInsets.only(right: index < 2 ? 12.w : 0), // wait, no index here
+                margin: EdgeInsets.only(right: d != 120 ? 12.w : 0),
                 padding: EdgeInsets.symmetric(vertical: 16.h),
                 decoration: BoxDecoration(
                   color: isSelected ? Colors.black : Colors.white,
@@ -218,7 +218,7 @@ class _BookingPageState extends ConsumerState<BookingPage> {
                   ),
                 ),
               ),
-            ).paddingRight(d == 120 ? 0 : 12.w),
+            ),
           );
         }).toList(),
       ),
