@@ -13,7 +13,7 @@ class ActivityService {
 
   Future<List<dynamic>> getActivities() async {
     try {
-      final response = await _dio.get('/activities', options: await _getOptions());
+      final response = await _dio.get('/api/activities', options: await _getOptions());
       return response.data;
     } catch (e) {
       return [];
@@ -23,7 +23,7 @@ class ActivityService {
   Future<Map<String, dynamic>> signup(int activityId) async {
     try {
       final response = await _dio.post(
-        '/activities/$activityId/signup',
+        '/api/activities/$activityId/signup',
         options: await _getOptions(),
       );
       return {'success': true, 'message': response.data['message'] ?? 'Inscripción exitosa'};

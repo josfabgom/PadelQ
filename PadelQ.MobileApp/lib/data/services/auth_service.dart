@@ -8,7 +8,7 @@ class AuthService {
 
   Future<bool> login(String email, String password) async {
     try {
-      final response = await _dio.post('/auth/login', data: {
+      final response = await _dio.post('/api/auth/login', data: {
         'email': email,
         'password': password,
       });
@@ -26,7 +26,7 @@ class AuthService {
 
   Future<bool> register(String fullName, String email, String password) async {
     try {
-      final response = await _dio.post('/auth/register', data: {
+      final response = await _dio.post('/api/auth/register', data: {
         'fullName': fullName,
         'email': email,
         'password': password,
@@ -48,7 +48,7 @@ class AuthService {
   Future<Map<String, dynamic>?> getUserInfo(String userId) async {
     try {
       final token = await getToken();
-      final response = await _dio.get('/users/$userId', options: Options(
+      final response = await _dio.get('/api/users/$userId', options: Options(
         headers: { 'Authorization': 'Bearer $token' }
       ));
       if (response.statusCode == 200) {

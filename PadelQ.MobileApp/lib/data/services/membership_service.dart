@@ -13,7 +13,7 @@ class MembershipService {
   Future<Map<String, dynamic>?> generateQrToken() async {
     try {
       final token = await getToken();
-      final response = await _dio.get('/membership/generate-qr', options: Options(
+      final response = await _dio.get('/api/membership/generate-qr', options: Options(
         headers: { 'Authorization': 'Bearer $token' }
       ));
       if (response.statusCode == 200) {

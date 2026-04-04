@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 // Get API URL from env or fallback to localhost for development
-// URL de tu backend local (corregida sin el /api duplicado)
-const API_BASE_URL = 'http://localhost:5041'; 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5041'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

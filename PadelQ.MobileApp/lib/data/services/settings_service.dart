@@ -13,7 +13,7 @@ class SettingsService {
 
   Future<List<dynamic>> getSettings() async {
     try {
-      final response = await _dio.get('/systemsettings', options: await _getOptions());
+      final response = await _dio.get('/api/systemsettings', options: await _getOptions());
       return response.data;
     } catch (e) {
       return [];
@@ -22,7 +22,7 @@ class SettingsService {
 
   Future<bool> updateSetting(String key, String value) async {
     try {
-      final response = await _dio.put('/systemsettings', 
+      final response = await _dio.put('/api/systemsettings', 
         data: {'key': key, 'value': value},
         options: await _getOptions()
       );

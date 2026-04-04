@@ -10,6 +10,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/paymentmethods")]
     [Authorize(Roles = "Admin")]
     public class PaymentMethodsController : ControllerBase
     {
@@ -36,7 +37,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<PaymentMethod>> CreatePaymentMethod(PaymentMethod method)
+        public async Task<ActionResult<PaymentMethod>> CreatePaymentMethod([FromBody] PaymentMethod method)
         {
             _context.PaymentMethods.Add(method);
             await _context.SaveChangesAsync();
@@ -44,7 +45,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdatePaymentMethod(int id, PaymentMethod method)
+        public async Task<IActionResult> UpdatePaymentMethod(int id, [FromBody] PaymentMethod method)
         {
             if (id != method.Id) return BadRequest();
             _context.Entry(method).State = EntityState.Modified;

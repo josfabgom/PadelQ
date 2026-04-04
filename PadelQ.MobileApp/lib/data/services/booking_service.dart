@@ -13,7 +13,7 @@ class BookingService {
 
   Future<List<dynamic>> getCourts() async {
     try {
-      final response = await _dio.get('/courts', options: await _getOptions());
+      final response = await _dio.get('/api/courts', options: await _getOptions());
       return response.data;
     } catch (e) {
       return [];
@@ -22,7 +22,7 @@ class BookingService {
 
   Future<List<dynamic>> getMyBookings() async {
     try {
-      final response = await _dio.get('/bookings/my-bookings', options: await _getOptions());
+      final response = await _dio.get('/api/bookings/my-bookings', options: await _getOptions());
       return response.data;
     } catch (e) {
       return [];
@@ -31,7 +31,7 @@ class BookingService {
 
   Future<Map<String, dynamic>> createBooking(int courtId, DateTime startTime, int duration) async {
     try {
-      final response = await _dio.post('/bookings/create', 
+      final response = await _dio.post('/api/bookings/create', 
         data: {
           'courtId': courtId,
           'startTime': startTime.toIso8601String(),
@@ -47,7 +47,7 @@ class BookingService {
 
   Future<bool> cancelBooking(String bookingId) async {
     try {
-      final response = await _dio.delete('/bookings/$bookingId', options: await _getOptions());
+      final response = await _dio.delete('/api/bookings/$bookingId', options: await _getOptions());
       return response.statusCode == 204;
     } catch (e) {
       return false;

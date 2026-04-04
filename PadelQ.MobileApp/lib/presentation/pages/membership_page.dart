@@ -119,14 +119,34 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                   ),
                   if (expiryDate != null) ...[
                     SizedBox(height: 16.h),
-                    Text(
-                      'VALIDEZ HASTA: ${DateFormat('dd/MM/yyyy').format(expiryDate.toLocal())}',
-                      style: TextStyle(
-                        color: isExpired ? Colors.yellow.shade200 : Colors.white70, 
-                        fontSize: 11.sp, 
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('COBERTURA DESDE', style: TextStyle(color: Colors.white60, fontSize: 8.sp, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                            Text(
+                              DateFormat('dd/MM/yyyy').format(DateTime.parse(authState.user?['coverageStartDate'] ?? authState.user?['CoverageStartDate'] ?? expiryDateRaw).toLocal()), 
+                              style: TextStyle(color: Colors.white, fontSize: 11.sp, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('VENCIMIENTO', style: TextStyle(color: Colors.white60, fontSize: 8.sp, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                            Text(
+                              DateFormat('dd/MM/yyyy').format(expiryDate.toLocal()),
+                              style: TextStyle(
+                                color: isExpired ? Colors.yellow.shade200 : Colors.white, 
+                                fontSize: 11.sp, 
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ],

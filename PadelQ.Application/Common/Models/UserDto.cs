@@ -17,6 +17,7 @@ namespace PadelQ.Application.Common.Models
         public string? MembershipHexColor { get; set; }
         public bool IsActive { get; set; } = true;
         public DateTime? ExpiryDate { get; set; }
+        public DateTime? CoverageStartDate { get; set; }
         public bool IsExpired { get; set; }
         public string? Role { get; set; }
     }
