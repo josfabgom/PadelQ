@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 namespace PadelQ.Api.Controllers
 {
+    [ApiController]
+    [Route("api/[controller]")]
     [Authorize(Roles = "Admin,Staff")]
     public class CourtsController : ControllerBase
     {
