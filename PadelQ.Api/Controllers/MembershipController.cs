@@ -86,6 +86,16 @@ namespace PadelQ.Api.Controllers
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound("User not found");
 
+            // Prevent membership for Administrative Roles
+            var isAdministrative = await _context.UserRoles
+                .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
+                .AnyAsync(x => x.UserId == userId && (x.Name == "Staff" || x.Name == "Merchant"));
+
+            if (isAdministrative)
+            {
+                return BadRequest("No se puede asignar una membresía a un perfil administrativo.");
+            }
+
             var membership = await _context.Memberships.FindAsync(membershipId);
             if (membership == null) return NotFound("Membership not found");
 

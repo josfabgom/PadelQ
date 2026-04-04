@@ -357,27 +357,31 @@ const UsersPage = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
-                        <button 
-                          onClick={() => { setSelectedUser(user); fetchUserTransactions(user.id); setIsHistoryModalOpen(true); }}
-                          className="p-2 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-slate-100 shadow-sm"
-                          title="Ver Cta Cte / Historial"
-                        >
-                          <Calendar className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => { setSelectedUser(user); setPaymentAmount(user.balance > 0 ? user.balance : 0); setIsPaymentModalOpen(true); }}
-                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100 shadow-sm"
-                          title="Registrar Pago"
-                        >
-                          <DollarSign className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => { setSelectedUser(user); setIsMembershipModalOpen(true); }}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-100 shadow-sm"
-                          title="Asignar Plan"
-                        >
-                          <CreditCard className="w-4 h-4" />
-                        </button>
+                        {user.role !== 'Staff' && user.role !== 'Merchant' && (
+                          <>
+                            <button 
+                              onClick={() => { setSelectedUser(user); fetchUserTransactions(user.id); setIsHistoryModalOpen(true); }}
+                              className="p-2 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-slate-100 shadow-sm"
+                              title="Ver Cta Cte / Historial"
+                            >
+                              <Calendar className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => { setSelectedUser(user); setPaymentAmount(user.balance > 0 ? user.balance : 0); setIsPaymentModalOpen(true); }}
+                              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100 shadow-sm"
+                              title="Registrar Pago"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => { setSelectedUser(user); setIsMembershipModalOpen(true); }}
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-100 shadow-sm"
+                              title="Asignar Plan"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                         <button 
                           onClick={() => openEditModal(user)}
                           className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-100 shadow-sm"
