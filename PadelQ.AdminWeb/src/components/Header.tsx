@@ -30,6 +30,14 @@ const Header = () => {
             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{VERSION}</span>
         </div>
         
+        <a 
+            href="/profile"
+            className="flex items-center gap-2 px-6 py-3 bg-white text-zinc-900 duration-300 font-black text-[11px] uppercase tracking-widest border border-zinc-100 shadow-sm rounded-2xl hover:bg-zinc-50"
+        >
+            <UserIcon className="w-4 h-4" />
+            Mi Perfil
+        </a>
+        
         <button 
             onClick={handleLogout}
             className="flex items-center gap-2 px-6 py-3 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl transition-all duration-300 font-black text-[11px] uppercase tracking-widest border border-rose-100 shadow-sm"

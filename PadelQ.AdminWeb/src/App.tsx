@@ -11,6 +11,7 @@ import QrValidator from './pages/QrValidator';
 import CtaCtePage from './pages/CtaCte';
 import PaymentMethodsPage from './pages/PaymentMethods';
 import ReportsPage from './pages/Reports';
+import ProfilePage from './pages/Profile';
 
 
 
@@ -62,6 +63,10 @@ function App() {
         <Route 
           path="/reports" 
           element={isAuthenticated ? <ReportsPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/profile" 
+          element={isAuthenticated ? <ProfilePage /> : <Navigate to="/login" />} 
         />
 
 
