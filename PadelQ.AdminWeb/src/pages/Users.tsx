@@ -522,9 +522,13 @@ const UsersPage = () => {
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-indigo-600"
                   >
                     <option value="User">Cliente (Solo App Móvil)</option>
-                    <option value="Staff">Administración (Sin Borrar)</option>
-                    <option value="Merchant">Comercio (Solo QR)</option>
-                    <option value="Admin">Administrador (Acceso Total)</option>
+                    {roles.includes('Admin') && (
+                      <>
+                        <option value="Staff">Administración (Sin Borrar)</option>
+                        <option value="Merchant">Comercio (Solo QR)</option>
+                        <option value="Admin">Administrador (Acceso Total)</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -636,12 +640,17 @@ const UsersPage = () => {
                   <select 
                     value={role} 
                     onChange={(e) => setRole(e.target.value)} 
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 transition-all font-outfit"
+                    disabled={!roles.includes('Admin')}
+                    className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 transition-all font-outfit ${!roles.includes('Admin') ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <option value="User">Cliente (Solo App Móvil)</option>
-                    <option value="Staff">Administración (Sin Borrar)</option>
-                    <option value="Merchant">Comercio (Solo QR)</option>
-                    <option value="Admin">Administrador (Acceso Total)</option>
+                    {roles.includes('Admin') && (
+                      <>
+                        <option value="Staff">Administración (Sin Borrar)</option>
+                        <option value="Merchant">Comercio (Solo QR)</option>
+                        <option value="Admin">Administrador (Acceso Total)</option>
+                      </>
+                    )}
                   </select>
                   <p className="text-[10px] text-slate-400 mt-2">
                     {role === 'Admin' 

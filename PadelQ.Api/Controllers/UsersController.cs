@@ -35,7 +35,14 @@ namespace PadelQ.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
-            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber, request.Role ?? "User");
+            // Only Admin can assign roles besides User
+            var assignedRole = request.Role ?? "User";
+            if (!User.IsInRole("Admin") && assignedRole != "User")
+            {
+                return BadRequest("Solo el administrador puede asignar roles especiales.");
+            }
+
+            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber, assignedRole);
             if (!succeeded) return BadRequest(result ?? "No se pudo crear el usuario.");
             return Ok(new { Id = result });
         }
@@ -43,6 +50,16 @@ namespace PadelQ.Api.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateUser(string id, [FromBody] UpdateUserRequest request)
         {
+            // Only Admin can change or assign roles
+            if (!User.IsInRole("Admin"))
+            {
+                var existingUser = await _identityService.GetUserByIdAsync(id);
+                if (existingUser != null && existingUser.Role != request.Role)
+                {
+                    return BadRequest("Solo el administrador puede cambiar los roles de los usuarios.");
+                }
+            }
+
             var (succeeded, message) = await _identityService.UpdateUserAsync(id, request.FullName, request.Email, request.PhoneNumber, request.IsActive, request.Dni, request.Address, request.City, request.Province, request.PhotoUrl, request.Role);
             if (!succeeded) return BadRequest(message ?? "No se pudo actualizar el usuario.");
             return NoContent();
