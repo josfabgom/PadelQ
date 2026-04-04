@@ -4,6 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../providers/auth_provider.dart';
+import '../../config/api_config.dart';
+import 'package:padelq_mobile/config/api_config.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});

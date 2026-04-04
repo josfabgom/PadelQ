@@ -56,7 +56,7 @@ class _BookingPageState extends ConsumerState<BookingPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: result['success'] == true ? Colors.emerald : Colors.red,
+          backgroundColor: result['success'] == true ? Colors.green : Colors.red,
           content: Text(result['message'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
       );
@@ -246,15 +246,15 @@ class _BookingPageState extends ConsumerState<BookingPage> {
               margin: EdgeInsets.only(bottom: 12.h),
               padding: EdgeInsets.all(20.w),
               decoration: BoxDecoration(
-                color: Colors.emerald.shade50,
+                color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(24.r),
-                border: Border.all(color: Colors.emerald.withOpacity(0.1)),
+                border: Border.all(color: Colors.green.withOpacity(0.1)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: EdgeInsets.all(12.w),
-                    decoration: BoxDecoration(color: Colors.emerald, borderRadius: BorderRadius.circular(16.r)),
+                    decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(16.r)),
                     child: const Icon(LucideIcons.calendarCheck, color: Colors.white, size: 20),
                   ),
                   SizedBox(width: 16.w),
@@ -262,8 +262,8 @@ class _BookingPageState extends ConsumerState<BookingPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(b['court']['name'], style: TextStyle(fontWeight: FontWeight.w900, color: Colors.emerald.shade900)),
-                        Text('${DateFormat('dd/MM').format(date)} - ${DateFormat('HH:mm').format(date)}HS', style: TextStyle(color: Colors.emerald.shade700, fontSize: 11.sp, fontWeight: FontWeight.bold)),
+                        Text(b['court']['name'], style: TextStyle(fontWeight: FontWeight.w900, color: Colors.green.shade900)),
+                        Text('${DateFormat('dd/MM').format(date)} - ${DateFormat('HH:mm').format(date)}HS', style: TextStyle(color: Colors.green.shade700, fontSize: 11.sp, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),

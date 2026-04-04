@@ -46,7 +46,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _confirmPasswordController.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          backgroundColor: Colors.emerald,
+          backgroundColor: Colors.green,
           content: Text('Contraseña actualizada correctamente', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ));
       }
