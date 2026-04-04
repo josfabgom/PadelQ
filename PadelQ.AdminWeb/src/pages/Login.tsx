@@ -21,9 +21,12 @@ const LoginPage = () => {
       
       const { token, fullName, email: userEmail, roles } = response.data;
       
-      // Strict Check for ADMIN role in this panel
-      if (!roles || !roles.includes('Admin')) {
-        setError('No tienes permisos de Administrador para acceder a este panel.');
+      // Strict Check for valid Admin Panel roles
+      const allowedRoles = ['Admin', 'Merchant', 'Staff'];
+      const hasPermission = roles && roles.some((r: string) => allowedRoles.includes(r));
+
+      if (!hasPermission) {
+        setError('No tienes permisos suficientes para acceder a este panel.');
         setLoading(false);
         return;
       }

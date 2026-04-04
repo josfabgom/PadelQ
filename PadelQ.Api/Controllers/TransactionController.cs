@@ -15,7 +15,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/transaction")]
-    [Authorize]
+    [Authorize(Roles = "Admin,Staff")]
     public class TransactionController : ControllerBase
     {
         private readonly ApplicationDbContext _context;

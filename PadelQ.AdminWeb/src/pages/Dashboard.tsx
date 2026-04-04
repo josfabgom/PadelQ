@@ -19,7 +19,18 @@ const Dashboard = () => {
   const [courts, setCourts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
+  const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
+  const isAdmin = roles.includes('Admin');
+  const isMerchant = roles.includes('Merchant');
+  const isStaff = roles.includes('Staff');
+
   useEffect(() => {
+    // If only merchant, redirect to validate immediately
+    if (isMerchant && !isAdmin && !isStaff) {
+       window.location.href = '/validate';
+       return;
+    }
+    
     const fetchData = async () => {
       try {
         const config = getAuthConfig();
@@ -53,18 +64,16 @@ const Dashboard = () => {
         </div>
         
         <div className="flex flex-wrap gap-2">
-          <NavButton href="/courts" icon={<Layout className="w-4 h-4" />} label="Canchas" />
-          <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />
-          <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />
-          <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />
+          {(isAdmin || isStaff) && <NavButton href="/courts" icon={<Layout className="w-4 h-4" />} label="Canchas" />}
+          {(isAdmin || isStaff) && <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />}
+          {(isAdmin || isStaff) && <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />}
+          {isAdmin && <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />}
+          {isAdmin && <NavButton href="/memberships" icon={<CreditCard className="w-4 h-4" />} label="Membresías" />}
+          {isAdmin && <NavButton href="/payment-methods" icon={<ShieldCheck className="w-4 h-4" />} label="Pagos" />}
+          {isAdmin && <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />}
+          {(isAdmin || isStaff || isMerchant) && <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />}
 
-          <NavButton href="/memberships" icon={<CreditCard className="w-4 h-4" />} label="Membresías" />
-          <NavButton href="/payment-methods" icon={<ShieldCheck className="w-4 h-4" />} label="Pagos" />
-          <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />
-          <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />
-
-
-          <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />
+          {isAdmin && <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />}
         </div>
       </div>
 

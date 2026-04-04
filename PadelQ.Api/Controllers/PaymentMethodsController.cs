@@ -10,7 +10,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/paymentmethods")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Staff")]
     public class PaymentMethodsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;

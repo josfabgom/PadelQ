@@ -176,7 +176,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost("validate-qr")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Merchant")]
         public async Task<IActionResult> ValidateQrToken([FromBody] string token)
         {
             if (!_qrService.ValidateToken(token, out string userId))

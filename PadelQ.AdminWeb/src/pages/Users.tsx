@@ -23,6 +23,7 @@ interface User {
 const UsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
   const [searchTerm, setSearchTerm] = useState('');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
@@ -391,17 +392,19 @@ const UsersPage = () => {
                         >
                           <Key className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100 shadow-sm"
-                          title="Eliminar Cliente"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
+                {roles.includes('Admin') && (
+                  <button 
+                    onClick={() => handleDeleteUser(user.id)}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100 shadow-sm"
+                    title="Eliminar Cliente"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </td>
+          </tr>
+        )) : (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
                       No se encontraron usuarios que coincidan con la búsqueda.

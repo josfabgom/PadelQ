@@ -15,6 +15,7 @@ interface Court {
 const CourtsPage = () => {
   const [courts, setCourts] = useState<Court[]>([]);
   const [loading, setLoading] = useState(true);
+  const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourt, setEditingCourt] = useState<Court | null>(null);
   const [formData, setFormData] = useState<Partial<Court>>({
@@ -118,9 +119,11 @@ const CourtsPage = () => {
                   <button onClick={() => handleOpenModal(court)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(court.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {roles.includes('Admin') && (
+                    <button onClick={() => handleDelete(court.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
               

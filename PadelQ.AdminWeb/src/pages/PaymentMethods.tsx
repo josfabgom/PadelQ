@@ -19,6 +19,8 @@ const PaymentMethods = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
+  const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
+  const isAdmin = roles.includes('Admin');
   
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,9 +137,11 @@ const PaymentMethods = () => {
                   <button onClick={() => handleOpenModal(method)} className="p-2 bg-zinc-50 hover:bg-black hover:text-white rounded-xl transition-all border border-zinc-100">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => handleDelete(method.id)} className="p-2 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-rose-100 text-rose-600">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {isAdmin && (
+                    <button onClick={() => handleDelete(method.id)} className="p-2 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-rose-100 text-rose-600">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                </div>
 
                <div className="mb-6">
