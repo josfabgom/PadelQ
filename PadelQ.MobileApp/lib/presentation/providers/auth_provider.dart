@@ -98,4 +98,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _authService.logout();
     state = AuthState();
   }
+
+  Future<void> refreshProfile() async {
+    if (state.user == null) return;
+    try {
+      final userId = state.user!['sub'] ?? state.user!['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+      final detailedInfo = await _authService.getUserInfo(userId.toString());
+      if (detailedInfo != null) {
+        state = state.copyWith(user: {...state.user!, ...detailedInfo});
+      }
+    } catch (e) {
+      print("Error refreshing profile: $e");
+    }
+  }
 }

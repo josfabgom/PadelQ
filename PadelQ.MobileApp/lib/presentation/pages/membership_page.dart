@@ -18,7 +18,10 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(membershipQrProvider.notifier).fetchQrToken());
+    Future.microtask(() {
+       ref.read(authProvider.notifier).refreshProfile();
+       ref.read(membershipQrProvider.notifier).fetchQrToken();
+    });
   }
 
   @override
