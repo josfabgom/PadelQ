@@ -7,7 +7,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin,Staff")]
+    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly IIdentityService _identityService;
@@ -18,6 +18,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin,Staff")]
         public async Task<IActionResult> GetUsers()
         {
             var users = await _identityService.GetUsersAsync();
@@ -27,6 +28,13 @@ namespace PadelQ.Api.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUser(string id)
         {
+            // Allow if it is Admin/Staff OR if it is the user themselves
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!User.IsInRole("Admin") && !User.IsInRole("Staff") && currentUserId != id)
+            {
+                return Forbid();
+            }
+
             var user = await _identityService.GetUserByIdAsync(id);
             if (user == null) return NotFound();
             return Ok(user);
@@ -84,6 +92,12 @@ namespace PadelQ.Api.Controllers
         [HttpPost("{id}/change-password")]
         public async Task<IActionResult> ChangePassword(string id, [FromBody] ChangePasswordRequest request)
         {
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!User.IsInRole("Admin") && currentUserId != id)
+            {
+                return Forbid();
+            }
+
             var (succeeded, message) = await _identityService.ChangePasswordAsync(id, request.NewPassword);
             if (!succeeded) return BadRequest(message);
             return Ok(new { Message = "Contraseña actualizada correctamente" });
