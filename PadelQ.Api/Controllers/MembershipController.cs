@@ -80,7 +80,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost("subscribe")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff,Merchant")]
         public async Task<IActionResult> SubscribeUser(string userId, int membershipId)
         {
             var user = await _context.Users.FindAsync(userId);
