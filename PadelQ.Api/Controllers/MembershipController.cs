@@ -147,8 +147,13 @@ namespace PadelQ.Api.Controllers
 
             if (userMembership == null) return NotFound("No active membership found");
 
-            var expiryDate = await CalculateExpiryDate(userId, userMembership.StartDate);
-            var isExpired = DateTime.UtcNow > expiryDate;
+            var lastMembershipPayment = await _context.Transactions
+                .Where(t => t.UserId == userId && t.Type == TransactionType.MembershipPayment)
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefaultAsync();
+
+            var isExpired = lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
+            var expiryDate = lastMembershipPayment?.Date.AddDays(30) ?? userMembership.StartDate.AddDays(30);
 
             return Ok(new
             {
@@ -163,9 +168,10 @@ namespace PadelQ.Api.Controllers
                 coverageEndDate = expiryDate,
                 isExpired = isExpired,
                 actualDiscount = isExpired ? 0 : (userMembership.Membership?.DiscountPercentage ?? 0),
-                // Redundancy for different casing policies
+                // Compatibility mapping
                 ExpiryDate = expiryDate,
-                CoverageStartDate = expiryDate.AddDays(-30)
+                CoverageStartDate = expiryDate.AddDays(-30),
+                IsExpired = isExpired
             });
         }
 
@@ -205,8 +211,13 @@ namespace PadelQ.Api.Controllers
                 return BadRequest("El usuario ya no tiene una membresía activa.");
             }
 
-            var expiryDate = await CalculateExpiryDate(userId, membership.StartDate);
-            var isExpired = DateTime.UtcNow > expiryDate;
+            var lastMembershipPayment = await _context.Transactions
+                .Where(t => t.UserId == userId && t.Type == TransactionType.MembershipPayment)
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefaultAsync();
+
+            var isExpired = lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
+            var expiryDate = lastMembershipPayment?.Date.AddDays(30) ?? membership.StartDate.AddDays(30);
 
             return Ok(new
             {
@@ -227,17 +238,5 @@ namespace PadelQ.Api.Controllers
             return Ok(new { Message = "Billing run completed", ChargesGenerated = count });
         }
 
-        private async Task<DateTime> CalculateExpiryDate(string userId, DateTime startDate)
-        {
-            // Find last payment
-            var lastPayment = await _context.Transactions
-                .Where(t => t.UserId == userId && t.Type == TransactionType.Payment)
-                .OrderByDescending(t => t.Date)
-                .FirstOrDefaultAsync();
-
-            // Expiry is 30 days after last payment, or 30 days after membership start if no payment
-            var baseDate = lastPayment?.Date ?? startDate;
-            return baseDate.AddDays(30);
-        }
     }
 }

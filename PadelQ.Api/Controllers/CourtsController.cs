@@ -32,7 +32,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         public async Task<ActionResult<int>> CreateCourt([FromBody] Court court)
         {
             var id = await _courtService.CreateAsync(court);
@@ -40,7 +40,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         public async Task<IActionResult> UpdateCourt(int id, [FromBody] Court court)
         {
             if (id != court.Id) return BadRequest();
