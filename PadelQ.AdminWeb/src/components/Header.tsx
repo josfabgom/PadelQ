@@ -1,5 +1,5 @@
-import React from 'react';
 import { LogOut, User as UserIcon } from 'lucide-react';
+import { VERSION } from '../version';
 
 const Header = () => {
   const userName = localStorage.getItem('padelq_user_name') || 'Administrador';
@@ -27,7 +27,7 @@ const Header = () => {
       <div className="flex items-center gap-4">
         <div className="px-4 py-2 bg-zinc-50 rounded-full border border-zinc-100 hidden md:flex items-center gap-2">
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Sistema Online</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{VERSION}</span>
         </div>
         
         <button 

@@ -14,7 +14,8 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]
+    [Route("api/membership")]
+    [Authorize]
     public class MembershipController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -34,7 +35,7 @@ namespace PadelQ.Api.Controllers
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<ActionResult<Membership>> CreateMembership(Membership membership)
+        public async Task<ActionResult<Membership>> CreateMembership([FromBody] Membership membership)
         {
             _context.Memberships.Add(membership);
             await _context.SaveChangesAsync();
@@ -142,16 +143,20 @@ namespace PadelQ.Api.Controllers
 
             return Ok(new
             {
-                userMembership.Id,
-                userMembership.UserId,
-                userMembership.MembershipId,
-                userMembership.StartDate,
-                userMembership.IsActive,
-                Membership = userMembership.Membership,
+                id = userMembership.Id,
+                userId = userMembership.UserId,
+                membershipId = userMembership.MembershipId,
+                startDate = userMembership.StartDate,
+                isActive = userMembership.IsActive,
+                membership = userMembership.Membership,
+                expiryDate = expiryDate,
+                coverageStartDate = expiryDate.AddDays(-30),
+                coverageEndDate = expiryDate,
+                isExpired = isExpired,
+                actualDiscount = isExpired ? 0 : (userMembership.Membership?.DiscountPercentage ?? 0),
+                // Redundancy for different casing policies
                 ExpiryDate = expiryDate,
-                IsExpired = isExpired,
-                // Override discount if expired
-                ActualDiscount = isExpired ? 0 : (userMembership.Membership?.DiscountPercentage ?? 0)
+                CoverageStartDate = expiryDate.AddDays(-30)
             });
         }
 

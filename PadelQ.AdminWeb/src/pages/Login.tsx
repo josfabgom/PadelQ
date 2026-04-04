@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../api/api';
+import { VERSION } from '../version';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -104,7 +105,7 @@ const LoginPage = () => {
 
         <div className="mt-12 text-center">
             <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">
-                Copyright © 2026 BLACK MARCA GRÁFICA
+                Copyright © 2026 BLACK MARCA GRÁFICA • {VERSION}
             </p>
         </div>
       </div>

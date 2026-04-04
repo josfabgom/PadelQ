@@ -49,7 +49,7 @@ const CtaCte = () => {
 
   const fetchPaymentMethods = async () => {
     try {
-      const res = await api.get('/api/paymentmethods', getAuthConfig());
+      const res = await api.get('/api/PaymentMethods', getAuthConfig());
       setPaymentMethods(res.data.filter((m: any) => m.isActive));
     } catch (err) {
       console.error("Error fetching payment methods", err);
@@ -219,12 +219,24 @@ const CtaCte = () => {
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 mb-2">Membresía Activa</p>
                           <p className="text-xl font-black text-white italic uppercase tracking-tight">{userMembership.membership.name}</p>
-                          <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-1">
-                            Vence: {new Date(userMembership.expiryDate).toLocaleDateString()}
-                          </p>
+                          <div className="flex gap-4 mt-2">
+                            <div>
+                               <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Cobertura Desde</p>
+                               <p className="text-[10px] font-bold text-white/70 uppercase">
+                                 {new Date(userMembership.coverageStartDate).toLocaleDateString()}
+                               </p>
+                            </div>
+                            <div className="w-px h-6 bg-white/10 self-end mb-1"></div>
+                            <div>
+                               <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Vencimiento</p>
+                               <p className={`text-[10px] font-bold uppercase ${userMembership.isExpired ? 'text-rose-400' : 'text-white/70'}`}>
+                                 {new Date(userMembership.expiryDate).toLocaleDateString()}
+                               </p>
+                            </div>
+                          </div>
                         </div>
                         <div className="text-right">
-                           <p className="text-sm font-black text-white mb-2 italic">VALOR CUOTA</p>
+                           <p className="text-[9px] font-black text-white/40 mb-2 italic uppercase tracking-widest">CUOTA MENSUAL</p>
                            <span className="px-5 py-3 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest group-hover/card:scale-105 transition-all flex items-center gap-3">
                               <CreditCard className="w-4 h-4" />
                               Pagar ${userMembership.membership.monthlyPrice.toLocaleString()}

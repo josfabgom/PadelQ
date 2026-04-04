@@ -20,6 +20,8 @@ const PaymentMethods = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
   
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     isActive: true,
@@ -30,7 +32,7 @@ const PaymentMethods = () => {
   const fetchMethods = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/paymentmethods', getAuthConfig());
+      const res = await api.get('/api/PaymentMethods', getAuthConfig());
       setMethods(res.data);
     } catch (err) {
       console.error("Error fetching payment methods", err);
@@ -44,6 +46,7 @@ const PaymentMethods = () => {
   }, []);
 
   const handleOpenModal = (method?: PaymentMethod) => {
+    setError(null);
     if (method) {
       setEditingMethod(method);
       setFormData({
@@ -66,23 +69,28 @@ const PaymentMethods = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
+    setError(null);
     try {
       if (editingMethod) {
-        await api.put(`/api/paymentmethods/${editingMethod.id}`, { id: editingMethod.id, ...formData }, getAuthConfig());
+        await api.put(`/api/PaymentMethods/${editingMethod.id}`, { id: editingMethod.id, ...formData }, getAuthConfig());
       } else {
-        await api.post('/api/paymentmethods', formData, getAuthConfig());
+        await api.post('/api/PaymentMethods', formData, getAuthConfig());
       }
       setIsModalOpen(false);
       fetchMethods();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving payment method", err);
+      setError(err.response?.data || "Error al guardar el medio de pago.");
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Desea eliminar o desactivar este medio de pago?')) {
       try {
-        await api.delete(`/api/paymentmethods/${id}`, getAuthConfig());
+        await api.delete(`/api/PaymentMethods/${id}`, getAuthConfig());
         fetchMethods();
       } catch (err) {
         console.error("Error deleting payment method", err);
@@ -168,6 +176,12 @@ const PaymentMethods = () => {
             <header className="mb-10">
               <h2 className="text-2xl font-black text-black uppercase italic tracking-tight">{editingMethod ? 'Editar Medio' : 'Nuevo Medio'}</h2>
               <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mt-1">Detalles del Canal de Cobro</p>
+              {error && (
+                <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-in fade-in slide-in-from-top-2">
+                  <div className="w-2 h-2 bg-rose-600 rounded-full animate-pulse"></div>
+                  <p className="text-[10px] font-black uppercase tracking-widest">{typeof error === 'string' ? error : 'Error de validación'}</p>
+                </div>
+              )}
             </header>
 
             <form onSubmit={handleSubmit} className="space-y-8">
@@ -223,10 +237,15 @@ const PaymentMethods = () => {
               <div className="pt-4">
                 <button 
                   type="submit"
-                  className="w-full py-6 bg-black text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] shadow-[0_20px_40px_rgba(0,0,0,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4"
+                  disabled={saving || !formData.name}
+                  className="w-full py-6 bg-black text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] shadow-[0_20px_40px_rgba(0,0,0,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:scale-100"
                 >
-                  <Zap className="w-4 h-4 fill-white" />
-                  {editingMethod ? 'Guardar Cambios' : 'Crear Medio de Pago'}
+                  {saving ? (
+                    <div className="w-5 h-5 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <Zap className="w-4 h-4 fill-white" />
+                  )}
+                  {saving ? 'Procesando...' : (editingMethod ? 'Guardar Cambios' : 'Crear Medio de Pago')}
                 </button>
               </div>
             </form>

@@ -44,3 +44,6 @@ target/
 Thumbs.db
 *.log
 sdks/
+*.tar.gz
+.env.production
+.env.hostinger

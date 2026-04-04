@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PadelQ.Domain.Entities;
 using System;
@@ -15,7 +16,7 @@ namespace PadelQ.Infrastructure.Persistence
             var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
  
-            context.Database.EnsureCreated();
+            context.Database.Migrate();
 
             // 1. Roles
             string[] roles = { "Admin", "User" };

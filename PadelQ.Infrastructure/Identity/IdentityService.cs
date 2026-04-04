@@ -154,6 +154,7 @@ namespace PadelQ.Infrastructure.Identity
                     MembershipHexColor = activeMembership?.Membership?.HexColor,
                     IsActive = u.IsActive,
                     ExpiryDate = expiryDate,
+                    CoverageStartDate = expiryDate?.AddDays(-30),
                     IsExpired = isExpired,
                     Role = (await _userManager.GetRolesAsync(u)).FirstOrDefault()
                 });
@@ -213,6 +214,7 @@ namespace PadelQ.Infrastructure.Identity
                 MembershipHexColor = activeMembership?.Membership?.HexColor,
                 IsActive = user.IsActive,
                 ExpiryDate = expiryDate,
+                CoverageStartDate = expiryDate?.AddDays(-30),
                 IsExpired = isExpired,
                 Role = (await _userManager.GetRolesAsync(user)).FirstOrDefault()
             };

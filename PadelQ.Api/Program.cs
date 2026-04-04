@@ -85,6 +85,21 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Use Exception Handler
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        // Add CORS Headers to Error Responses too
+        context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+        context.Response.Headers.Append("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        context.Response.Headers.Append("Access-Control-Allow-Headers", "*");
+        
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { error = "Internal Server Error" });
+    });
+});
+
 // Enable CORS
 app.UseCors("AllowReactApp");
 
