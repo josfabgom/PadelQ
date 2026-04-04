@@ -29,7 +29,10 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> GetUser(string id)
         {
             // Allow if it is Admin/Staff OR if it is the user themselves
-            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                               ?? User.FindFirst("sub")?.Value 
+                               ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+            
             if (!User.IsInRole("Admin") && !User.IsInRole("Staff") && currentUserId != id)
             {
                 return Forbid();
@@ -92,7 +95,10 @@ namespace PadelQ.Api.Controllers
         [HttpPost("{id}/change-password")]
         public async Task<IActionResult> ChangePassword(string id, [FromBody] ChangePasswordRequest request)
         {
-            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                               ?? User.FindFirst("sub")?.Value 
+                               ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+            
             if (!User.IsInRole("Admin") && currentUserId != id)
             {
                 return Forbid();
