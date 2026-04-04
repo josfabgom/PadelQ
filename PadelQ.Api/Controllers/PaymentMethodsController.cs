@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 namespace PadelQ.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
     [Route("api/paymentmethods")]
     [Authorize(Roles = "Admin")]
     public class PaymentMethodsController : ControllerBase

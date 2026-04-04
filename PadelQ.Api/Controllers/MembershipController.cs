@@ -13,7 +13,6 @@ using PadelQ.Application.Common.Interfaces;
 namespace PadelQ.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
     [Route("api/membership")]
     [Authorize]
     public class MembershipController : ControllerBase
