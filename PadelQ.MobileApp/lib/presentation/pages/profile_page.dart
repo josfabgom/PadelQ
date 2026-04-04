@@ -161,7 +161,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                       child: _isLoading 
                         ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                        : const Text('ACTUALIZAR CONTRASEÑA', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                        : Text('ACTUALIZAR CONTRASEÑA', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.w)),
                     ),
                   ),
                 ],
