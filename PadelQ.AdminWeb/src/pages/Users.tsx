@@ -50,6 +50,7 @@ const UsersPage = () => {
 
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDescription, setPaymentDescription] = useState('');
+  const [isMembershipPaymentLog, setIsMembershipPaymentLog] = useState(false);
   const [memberships, setMemberships] = useState<any[]>([]);
   const [selectedMembershipId, setSelectedMembershipId] = useState<number | string>('');
 
@@ -100,10 +101,12 @@ const UsersPage = () => {
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDescription}`, {}, config);
+      const endpoint = isMembershipPaymentLog ? '/api/transaction/membership-payment' : '/api/transaction/payment';
+      await api.post(`${endpoint}?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDescription}`, {}, config);
       setIsPaymentModalOpen(false);
       setPaymentAmount(0);
       setPaymentDescription('');
+      setIsMembershipPaymentLog(false);
       fetchUsers();
     } catch (err) {
       console.error("Error al registrar pago", err);
@@ -457,7 +460,8 @@ const UsersPage = () => {
                 <button 
                   onClick={() => {
                     setPaymentAmount(selectedUser.balance);
-                    setPaymentDescription(`Pago Membresía - ${selectedUser.membershipName}`);
+                    setPaymentDescription(`Pago Membresía / Abono - ${selectedUser.membershipName}`);
+                    setIsMembershipPaymentLog(true);
                   } }
                   className="px-3 py-2 bg-amber-600 text-white text-[10px] font-black uppercase rounded-lg shadow-md active:scale-95 transition-all"
                 >

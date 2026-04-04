@@ -51,7 +51,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost("payment")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         public async Task<ActionResult<Transaction>> RecordPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description)
         {
             var user = await _context.Users.FindAsync(userId);
@@ -66,6 +66,27 @@ namespace PadelQ.Api.Controllers
                 Description = description
             };
 
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(transaction);
+        }
+
+        [HttpPost("membership-payment")]
+        [Authorize(Roles = "Admin,Staff")]
+        public async Task<ActionResult<Transaction>> RecordMembershipPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
+            var transaction = new Transaction
+            {
+                UserId = userId,
+                Amount = amount,
+                Date = DateTime.UtcNow,
+                Type = TransactionType.MembershipPayment,
+                Description = description ?? "Pago de Membresía / Abono"
+            };
 
             _context.Transactions.Add(transaction);
             await _context.SaveChangesAsync();
@@ -81,7 +102,7 @@ namespace PadelQ.Api.Controllers
             var end = endDate ?? DateTime.UtcNow;
 
             var report = await _context.Transactions
-                .Where(t => t.Type == TransactionType.Payment && t.Date >= start && t.Date <= end)
+                .Where(t => (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment) && t.Date >= start && t.Date <= end)
                 .GroupBy(t => new { t.PaymentMethodId, MethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Sin Especificar", Color = t.PaymentMethod != null ? t.PaymentMethod.HexColor : "#888888" })
                 .Select(g => new
                 {

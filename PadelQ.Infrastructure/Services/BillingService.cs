@@ -19,81 +19,9 @@ namespace PadelQ.Infrastructure.Services
 
         public async Task<int> GenerateMonthlyChargesAsync()
         {
-            var count = 0;
-            var today = DateTime.UtcNow.Date;
-            
-            // Get tolerance setting (default to 5 days)
-            var toleranceSetting = await _context.SystemSettings
-                .FirstOrDefaultAsync(s => s.Key == "BillingToleranceDays");
-            
-            int toleranceDays = 5;
-            if (toleranceSetting != null && int.TryParse(toleranceSetting.Value, out int parsedValue))
-            {
-                toleranceDays = parsedValue;
-            }
-
-            // Get IDs of users with administrative roles (Staff, Merchant) to exclude from billing
-            var excludedUserIds = await _context.UserRoles
-                .Join(_context.Roles, 
-                    ur => ur.RoleId, 
-                    r => r.Id, 
-                    (ur, r) => new { ur.UserId, r.Name })
-                .Where(x => x.Name == "Staff" || x.Name == "Merchant")
-                .Select(x => x.UserId)
-                .ToListAsync();
-
-            // Get all active memberships that have an expiration date
-            var membershipsToCharge = await _context.UserMemberships
-                .Include(um => um.Membership)
-                .Where(um => um.IsActive && um.EndDate != null && !excludedUserIds.Contains(um.UserId))
-                .ToListAsync();
-
-            foreach (var um in membershipsToCharge)
-            {
-                if (um.Membership == null) continue;
-
-                var expirationDate = um.EndDate.Value.Date;
-                var generationThreshold = expirationDate.AddDays(-toleranceDays);
-
-                // If today is within the tolerance window of the expiration date
-                if (today >= generationThreshold)
-                {
-                    // Calculate the period we are charging for
-                    // Usually it's the next month after the current expiration
-                    var nextExpiration = expirationDate.AddMonths(1);
-                    
-                    // Simple check to avoid duplicates: 
-                    // Any charge with "Cuota Mensual" for this user containing the NEW expiration date in description
-                    var searchPattern = $"(Venc: {nextExpiration:dd/MM/yyyy})";
-                    var alreadyCharged = await _context.Transactions
-                        .AnyAsync(t => t.UserId == um.UserId 
-                                    && t.Type == TransactionType.Charge 
-                                    && t.Description != null 
-                                    && t.Description.Contains(searchPattern));
-
-                    if (!alreadyCharged)
-                    {
-                        var transaction = new Transaction
-                        {
-                            UserId = um.UserId,
-                            Amount = um.Membership.MonthlyPrice,
-                            Date = DateTime.UtcNow,
-                            Type = TransactionType.Charge,
-                            Description = $"Cuota Mensual - {um.Membership.Name} ({expirationDate:dd/MM} - {nextExpiration:dd/MM}) {searchPattern}"
-                        };
-
-                        _context.Transactions.Add(transaction);
-                        count++;
-                    }
-                }
-            }
-
-            if (count > 0)
-            {
-                await _context.SaveChangesAsync();
-            }
-
-            return count;
+            // Automated membership charges are disabled per v2.8 internal requirements. 
+            // Memberships are now tracked via descriptive MembershipPayment logs.
+            return 0;
         }
     }
 }

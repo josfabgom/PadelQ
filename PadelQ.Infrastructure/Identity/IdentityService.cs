@@ -122,20 +122,13 @@ namespace PadelQ.Infrastructure.Identity
                     .OrderByDescending(um => um.StartDate)
                     .FirstOrDefault();
 
-                var expiryDate = activeMembership == null ? null : (DateTime?)(
-                    (_context.Transactions
-                        .Where(t => t.UserId == u.Id && t.Type == TransactionType.Payment)
-                        .OrderByDescending(t => t.Date)
-                        .Select(t => t.Date)
-                        .FirstOrDefault() == default ? activeMembership.StartDate : 
-                        _context.Transactions
-                            .Where(t => t.UserId == u.Id && t.Type == TransactionType.Payment)
-                            .OrderByDescending(t => t.Date)
-                            .Select(t => t.Date)
-                            .FirstOrDefault()).AddDays(30)
-                );
+                var lastMembershipPayment = _context.Transactions
+                    .Where(t => t.UserId == u.Id && t.Type == TransactionType.MembershipPayment)
+                    .OrderByDescending(t => t.Date)
+                    .FirstOrDefault();
 
-                var isExpired = (expiryDate != null && DateTime.UtcNow > expiryDate) || (charges - payments > 0.01m);
+                var isExpired = activeMembership == null || lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
+                var expiryDate = lastMembershipPayment?.Date.AddDays(30);
 
                 dtos.Add(new PadelQ.Application.Common.Models.UserDto
                 {
@@ -150,7 +143,7 @@ namespace PadelQ.Infrastructure.Identity
                     PhotoUrl = u.PhotoUrl,
                     Balance = charges - payments,
                     MembershipName = activeMembership?.Membership?.Name,
-                    DiscountPercentage = isExpired ? 0 : (activeMembership?.Membership?.DiscountPercentage ?? 0),
+                    DiscountPercentage = 0, // No automatic discounts per v2.8 internal requirements
                     MembershipHexColor = activeMembership?.Membership?.HexColor,
                     IsActive = u.IsActive,
                     ExpiryDate = expiryDate,
@@ -182,20 +175,13 @@ namespace PadelQ.Infrastructure.Identity
                 .OrderByDescending(um => um.StartDate)
                 .FirstOrDefault();
 
-            var expiryDate = activeMembership == null ? null : (DateTime?)(
-                (_context.Transactions
-                    .Where(t => t.UserId == user.Id && t.Type == TransactionType.Payment)
-                    .OrderByDescending(t => t.Date)
-                    .Select(t => t.Date)
-                    .FirstOrDefault() == default ? activeMembership.StartDate : 
-                    _context.Transactions
-                        .Where(t => t.UserId == user.Id && t.Type == TransactionType.Payment)
-                        .OrderByDescending(t => t.Date)
-                        .Select(t => t.Date)
-                        .FirstOrDefault()).AddDays(30)
-            );
+            var lastMembershipPayment = _context.Transactions
+                .Where(t => t.UserId == user.Id && t.Type == TransactionType.MembershipPayment)
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefault();
 
-            var isExpired = (expiryDate != null && DateTime.UtcNow > expiryDate) || (charges - payments > 0.01m);
+            var isExpired = activeMembership == null || lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
+            var expiryDate = lastMembershipPayment?.Date.AddDays(30);
 
             return new PadelQ.Application.Common.Models.UserDto
             {
@@ -210,7 +196,7 @@ namespace PadelQ.Infrastructure.Identity
                 PhotoUrl = user.PhotoUrl,
                 Balance = charges - payments,
                 MembershipName = activeMembership?.Membership?.Name,
-                DiscountPercentage = isExpired ? 0 : (activeMembership?.Membership?.DiscountPercentage ?? 0),
+                DiscountPercentage = 0, // No automatic discounts per v2.8 internal requirements
                 MembershipHexColor = activeMembership?.Membership?.HexColor,
                 IsActive = user.IsActive,
                 ExpiryDate = expiryDate,

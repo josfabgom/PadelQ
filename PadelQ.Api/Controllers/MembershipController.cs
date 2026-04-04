@@ -120,14 +120,14 @@ namespace PadelQ.Api.Controllers
 
             _context.UserMemberships.Add(userMembership);
             
-            // Generate initial charge
+            // Log membership payment (Descriptive only, does not affect financial balance)
             var transaction = new Transaction
             {
                 UserId = userId,
                 Amount = membership.MonthlyPrice,
                 Date = DateTime.UtcNow,
-                Type = TransactionType.Charge,
-                Description = $"Cuota Mensual - {membership.Name} (Inicial)"
+                Type = TransactionType.MembershipPayment,
+                Description = $"Abono Membresía Inicial - {membership.Name}"
             };
             _context.Transactions.Add(transaction);
 

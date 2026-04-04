@@ -37,6 +37,7 @@ namespace PadelQ.Domain.Entities
     public enum TransactionType
     {
         Charge, // + to balance/debt
-        Payment // - to balance/debt
+        Payment, // - to balance/debt
+        MembershipPayment // Descriptive only, does not affect balance
     }
 }
