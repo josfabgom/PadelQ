@@ -427,13 +427,45 @@ const UsersPage = () => {
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 font-outfit">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
               <div>
-                <h2 className="text-xl font-bold text-emerald-900">Registrar Pago</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-emerald-900">Registrar Pago</h2>
+                  {selectedUser?.membershipName && (
+                    <span className="px-2 py-0.5 bg-emerald-200 text-emerald-800 text-[9px] font-black uppercase rounded-md">
+                      {selectedUser.membershipName}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">{selectedUser?.fullName}</p>
               </div>
               <button onClick={() => setIsPaymentModalOpen(false)} className="text-emerald-400 hover:text-emerald-600 p-2 hover:bg-emerald-100 rounded-full transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
+            
+            {/* Membership Alert */}
+            {selectedUser?.balance! > 0 && selectedUser?.membershipName && (
+              <div className="mx-6 mt-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4 animate-in slide-in-from-top-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Deuda Pendiente</div>
+                    <div className="text-sm font-bold text-amber-900">Membresía: ${selectedUser.balance.toFixed(2)}</div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setPaymentAmount(selectedUser.balance);
+                    setPaymentDescription(`Pago Membresía - ${selectedUser.membershipName}`);
+                  } }
+                  className="px-3 py-2 bg-amber-600 text-white text-[10px] font-black uppercase rounded-lg shadow-md active:scale-95 transition-all"
+                >
+                  Saldar Total
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleRecordPayment} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Monto del Pago ($)</label>

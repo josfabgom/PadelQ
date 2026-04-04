@@ -135,7 +135,7 @@ namespace PadelQ.Infrastructure.Identity
                             .FirstOrDefault()).AddDays(30)
                 );
 
-                var isExpired = expiryDate != null && DateTime.UtcNow > expiryDate;
+                var isExpired = (expiryDate != null && DateTime.UtcNow > expiryDate) || (charges - payments > 0.01m);
 
                 dtos.Add(new PadelQ.Application.Common.Models.UserDto
                 {
@@ -195,7 +195,7 @@ namespace PadelQ.Infrastructure.Identity
                         .FirstOrDefault()).AddDays(30)
             );
 
-            var isExpired = expiryDate != null && DateTime.UtcNow > expiryDate;
+            var isExpired = (expiryDate != null && DateTime.UtcNow > expiryDate) || (charges - payments > 0.01m);
 
             return new PadelQ.Application.Common.Models.UserDto
             {
