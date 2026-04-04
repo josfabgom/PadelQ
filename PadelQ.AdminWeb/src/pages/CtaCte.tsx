@@ -22,6 +22,8 @@ interface User {
   email: string;
   balance: number;
   membershipName?: string;
+  expiryDate?: string;
+  coverageStartDate?: string;
 }
 
 const CtaCte = () => {
@@ -171,10 +173,18 @@ const CtaCte = () => {
                       ${Math.abs(user.balance).toLocaleString()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-zinc-400">
-                    <span className="text-[10px] font-black uppercase tracking-widest">DNI: {user.dni || 'S/D'}</span>
+                  <div className="flex flex-wrap items-center gap-2 text-zinc-400 mt-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">DNI: {user.dni || 'S/D'}</span>
                     <span className="w-1 h-1 bg-zinc-200 rounded-full"></span>
-                    <span className="text-[10px] font-bold uppercase tracking-widest">{user.membershipName || 'Sin Club'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-black">{user.membershipName || 'Sin Club'}</span>
+                    {user.expiryDate && (
+                      <>
+                        <span className="w-1 h-1 bg-zinc-200 rounded-full"></span>
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-tighter">
+                          Vence: {new Date(user.expiryDate).toLocaleDateString()}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </button>
               ))}
@@ -244,10 +254,23 @@ const CtaCte = () => {
                         </div>
                       </div>
                     )}
+                    {/* Display basic membership info if complex data is missing */}
                     {!userMembership && !membershipLoading && (
-                      <div>
+                      <div className="col-span-2">
                         <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Membresía</p>
-                        <p className="text-xl font-black text-white italic uppercase">{selectedUser.membershipName || 'Visitante'}</p>
+                        <div className="flex items-center gap-6">
+                            <p className="text-xl font-black text-white italic uppercase">{selectedUser.membershipName || 'Visitante'}</p>
+                            {selectedUser.expiryDate && (
+                                <div className="flex gap-4 items-center bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
+                                    <div className="flex flex-col">
+                                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Vigencia</span>
+                                        <span className="text-[10px] font-bold text-white/70 uppercase">
+                                            {selectedUser.coverageStartDate ? new Date(selectedUser.coverageStartDate).toLocaleDateString() : 'S/D'} - {new Date(selectedUser.expiryDate).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                       </div>
                     )}
                   </div>
