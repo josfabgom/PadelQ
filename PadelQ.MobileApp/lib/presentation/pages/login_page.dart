@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../../config/api_config.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -129,6 +130,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           style: TextStyle(
                             fontSize: 10.0, 
                             color: Colors.white.withOpacity(0.2),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                        const SizedBox(height: 8.0),
+                        Text(
+                          ApiConfig.appVersion,
+                          style: TextStyle(
+                            fontSize: 10.0, 
+                            color: Colors.white.withOpacity(0.1),
                             fontWeight: FontWeight.bold,
                             letterSpacing: 2.0,
                           ),

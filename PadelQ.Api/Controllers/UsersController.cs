@@ -60,7 +60,7 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
-            var (succeeded, message) = await _identityService.UpdateUserAsync(id, request.FullName, request.Email, request.PhoneNumber, request.IsActive, request.Dni, request.Address, request.City, request.Province, request.PhotoUrl, request.Role);
+            var (succeeded, message) = await _identityService.UpdateUserAsync(id, request.FullName, request.Email, request.PhoneNumber, request.IsActive, request.Dni, request.Address, request.City, request.Province, request.PhotoUrl, request.Role, request.CanAccessActivities, request.CanAccessBookings);
             if (!succeeded) return BadRequest(message ?? "No se pudo actualizar el usuario.");
             return NoContent();
         }
@@ -91,6 +91,6 @@ namespace PadelQ.Api.Controllers
     }
 
     public record CreateUserRequest(string FullName, string Email, string Password, string? Dni, string? PhoneNumber, string? Role);
-    public record UpdateUserRequest(string FullName, string Email, string? PhoneNumber, bool IsActive, string? Dni, string? Address, string? City, string? Province, string? PhotoUrl, string? Role);
+    public record UpdateUserRequest(string FullName, string Email, string? PhoneNumber, bool IsActive, string? Dni, string? Address, string? City, string? Province, string? PhotoUrl, string? Role, bool CanAccessActivities = true, bool CanAccessBookings = true);
     public record ChangePasswordRequest(string NewPassword);
 }

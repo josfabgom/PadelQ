@@ -146,6 +146,8 @@ namespace PadelQ.Infrastructure.Identity
                     DiscountPercentage = 0, // No automatic discounts per v2.8 internal requirements
                     MembershipHexColor = activeMembership?.Membership?.HexColor,
                     IsActive = u.IsActive,
+                    CanAccessActivities = u.CanAccessActivities,
+                    CanAccessBookings = u.CanAccessBookings,
                     ExpiryDate = expiryDate,
                     CoverageStartDate = expiryDate?.AddDays(-30),
                     IsExpired = isExpired,
@@ -199,6 +201,8 @@ namespace PadelQ.Infrastructure.Identity
                 DiscountPercentage = 0, // No automatic discounts per v2.8 internal requirements
                 MembershipHexColor = activeMembership?.Membership?.HexColor,
                 IsActive = user.IsActive,
+                CanAccessActivities = user.CanAccessActivities,
+                CanAccessBookings = user.CanAccessBookings,
                 ExpiryDate = expiryDate,
                 CoverageStartDate = expiryDate?.AddDays(-30),
                 IsExpired = isExpired,
@@ -206,7 +210,7 @@ namespace PadelQ.Infrastructure.Identity
             };
         }
 
-        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role)
+        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role, bool canAccessActivities, bool canAccessBookings)
         {
             if (!string.IsNullOrEmpty(dni))
             {
@@ -227,6 +231,8 @@ namespace PadelQ.Infrastructure.Identity
             user.City = city;
             user.Province = province;
             user.PhotoUrl = photoUrl;
+            user.CanAccessActivities = canAccessActivities;
+            user.CanAccessBookings = canAccessBookings;
  
             var result = await _userManager.UpdateAsync(user);
             if (!result.Succeeded) return (false, result.Errors.FirstOrDefault()?.Code ?? "UNKNOWN_ERROR");

@@ -5,7 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:padelq_mobile/presentation/pages/login_page.dart';
 import 'package:padelq_mobile/presentation/pages/home_page.dart';
-import 'package:padelq_mobile/presentation/pages/users_page.dart';
+import 'package:padelq_mobile/presentation/pages/profile_page.dart';
 import 'package:padelq_mobile/presentation/pages/register_page.dart';
 import 'package:padelq_mobile/presentation/pages/booking_page.dart';
 import 'package:padelq_mobile/presentation/pages/admin_settings_page.dart';
@@ -23,7 +23,7 @@ final _router = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
     GoRoute(path: '/register', builder: (context, state) => const RegisterPage()),
     GoRoute(path: '/home', builder: (context, state) => const HomePage()),
-    GoRoute(path: '/users', builder: (context, state) => const UsersPage()),
+    GoRoute(path: '/users', builder: (context, state) => const ProfilePage()),
     GoRoute(path: '/booking', builder: (context, state) => const BookingPage()),
     GoRoute(path: '/admin-settings', builder: (context, state) => const AdminSettingsPage()),
     GoRoute(path: '/activities', builder: (context, state) => const ActivitiesPage()),

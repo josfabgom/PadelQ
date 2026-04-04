@@ -18,6 +18,8 @@ interface User {
   membershipHexColor?: string;
   isActive: boolean;
   role?: string;
+  canAccessActivities?: boolean;
+  canAccessBookings?: boolean;
 }
 
 const UsersPage = () => {
@@ -47,6 +49,8 @@ const UsersPage = () => {
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [role, setRole] = useState('User');
+  const [canAccessActivities, setCanAccessActivities] = useState(true);
+  const [canAccessBookings, setCanAccessBookings] = useState(true);
 
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDescription, setPaymentDescription] = useState('');
@@ -95,6 +99,8 @@ const UsersPage = () => {
     setPassword('');
     setNewPassword('');
     setRole('User');
+    setCanAccessActivities(true);
+    setCanAccessBookings(true);
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
@@ -143,7 +149,9 @@ const UsersPage = () => {
         password,
         dni,
         phoneNumber: phone,
-        role
+        role,
+        canAccessActivities,
+        canAccessBookings
       }, config);
       setIsCreateModalOpen(false);
       resetForm();
@@ -177,7 +185,9 @@ const UsersPage = () => {
         city,
         province,
         photoUrl,
-        role
+        role,
+        canAccessActivities,
+        canAccessBookings
       }, config);
       setIsEditModalOpen(false);
       fetchUsers();
@@ -233,6 +243,8 @@ const UsersPage = () => {
     setPhotoUrl(user.photoUrl || '');
     setIsActive(user.isActive);
     setRole(user.role || 'User');
+    setCanAccessActivities(user.canAccessActivities !== false);
+    setCanAccessBookings(user.canAccessBookings !== false);
     setIsEditModalOpen(true);
   };
 
@@ -567,6 +579,17 @@ const UsersPage = () => {
                     )}
                   </select>
                 </div>
+
+                <div className="flex gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" checked={canAccessActivities} onChange={(e) => setCanAccessActivities(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" />
+                    <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">Actividades</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" checked={canAccessBookings} onChange={(e) => setCanAccessBookings(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" />
+                    <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">Reservas</span>
+                  </label>
+                </div>
               </div>
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-3 border rounded-xl font-bold text-slate-600">Cancelar</button>
@@ -693,6 +716,20 @@ const UsersPage = () => {
                       ? '⚠️ El Administrador puede gestionar canchas, precios, usuarios y ver reportes.' 
                       : 'El Usuario solo tiene acceso a sus propias reservas y actividad en la App Móvil.'}
                   </p>
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Permisos de Acceso App</h4>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-all group flex-1">
+                        <input type="checkbox" checked={canAccessActivities} onChange={(e) => setCanAccessActivities(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 transition-all" />
+                        <span className="text-xs font-bold text-slate-700">Actividades</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-all group flex-1">
+                        <input type="checkbox" checked={canAccessBookings} onChange={(e) => setCanAccessBookings(e.target.checked)} className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 transition-all" />
+                        <span className="text-xs font-bold text-slate-700">Reservas</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 

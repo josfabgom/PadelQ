@@ -15,6 +15,8 @@ namespace PadelQ.Domain.Entities
         public decimal PlayerLevel { get; set; } = 1.0m;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;
+        public bool CanAccessActivities { get; set; } = true;
+        public bool CanAccessBookings { get; set; } = true;
 
         public virtual ICollection<UserMembership> UserMemberships { get; set; } = new List<UserMembership>();
         public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();

@@ -16,10 +16,21 @@ class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
 
   void _onItemTapped(int index) {
+    final authState = ref.read(authProvider);
+    
+    if (index == 1 && !authState.canAccessBookings) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acceso restringido a Reservas por la administración.')));
+      return;
+    }
+    if (index == 2 && !authState.canAccessActivities) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acceso restringido a Actividades por la administración.')));
+      return;
+    }
+
     setState(() => _currentIndex = index);
     if (index == 1) context.push('/booking');
     if (index == 2) context.push('/activities');
-    if (index == 3) context.push('/users');
+    if (index == 3) context.push('/users'); // Renovables en futura versión a /profile
   }
 
   @override
@@ -35,125 +46,116 @@ class _HomePageState extends ConsumerState<HomePage> {
         backgroundColor: Colors.white,
         actions: [
           if (authState.isAdmin)
-            IconButton(icon: const Icon(LucideIcons.settings, color: Colors.black, size: 20), onPressed: () => context.push('/admin-settings')),
-          IconButton(icon: const Icon(LucideIcons.logOut, color: Colors.black, size: 20), onPressed: () async {
+            IconButton(icon: const Icon(Icons.settings, color: Colors.black, size: 20), onPressed: () => context.push('/admin-settings')),
+          IconButton(icon: const Icon(Icons.logout, color: Colors.black, size: 20), onPressed: () async {
             await ref.read(authProvider.notifier).logout();
             if (mounted) context.go('/login');
           }),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 32.h),
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'HOLA, ',
-                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.normal, color: Colors.black),
-                    ),
-                    Text(
-                      (authState.user?['fullName'] ?? authState.user?['FullName'] ?? 'JUGADOR').toString().toUpperCase(),
-                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  'RESERVA TU EXPERIENCIA PREMIUM HOY',
-                  style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.w900, letterSpacing: 2.w),
-                ),
-                SizedBox(height: 32.h),
-                
-                // Balance and Membership Card
-                GestureDetector(
-                  onTap: () => context.push('/membership'),
-                  child: Container(
-                    padding: EdgeInsets.all(32.w),
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(32.r),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 30, offset: const Offset(0, 15))],
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                            right: -20, bottom: -20,
-                            child: Icon(LucideIcons.award, color: Colors.white.withOpacity(0.05), size: 100),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('SALDO DISPONIBLE', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
-                                SizedBox(height: 8.h),
-                                Text(
-                                  '\$${(authState.user?['balance'] ?? 0.0).toString()}',
-                                  style: TextStyle(color: Colors.white, fontSize: 28.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text('ESTADO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
-                                SizedBox(height: 8.h),
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16.r), border: Border.all(color: Colors.white.withOpacity(0.1))),
-                                  child: Text(
-                                    (authState.user?['membershipName'] ?? 'SIN PLAN').toString().toUpperCase(),
-                                    style: TextStyle(color: Colors.white, fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 32.h),
+              color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'HOLA, ',
+                        style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.normal, color: Colors.black),
+                      ),
+                      Text(
+                        (authState.user?['fullName'] ?? authState.user?['FullName'] ?? 'JUGADOR').toString().toUpperCase(),
+                        style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    'GESTIÓN DE TU MEMBRESÍA PREMIUM',
+                    style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.w900, letterSpacing: 2.w),
+                  ),
+                  SizedBox(height: 32.h),
+                  
+                  // Balance and Membership Card
+                  GestureDetector(
+                    onTap: () => context.push('/membership'),
+                    child: Container(
+                      padding: EdgeInsets.all(32.w),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(32.r),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 30, offset: const Offset(0, 15))],
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                              right: -20, bottom: -20,
+                              child: Icon(Icons.workspace_premium, color: Colors.white.withOpacity(0.05), size: 100),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('SALDO DISPONIBLE', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                  SizedBox(height: 8.h),
+                                  Text(
+                                    '\$${(authState.user?['balance'] ?? 0.0).toString()}',
+                                    style: TextStyle(color: Colors.white, fontSize: 28.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text('ESTADO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                  SizedBox(height: 8.h),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16.r), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                                    child: Text(
+                                      (authState.user?['membershipName'] ?? 'SIN PLAN').toString().toUpperCase(),
+                                      style: TextStyle(color: Colors.white, fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          
-          Padding(
-            padding: EdgeInsets.fromLTRB(24.w, 32.h, 24.w, 0),
-            child: Text(
-                'CANCHAS DISPONIBLES',
-                style: TextStyle(fontSize: 11.sp, fontStyle: FontStyle.italic, fontWeight: FontWeight.w900, letterSpacing: 2.w, color: Colors.black54),
+            
+            SizedBox(height: 60.h),
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    'PadelQ PLATFORM',
+                    style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade300, letterSpacing: 4.w),
+                  ),
+                  SizedBox(height: 8.h),
+                  Text(
+                    ApiConfig.appVersion,
+                    style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade300),
+                  ),
+                ],
+              ),
             ),
-          ),
-
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
-              children: [
-                _BookingCard(
-                  name: "CANCHA 01", 
-                  type: "CRISTAL PANORÁMICO", 
-                  imageUrl: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=2070&auto=format&fit=crop",
-                  price: "\$3.500",
-                ),
-                SizedBox(height: 24.h),
-                _BookingCard(
-                  name: "CANCHA 02", 
-                  type: "MURO PROFESIONAL", 
-                  imageUrl: "https://images.unsplash.com/photo-1592910129881-892b7b392e81?q=80&w=2070&auto=format&fit=crop",
-                  price: "\$3.000",
-                ),
-              ],
-            ),
-          ),
-        ],
+            SizedBox(height: 40.h),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -169,10 +171,10 @@ class _HomePageState extends ConsumerState<HomePage> {
           selectedLabelStyle: TextStyle(fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
           unselectedLabelStyle: TextStyle(fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
           items: const [
-            BottomNavigationBarItem(icon: Icon(LucideIcons.home, size: 20), label: 'HOME'),
-            BottomNavigationBarItem(icon: Icon(LucideIcons.calendar, size: 20), label: 'RESERVA'),
-            BottomNavigationBarItem(icon: Icon(LucideIcons.activity, size: 20), label: 'PLAY'),
-            BottomNavigationBarItem(icon: Icon(LucideIcons.users, size: 20), label: 'SOCIAL'),
+            BottomNavigationBarItem(icon: Icon(Icons.home, size: 20), label: 'HOME'),
+            BottomNavigationBarItem(icon: Icon(Icons.calendar_month, size: 20), label: 'RESERVA'),
+            BottomNavigationBarItem(icon: Icon(Icons.bolt, size: 20), label: 'PLAY'),
+            BottomNavigationBarItem(icon: Icon(Icons.person, size: 20), label: 'PERFIL'),
           ],
         ),
       ),

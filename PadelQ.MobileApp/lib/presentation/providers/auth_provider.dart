@@ -19,6 +19,16 @@ class AuthState {
     return role == 'Admin';
   }
 
+  bool get canAccessActivities {
+    if (user == null) return true;
+    return user!['canAccessActivities'] ?? user!['CanAccessActivities'] ?? true;
+  }
+
+  bool get canAccessBookings {
+    if (user == null) return true;
+    return user!['canAccessBookings'] ?? user!['CanAccessBookings'] ?? true;
+  }
+
   AuthState copyWith({bool? isLoading, String? error, Map<String, dynamic>? user, bool? isAuthenticated}) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,

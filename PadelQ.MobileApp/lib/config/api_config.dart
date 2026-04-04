@@ -3,4 +3,5 @@ class ApiConfig {
     'API_URL',
     defaultValue: 'http://localhost:5041',
   );
+  static const String appVersion = "v3.1 MOBILE";
 }

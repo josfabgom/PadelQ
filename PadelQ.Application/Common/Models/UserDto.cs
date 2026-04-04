@@ -19,6 +19,8 @@ namespace PadelQ.Application.Common.Models
         public DateTime? ExpiryDate { get; set; }
         public DateTime? CoverageStartDate { get; set; }
         public bool IsExpired { get; set; }
+        public bool CanAccessActivities { get; set; } = true;
+        public bool CanAccessBookings { get; set; } = true;
         public string? Role { get; set; }
     }
 }

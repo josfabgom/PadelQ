@@ -55,8 +55,20 @@ class AuthService {
         return response.data;
       }
       return null;
+    }
+  }
+
+  Future<bool> changePassword(String userId, String newPassword) async {
+    try {
+      final token = await getToken();
+      final response = await _dio.post(
+        '/api/users/$userId/change-password',
+        data: {'newPassword': newPassword},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      return response.statusCode == 200;
     } catch (e) {
-      return null;
+      return false;
     }
   }
 }
