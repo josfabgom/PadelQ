@@ -29,9 +29,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Color(0xFFE11D48),
-            content: Text('Error al iniciar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          SnackBar(
+            backgroundColor: const Color(0xFFE11D48),
+            content: Text(authState.error ?? 'Error al iniciar sesión', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         );
       }

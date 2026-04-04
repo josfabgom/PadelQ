@@ -47,6 +47,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final userData = JwtDecoder.decode(token);
         final userId = userData['sub'] ?? userData['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
         
+        // Role restriction for Mobile App
+        final roles = userData['role'] ?? userData['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+        final isRestricted = (roles is List && (roles.contains('Staff') || roles.contains('Merchant'))) ||
+                             (roles == 'Staff' || roles == 'Merchant');
+        
+        // Admins can always login to mobile. Users too. 
+        // We block if only Staff/Merchant.
+        final isAdmin = roles is List ? roles.contains('Admin') : roles == 'Admin';
+        
+        if (isRestricted && !isAdmin) {
+          state = state.copyWith(isLoading: false, error: 'Estas credenciales son solo para uso administrativo web.');
+          await _authService.logout();
+          return;
+        }
+
         // Fetch detailed info (balance, membership)
         final detailedInfo = await _authService.getUserInfo(userId);
         final finalUser = {...userData, ...?detailedInfo};

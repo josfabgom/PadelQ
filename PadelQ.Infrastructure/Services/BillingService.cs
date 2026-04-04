@@ -32,10 +32,20 @@ namespace PadelQ.Infrastructure.Services
                 toleranceDays = parsedValue;
             }
 
+            // Get IDs of users with administrative roles (Staff, Merchant) to exclude from billing
+            var excludedUserIds = await _context.UserRoles
+                .Join(_context.Roles, 
+                    ur => ur.RoleId, 
+                    r => r.Id, 
+                    (ur, r) => new { ur.UserId, r.Name })
+                .Where(x => x.Name == "Staff" || x.Name == "Merchant")
+                .Select(x => x.UserId)
+                .ToListAsync();
+
             // Get all active memberships that have an expiration date
             var membershipsToCharge = await _context.UserMemberships
                 .Include(um => um.Membership)
-                .Where(um => um.IsActive && um.EndDate != null)
+                .Where(um => um.IsActive && um.EndDate != null && !excludedUserIds.Contains(um.UserId))
                 .ToListAsync();
 
             foreach (var um in membershipsToCharge)
