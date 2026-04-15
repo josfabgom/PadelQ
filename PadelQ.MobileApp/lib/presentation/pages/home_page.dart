@@ -4,8 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../providers/auth_provider.dart';
+import 'package:intl/intl.dart';
 import '../../config/api_config.dart';
-import 'package:padelq_mobile/config/api_config.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -106,32 +106,70 @@ class _HomePageState extends ConsumerState<HomePage> {
                               right: -20, bottom: -20,
                               child: Icon(Icons.workspace_premium, color: Colors.white.withOpacity(0.05), size: 100),
                           ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Column(
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('SALDO DISPONIBLE', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
-                                  SizedBox(height: 8.h),
-                                  Text(
-                                    '\$${(authState.user?['balance'] ?? 0.0).toString()}',
-                                    style: TextStyle(color: Colors.white, fontSize: 28.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('BENEFICIO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                      SizedBox(height: 8.h),
+                                      Text(
+                                        '${(authState.user?['discountPercentage'] ?? authState.user?['DiscountPercentage'] ?? 0)}% OFF',
+                                        style: TextStyle(color: Colors.white, fontSize: 24.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text('ESTADO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                      SizedBox(height: 8.h),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16.r), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                                        child: Text(
+                                          (authState.user?['membershipName'] ?? 'SIN PLAN').toString().toUpperCase(),
+                                          style: TextStyle(color: Colors.white, fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
+                              SizedBox(height: 24.h),
+                              Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                              SizedBox(height: 24.h),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('ESTADO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
-                                  SizedBox(height: 8.h),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-                                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16.r), border: Border.all(color: Colors.white.withOpacity(0.1))),
-                                    child: Text(
-                                      (authState.user?['membershipName'] ?? 'SIN PLAN').toString().toUpperCase(),
-                                      style: TextStyle(color: Colors.white, fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
-                                    ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('COBERTURA DESDE', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 8.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                      SizedBox(height: 4.h),
+                                      Text(
+                                        authState.user?['coverageStartDate'] != null || authState.user?['CoverageStartDate'] != null
+                                          ? DateFormat('dd/MM/yyyy').format(DateTime.parse(authState.user?['coverageStartDate'] ?? authState.user?['CoverageStartDate']).toLocal())
+                                          : '--/--/----',
+                                        style: TextStyle(color: Colors.white, fontSize: 13.sp, fontWeight: FontWeight.w900),
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text('VENCIMIENTO', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 8.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w)),
+                                      SizedBox(height: 4.h),
+                                      Text(
+                                        authState.user?['expiryDate'] != null || authState.user?['ExpiryDate'] != null
+                                          ? DateFormat('dd/MM/yyyy').format(DateTime.parse(authState.user?['expiryDate'] ?? authState.user?['ExpiryDate']).toLocal())
+                                          : '--/--/----',
+                                        style: TextStyle(color: Colors.white, fontSize: 13.sp, fontWeight: FontWeight.w900),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
