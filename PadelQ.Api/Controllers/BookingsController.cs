@@ -7,6 +7,9 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
+using Microsoft.EntityFrameworkCore;
+using PadelQ.Infrastructure.Persistence;
+
 namespace PadelQ.Api.Controllers
 {
     [Authorize]
@@ -15,10 +18,12 @@ namespace PadelQ.Api.Controllers
     public class BookingsController : ControllerBase
     {
         private readonly IBookingService _bookingService;
+        private readonly ApplicationDbContext _context;
 
-        public BookingsController(IBookingService bookingService)
+        public BookingsController(IBookingService bookingService, ApplicationDbContext context)
         {
             _bookingService = bookingService;
+            _context = context;
         }
 
         [HttpGet("my-bookings")]
@@ -49,6 +54,34 @@ namespace PadelQ.Api.Controllers
             return Ok(new { BookingId = bookingId, Message = message });
         }
 
+        [HttpGet("by-date")]
+        public async Task<ActionResult<IEnumerable<Booking>>> GetByDate([FromQuery] DateTime date)
+        {
+            var bookings = await _context.Bookings
+                .Include(b => b.Court)
+                .Include(b => b.User)
+                .Where(b => b.StartTime.Date == date.Date && b.Status != BookingStatus.Cancelled)
+                .ToListAsync();
+            return Ok(bookings);
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("admin-create")]
+        public async Task<IActionResult> AdminCreate([FromBody] CreateAdminBookingRequest request)
+        {
+            var (success, message, bookingId) = await _bookingService.CreateAdminBooking(
+                request.UserId,
+                request.GuestName,
+                request.CourtId,
+                request.StartTime,
+                request.DurationMinutes
+            );
+
+            if (!success) return BadRequest(message);
+            
+            return Ok(new { BookingId = bookingId, Message = message });
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> Cancel(Guid id)
         {
@@ -59,4 +92,5 @@ namespace PadelQ.Api.Controllers
     }
 
     public record CreateBookingRequest(int CourtId, DateTime StartTime, int DurationMinutes);
+    public record CreateAdminBookingRequest(string? UserId, string? GuestName, int CourtId, DateTime StartTime, int DurationMinutes);
 }

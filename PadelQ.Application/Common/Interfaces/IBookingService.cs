@@ -10,6 +10,7 @@ namespace PadelQ.Application.Common.Interfaces
         Task<IEnumerable<Booking>> GetUserBookings(string userId);
         Task<IEnumerable<Booking>> GetCourtBookings(int courtId, DateTime date);
         Task<(bool Success, string Message, Guid BookingId)> CreateBooking(string userId, int courtId, DateTime startTime, int durationMinutes);
+        Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, int courtId, DateTime startTime, int durationMinutes);
         Task<bool> CancelBooking(Guid bookingId);
         Task<bool> IsAvailable(int courtId, DateTime start, DateTime end);
         Task<IEnumerable<Booking>> GetAllAsync();

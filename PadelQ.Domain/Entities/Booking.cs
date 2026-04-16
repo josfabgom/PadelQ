@@ -9,8 +9,8 @@ namespace PadelQ.Domain.Entities
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
 
-        [Required]
-        public string UserId { get; set; } = string.Empty;
+        public string? UserId { get; set; }
+        public string? GuestName { get; set; }
 
         [Required]
         public int CourtId { get; set; }

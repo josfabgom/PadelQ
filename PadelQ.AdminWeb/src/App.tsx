@@ -12,6 +12,7 @@ import CtaCtePage from './pages/CtaCte';
 import PaymentMethodsPage from './pages/PaymentMethods';
 import ReportsPage from './pages/Reports';
 import ProfilePage from './pages/Profile';
+import BookingsPage from './pages/Bookings';
 
 
 
@@ -72,6 +73,10 @@ function App() {
 
 
 
+          <Route 
+            path="/bookings" 
+            element={isAuthenticated ? <BookingsPage /> : <Navigate to="/login" />} 
+          />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>

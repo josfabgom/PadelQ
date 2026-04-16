@@ -133,6 +133,86 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
+        public async Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, int courtId, DateTime startTime, int durationMinutes)
+        {
+            var endTime = startTime.AddMinutes(durationMinutes);
+            
+            // Lógica de Alta Concurrencia mediante Transacciones SQL 'Serializable'
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            
+            try
+            {
+                // Verificamos disponibilidad con bloqueo explícito de SQL (UPDLOCK)
+                var overlapping = await _context.Bookings
+                    .FromSqlRaw(@"SELECT * FROM Bookings WITH (UPDLOCK, HOLDLOCK) 
+                                 WHERE CourtId = {0} 
+                                 AND Status != {1}
+                                 AND ((StartTime < {3} AND EndTime > {2}))", 
+                                 courtId, (int)BookingStatus.Cancelled, startTime, endTime)
+                    .AnyAsync();
+
+                if (overlapping)
+                {
+                    return (false, "La cancha ya está reservada para el horario seleccionado.", Guid.Empty);
+                }
+
+                var court = await _context.Courts.FindAsync(courtId);
+                var pricePerHour = await GetDecimalSetting("PricePerHour", 25.0m);
+                var effectivePricePerHour = court?.PricePerHour ?? pricePerHour;
+
+                // Si es un usuario registrado, buscamos su descuento
+                decimal membershipDiscount = 0;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    membershipDiscount = await _context.UserMemberships
+                        .Include(um => um.Membership)
+                        .Where(um => um.UserId == userId && um.IsActive)
+                        .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
+                        .FirstOrDefaultAsync();
+                }
+
+                var basePrice = (decimal)(durationMinutes / 60.0) * effectivePricePerHour;
+                var finalPrice = basePrice * (1 - (membershipDiscount / 100m));
+
+                var booking = new Booking
+                {
+                    UserId = userId,
+                    GuestName = guestName,
+                    CourtId = courtId,
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    Price = finalPrice,
+                    Status = BookingStatus.Confirmed
+                };
+
+                _context.Bookings.Add(booking);
+
+                // Crear cargo en la cuenta si existe el usuario
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var transactionEntry = new Transaction
+                    {
+                        UserId = userId,
+                        Amount = finalPrice,
+                        Type = TransactionType.Charge,
+                        Date = DateTime.UtcNow,
+                        Description = $"Reserva de Cancha (Admin): {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : "")
+                    };
+                    _context.Transactions.Add(transactionEntry);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (true, "Reserva administrativa realizada con éxito.", booking.Id);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return (false, "Error: " + ex.Message, Guid.Empty);
+            }
+        }
+
         public async Task<bool> IsAvailable(int courtId, DateTime start, DateTime end)
         {
              return !await _context.Bookings
