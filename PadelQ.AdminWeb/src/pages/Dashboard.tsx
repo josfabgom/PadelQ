@@ -86,17 +86,6 @@ const Dashboard = () => {
         <StatCard icon={<Users/>} label="Clientes" value="142" trend="+8%" />
       </div>
 
-      <div className="bg-white p-8 rounded-[40px] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-black/5">
-        <div className="mb-8 flex justify-between items-center">
-            <h2 className="text-xl font-black text-black uppercase tracking-tight italic">Calendario de Reservas</h2>
-        </div>
-        <Calendar 
-            bookings={detailedBookings} 
-            courts={courts} 
-            selectedDate={selectedDate}
-        />
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
         {/* Main Chart */}
         <div className="lg:col-span-2 bg-white p-10 rounded-[40px] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-black/5">

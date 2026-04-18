@@ -26,6 +26,10 @@ namespace PadelQ.Api.Controllers
             _context = context;
         }
 
+        [AllowAnonymous]
+        [HttpGet("ping-version")]
+        public IActionResult Ping() => Ok(new { Version = "1.0.5-wipe-fixed", Status = "Alive" });
+
         [HttpGet("my-bookings")]
         public async Task<ActionResult<IEnumerable<Booking>>> GetMyBookings()
         {
@@ -65,21 +69,62 @@ namespace PadelQ.Api.Controllers
             return Ok(bookings);
         }
 
+        [HttpGet("by-range")]
+        public async Task<ActionResult<IEnumerable<Booking>>> GetByRange([FromQuery] DateTime start, [FromQuery] DateTime end)
+        {
+            var bookings = await _context.Bookings
+                .Include(b => b.Court)
+                .Include(b => b.User)
+                .Where(b => b.StartTime >= start && b.StartTime <= end && b.Status != BookingStatus.Cancelled)
+                .ToListAsync();
+            return Ok(bookings);
+        }
+
         [Authorize(Roles = "Admin,Staff")]
         [HttpPost("admin-create")]
         public async Task<IActionResult> AdminCreate([FromBody] CreateAdminBookingRequest request)
         {
-            var (success, message, bookingId) = await _bookingService.CreateAdminBooking(
-                request.UserId,
-                request.GuestName,
-                request.CourtId,
-                request.StartTime,
-                request.DurationMinutes
-            );
+            if (request.IsRecurring && request.EndDate.HasValue)
+            {
+                var (success, message, bookingIds) = await _bookingService.CreateRecurringBooking(
+                    request.UserId,
+                    request.GuestName,
+                    request.CourtId,
+                    request.StartTime,
+                    request.DurationMinutes,
+                    request.EndDate.Value,
+                    request.DepositPaid
+                );
 
-            if (!success) return BadRequest(message);
-            
-            return Ok(new { BookingId = bookingId, Message = message });
+                if (!success) return BadRequest(message);
+                return Ok(new { BookingIds = bookingIds, Message = message });
+            }
+            else
+            {
+                var (success, message, bookingId) = await _bookingService.CreateAdminBooking(
+                    request.UserId,
+                    request.GuestName,
+                    request.CourtId,
+                    request.StartTime,
+                    request.DurationMinutes,
+                    request.DepositPaid
+                );
+
+                if (!success) return BadRequest(message);
+                return Ok(new { BookingId = bookingId, Message = message });
+            }
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpDelete("series/{recurrenceGroupId}")]
+        public async Task<IActionResult> CancelSeries(Guid recurrenceGroupId)
+        {
+            var success = await _bookingService.CancelBookingSeries(recurrenceGroupId);
+            if (!success) 
+            {
+                return NotFound("No se encontraron reservas futuras en esta serie.");
+            }
+            return NoContent();
         }
 
         [HttpDelete("{id}")]
@@ -89,8 +134,33 @@ namespace PadelQ.Api.Controllers
             if (!success) return NotFound();
             return NoContent();
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("wipe-all")]
+        public async Task<IActionResult> WipeAllData()
+        {
+            var (success, message) = await _bookingService.WipeAllBookings();
+            if (!success) return BadRequest(message);
+            return Ok(new { Message = message });
+        }
     }
 
-    public record CreateBookingRequest(int CourtId, DateTime StartTime, int DurationMinutes);
-    public record CreateAdminBookingRequest(string? UserId, string? GuestName, int CourtId, DateTime StartTime, int DurationMinutes);
+    public class CreateBookingRequest
+    {
+        public int CourtId { get; set; }
+        public DateTime StartTime { get; set; }
+        public int DurationMinutes { get; set; }
+    }
+
+    public class CreateAdminBookingRequest
+    {
+        public string? UserId { get; set; }
+        public string? GuestName { get; set; }
+        public int CourtId { get; set; }
+        public DateTime StartTime { get; set; }
+        public int DurationMinutes { get; set; }
+        public bool IsRecurring { get; set; } = false;
+        public DateTime? EndDate { get; set; }
+        public decimal DepositPaid { get; set; } = 0;
+    }
 }

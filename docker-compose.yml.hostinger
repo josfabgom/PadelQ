@@ -8,6 +8,8 @@ services:
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
     volumes:
       - mssql_data:/var/opt/mssql
+    ports:
+      - "1433:1433"
     networks:
       - padelq_network
 

@@ -30,6 +30,21 @@ namespace PadelQ.Infrastructure.Persistence
                 .HasIndex(u => u.Dni)
                 .IsUnique()
                 .HasFilter("[Dni] IS NOT NULL");
+
+            // UTC DateTime Converter
+            var dateTimeConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+                v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+            foreach (var entityType in builder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (property.ClrType == typeof(DateTime) || property.ClrType == typeof(DateTime?))
+                    {
+                        property.SetValueConverter(dateTimeConverter);
+                    }
+                }
+            }
         }
     }
 }

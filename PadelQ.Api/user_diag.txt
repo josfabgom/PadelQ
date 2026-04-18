@@ -1,4 +1,8 @@
 --- USER DIAGNOSTIC ---
+User: marce@padelq.com, Email: marce@padelq.com, Name: Marcelo, DNI: 12333444
+User: comercio@padelq.com, Email: comercio@padelq.com, Name: comercio, DNI: 44556777
 User: Admin, Email: admin@padelq.com, Name: Administrador Sistema, DNI: 
-User: marce@padelq.com, Email: marce@padelq.com, Name: Marcelo Mercado, DNI: 12233564
+User: pedro@padelq.com, Email: pedro@padelq.com, Name: pedro, DNI: 45232567
+User: user@padelq.com, Email: user@padelq.com, Name: user, DNI: 12342355
+User: vendedor@padelq.com, Email: vendedor@padelq.com, Name: Vendedor, DNI: 13456789
 ------------------------

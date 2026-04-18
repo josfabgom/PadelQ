@@ -34,6 +34,11 @@ namespace PadelQ.Domain.Entities
 
         [ForeignKey("CourtId")]
         public virtual Court? Court { get; set; }
+
+        public Guid? RecurrenceGroupId { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal DepositPaid { get; set; } = 0;
     }
 
     public enum BookingStatus

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut } from 'lucide-react';
+import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2 } from 'lucide-react';
 import Header from '../components/Header';
 
 interface Setting {
@@ -165,6 +165,54 @@ const AdminSettingsPage = () => {
                 suffix="días antes"
                 type="number"
               />
+            </div>
+          </div>
+
+          {/* Danger Zone Card */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-rose-100 bg-rose-50/20 space-y-8">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-rose-900">Zona de Peligro</h2>
+                <p className="text-sm text-rose-600/70">Acciones destructivas irreversibles</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+                <div className="p-6 bg-white border border-rose-200 rounded-3xl space-y-4 shadow-sm">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-rose-50 text-rose-500 rounded-lg">
+                            <AlertCircle className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-900">Vaciar Calendario de Reservas</h3>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Elimina permanentemente **todas** las reservas del sistema. Úsalo solo para limpiezas de mantenimiento.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <button 
+                        onClick={async () => {
+                            if(confirm("¡ATENCIÓN! ¿Estás seguro de que quieres BORRAR TODAS las reservas? Esta acción no se puede deshacer.")) {
+                                try {
+                                    await api.post('/api/bookings/wipe-all', {}, config);
+                                    setMessage({ text: "Base de datos de reservas limpiada con éxito.", type: 'success' });
+                                    setTimeout(() => setMessage({ text: '', type: '' }), 5000);
+                                } catch (e: any) {
+                                    const errorMsg = e.response?.data?.message || e.response?.data || e.message;
+                                    setMessage({ text: "Error: " + errorMsg, type: 'error' });
+                                }
+                            }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl transition-all shadow-lg shadow-rose-200 font-bold"
+                    >
+                        <Trash2 className="w-5 h-5" />
+                        VACIAR TODO EL CALENDARIO
+                    </button>
+                </div>
             </div>
           </div>
         </div>

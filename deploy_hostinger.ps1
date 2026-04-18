@@ -64,12 +64,12 @@ tar -czf $PACKAGE_NAME --exclude="bin" --exclude="obj" --exclude="node_modules" 
 
 # 4. Subir el paquete al servidor
 Write-Host "📤 Subiendo paquete a $USER@$SERVER_IP..." -ForegroundColor Yellow
-scp $PACKAGE_NAME "$($USER)@$($SERVER_IP):$TARGET_DIR"
+$SSH_KEY = "C:\Users\josfa\.ssh\id_ed25519_padelq"
+scp -i $SSH_KEY $PACKAGE_NAME "$($USER)@$($SERVER_IP):$TARGET_DIR"
 
 # 5. Ejecutar comandos remotos por SSH
-Write-Host "⚡ Ejecutando comandos de actualización en Hostinger..." -ForegroundColor Yellow
-# Probamos primero con 'docker compose' y luego con 'docker-compose' por si acaso
-$REMOTE_CMD = "cd $TARGET_DIR && tar -xzf $PACKAGE_NAME && (docker compose -f docker-compose.yml.hostinger down; docker compose -f docker-compose.yml.hostinger up -d --build) && rm $PACKAGE_NAME"
-ssh "$($USER)@$($SERVER_IP)" "$REMOTE_CMD"
+Write-Host "⚡ Ejecutando comandos de actualización y limpieza en Hostinger..." -ForegroundColor Yellow
+$REMOTE_CMD = "cd $TARGET_DIR && tar -xzf $PACKAGE_NAME && docker compose -f docker-compose.yml.hostinger up -d --build && docker image prune -af && docker builder prune -f && rm $PACKAGE_NAME"
+ssh -i $SSH_KEY "$($USER)@$($SERVER_IP)" "$REMOTE_CMD"
 
 Write-Host "`n✅ ¡DESPLIEGUE COMPLETADO CON ÉXITO! El sistema ya está actualizado.`n" -ForegroundColor Green
