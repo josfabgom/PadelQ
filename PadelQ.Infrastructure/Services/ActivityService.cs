@@ -69,8 +69,25 @@ namespace PadelQ.Infrastructure.Services
                 dbActivity.IsActive = activity.IsActive;
 
                 // Update Schedules
-                _context.ActivitySchedules.RemoveRange(dbActivity.Schedules);
-                dbActivity.Schedules = activity.Schedules;
+                var existingSchedules = dbActivity.Schedules.ToList();
+                foreach (var s in existingSchedules)
+                {
+                    _context.ActivitySchedules.Remove(s);
+                }
+
+                foreach (var s in activity.Schedules)
+                {
+                    var newSchedule = new ActivitySchedule
+                    {
+                        ActivityId = dbActivity.Id,
+                        DayOfWeek = s.DayOfWeek,
+                        StartTime = s.StartTime,
+                        EndTime = s.EndTime,
+                        CourtId = s.CourtId,
+                        SpaceId = s.SpaceId
+                    };
+                    _context.ActivitySchedules.Add(newSchedule);
+                }
 
                 await _context.SaveChangesAsync();
             }

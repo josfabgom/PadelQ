@@ -57,6 +57,7 @@ const UsersPage = () => {
   const [isMembershipPaymentLog, setIsMembershipPaymentLog] = useState(false);
   const [memberships, setMemberships] = useState<any[]>([]);
   const [selectedMembershipId, setSelectedMembershipId] = useState<number | string>('');
+  const [dniExists, setDniExists] = useState<any | null>(null);
 
   const config = getAuthConfig();
 
@@ -101,6 +102,7 @@ const UsersPage = () => {
     setRole('User');
     setCanAccessActivities(true);
     setCanAccessBookings(true);
+    setDniExists(null);
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
@@ -139,6 +141,25 @@ const UsersPage = () => {
       console.error("Error al cargar transacciones", err);
     }
   };
+
+  // Check DNI Realtime
+  useEffect(() => {
+    const checkDni = async () => {
+      if (dni.length > 5 && isCreateModalOpen) {
+        try {
+          const response = await api.get(`/api/users/check-dni?dni=${dni}`, config);
+          setDniExists(response.data);
+        } catch (err) {
+          setDniExists(null);
+        }
+      } else {
+        setDniExists(null);
+      }
+    };
+
+    const timer = setTimeout(checkDni, 500);
+    return () => clearTimeout(timer);
+  }, [dni, isCreateModalOpen]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -544,7 +565,24 @@ const UsersPage = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">DNI (Clave Única)</label>
-                  <input type="text" required value={dni} onChange={(e) => setDni(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                  <input 
+                    type="text" 
+                    required 
+                    value={dni} 
+                    onChange={(e) => setDni(e.target.value)} 
+                    className={`w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none transition-all ${
+                        dniExists ? 'border-rose-300 ring-4 ring-rose-500/5' : 'border-slate-200'
+                    }`}
+                  />
+                  {dniExists && (
+                    <div className="mt-2 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                        <ShieldAlert className="w-4 h-4 text-rose-600" />
+                        <div>
+                            <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">DNI YA REGISTRADO</p>
+                            <p className="text-[9px] text-rose-600 font-bold uppercase tracking-tight leading-none">Pertenece a: {dniExists.fullName}</p>
+                        </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>

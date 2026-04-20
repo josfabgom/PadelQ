@@ -1,9 +1,16 @@
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Clock } from 'lucide-react';
 import { VERSION } from '../version';
+import React, { useState, useEffect } from 'react';
 
 const Header = () => {
   const userName = localStorage.getItem('padelq_user_name') || 'Administrador';
   const userEmail = localStorage.getItem('padelq_user_email') || '';
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('padelq_token');
@@ -14,7 +21,7 @@ const Header = () => {
 
   return (
     <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[32px] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-6 min-w-[200px]">
         <div className="w-12 h-12 bg-black rounded-[16px] flex items-center justify-center text-white shadow-lg">
           <UserIcon className="w-6 h-6" />
         </div>
@@ -24,8 +31,15 @@ const Header = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="px-4 py-2 bg-zinc-50 rounded-full border border-zinc-100 hidden md:flex items-center gap-2">
+      <div className="hidden lg:flex items-center justify-center gap-4 px-8 py-3 bg-zinc-100 rounded-[24px] border border-black/5 shadow-inner">
+          <Clock className="w-6 h-6 text-black animate-pulse" />
+          <span className="text-3xl font-black italic tracking-tighter tabular-nums text-black">
+              {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+      </div>
+
+      <div className="flex items-center gap-4 min-w-[200px] justify-end">
+        <div className="px-4 py-2 bg-zinc-50 rounded-full border border-zinc-100 hidden xl:flex items-center gap-2">
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{VERSION}</span>
         </div>

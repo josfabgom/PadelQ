@@ -281,6 +281,13 @@ namespace PadelQ.Infrastructure.Identity
             return (true, "PASSWORD_CHANGED_SUCCESSFULLY");
         }
 
+        public async Task<PadelQ.Application.Common.Models.UserDto?> GetUserByDniAsync(string dni)
+        {
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Dni == dni);
+            if (user == null) return null;
+            return await GetUserByIdAsync(user.Id);
+        }
+
         private async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
         {
             var userRoles = await _userManager.GetRolesAsync(user);

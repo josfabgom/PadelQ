@@ -345,6 +345,18 @@ namespace PadelQ.Infrastructure.Services
                         return (false, $"Conflicto de disponibilidad el día {currentStartTime:dd/MM/yyyy}. Serie cancelada.", new List<Guid>());
                     }
 
+                    // NUEVO: Verificar si hay actividades (clases) bloqueando la cancha
+                    var activityOverlapping = await _context.ActivitySchedules
+                        .AnyAsync(s => s.CourtId == courtId 
+                                    && s.DayOfWeek == currentStartTime.DayOfWeek
+                                    && ((s.StartTime < currentEndTime.TimeOfDay && s.EndTime > currentStartTime.TimeOfDay)));
+
+                    if (activityOverlapping)
+                    {
+                        await transaction.RollbackAsync();
+                        return (false, $"La cancha está bloqueada por una actividad programada el día {currentStartTime:dd/MM/yyyy}. Serie cancelada.", new List<Guid>());
+                    }
+
                     var basePrice = (decimal)(durationMinutes / 60.0) * effectivePricePerHour;
                     var finalPrice = basePrice * (1 - (membershipDiscount / 100m));
 
@@ -396,10 +408,17 @@ namespace PadelQ.Infrastructure.Services
 
         public async Task<bool> IsAvailable(int courtId, DateTime start, DateTime end)
         {
-             return !await _context.Bookings
+             var bookingOverlap = await _context.Bookings
                 .AnyAsync(b => b.CourtId == courtId 
                     && b.Status != BookingStatus.Cancelled
                     && ( (start < b.EndTime && end > b.StartTime) ));
+
+             var activityOverlap = await _context.ActivitySchedules
+                .AnyAsync(s => s.CourtId == courtId 
+                            && s.DayOfWeek == start.DayOfWeek
+                            && ((s.StartTime < end.TimeOfDay && s.EndTime > start.TimeOfDay)));
+
+             return !bookingOverlap && !activityOverlap;
         }
 
         public async Task<bool> CancelBooking(Guid bookingId)

@@ -8,6 +8,8 @@ interface ActivitySchedule {
   dayOfWeek: number;
   startTime: string;
   endTime: string;
+  courtId?: number | null;
+  spaceId?: number | null;
 }
 
 interface ClubActivity {
@@ -21,8 +23,15 @@ interface ClubActivity {
   schedules: ActivitySchedule[];
 }
 
+interface Resource {
+    id: number;
+    name: string;
+    type: 'court' | 'space';
+}
+
 const ActivitiesPage = () => {
   const [activities, setActivities] = useState<ClubActivity[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<ClubActivity | null>(null);
@@ -44,10 +53,21 @@ const ActivitiesPage = () => {
 
   const fetchActivities = async () => {
     try {
-      const response = await api.get('/api/activities', config);
-      setActivities(response.data);
+      const [actRes, courtRes, spaceRes] = await Promise.all([
+        api.get('/api/activities', config),
+        api.get('/api/courts', config),
+        api.get('/api/spaces', config)
+      ]);
+      
+      setActivities(actRes.data);
+      
+      const combinedResources: Resource[] = [
+          ...courtRes.data.map((c: any) => ({ id: c.id, name: c.name, type: 'court' as const })),
+          ...spaceRes.data.map((s: any) => ({ id: s.id, name: s.name, type: 'space' as const }))
+      ];
+      setResources(combinedResources);
     } catch (err) {
-      console.error("Error al cargar actividades", err);
+      console.error("Error al cargar datos", err);
     } finally {
       setLoading(false);
     }
@@ -103,7 +123,7 @@ const ActivitiesPage = () => {
       ...formData,
       schedules: [
         ...formData.schedules,
-        { dayOfWeek: 1, startTime: '10:00:00', endTime: '11:00:00' }
+        { dayOfWeek: 1, startTime: '10:00:00', endTime: '11:00:00', courtId: null, spaceId: null }
       ]
     });
   };
@@ -184,12 +204,27 @@ const ActivitiesPage = () => {
                   <span>Capacidad: {activity.maxCapacity} personas</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
-                  {activity.schedules.map((s, i) => (
-                    <div key={i} className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg">
-                      <Calendar className="w-3 h-3" />
-                      <span>{getDayName(s.dayOfWeek)} {s.startTime.substring(0,5)}</span>
-                    </div>
-                  ))}
+                  {activity.schedules.map((s, i) => {
+                    const resource = s.courtId ? resources.find(r => r.type === 'court' && r.id === s.courtId) : (s.spaceId ? resources.find(r => r.type === 'space' && r.id === s.spaceId) : null);
+                    return (
+                      <div key={i} className="flex flex-col gap-1 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg">
+                        <div className="flex items-center gap-1 font-bold">
+                          <Calendar className="w-3 h-3" />
+                          <span>{getDayName(s.dayOfWeek)} {s.startTime.substring(0,5)}</span>
+                        </div>
+                        {resource ? (
+                          <div className="flex items-center gap-1 text-[9px] text-indigo-600 border-t border-slate-200 pt-1 mt-0.5">
+                            {resource.type === 'court' ? '🎾' : '🏠'}
+                            <span>{resource.name}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[9px] text-rose-500 border-t border-slate-200 pt-1 mt-0.5 font-bold">
+                            <span>⚠️ Recurso no vinculado ({s.courtId ?? s.spaceId ?? 'null'})</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex items-center gap-3 text-sm font-bold text-indigo-600 bg-indigo-50 p-3 rounded-xl mt-4">
                   <DollarSign className="w-4 h-4" />
@@ -303,6 +338,34 @@ const ActivitiesPage = () => {
                             <option value={6}>Sábado</option>
                             <option value={0}>Domingo</option>
                           </select>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Recurso / Cancha</label>
+                            <select 
+                                value={schedule.courtId ? `court-${schedule.courtId}` : (schedule.spaceId ? `space-${schedule.spaceId}` : '')}
+                                onChange={(e) => {
+                                    const [type, id] = e.target.value.split('-');
+                                    let courtId = null;
+                                    let spaceId = null;
+
+                                    if (type === 'court') courtId = Number(id);
+                                    else if (type === 'space') spaceId = Number(id);
+                                    
+                                    const newSchedules = [...formData.schedules];
+                                    newSchedules[index] = { ...newSchedules[index], courtId, spaceId };
+                                    setFormData({ ...formData, schedules: newSchedules });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                            >
+                                <option value="">No asignado</option>
+                                {resources.map(r => (
+                                    <option key={`${r.type}-${r.id}`} value={`${r.type}-${r.id}`}>
+                                        {r.type === 'court' ? '🎾 Cancha: ' : '🏠 Espacio: '} {r.name}
+                                    </option>
+                                ))}
+                            </select>
+                          </div>
+
                           <div className="grid grid-cols-2 gap-2">
                             <div className="relative">
                               <Clock className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3" />

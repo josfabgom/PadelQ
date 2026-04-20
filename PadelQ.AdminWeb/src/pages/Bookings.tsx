@@ -67,6 +67,7 @@ interface Client {
   id: string;
   fullName: string;
   email: string;
+  dni?: string;
 }
 
 interface Space {
@@ -94,6 +95,20 @@ interface SpaceBooking {
   depositPaid: number;
 }
 
+interface Activity {
+    id: number;
+    name: string;
+    instructorName: string;
+    schedules: {
+        id: number;
+        dayOfWeek: number;
+        startTime: string;
+        endTime: string;
+        courtId?: number | null;
+        spaceId?: number | null;
+    }[];
+}
+
 const BookingsPage = () => {
   const [view, setView] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState(startOfToday());
@@ -101,6 +116,7 @@ const BookingsPage = () => {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [spaceBookings, setSpaceBookings] = useState<SpaceBooking[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -121,6 +137,7 @@ const BookingsPage = () => {
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestDni, setGuestDni] = useState('');
+  const [existingUser, setExistingUser] = useState<any | null>(null);
   const [duration, setDuration] = useState(60);
   const [isFree, setIsFree] = useState(false);
   const [searchClient, setSearchClient] = useState('');
@@ -185,9 +202,10 @@ const BookingsPage = () => {
       const pUsers = api.get('/api/users', config).then(r => r.data).catch(() => []);
       const pPayments = api.get('/api/PaymentMethods', config).then(r => r.data).catch(() => []);
       const pSettings = api.get('/api/SystemSettings', config).then(r => r.data).catch(() => []);
+      const pActivities = api.get('/api/activities', config).then(r => r.data).catch(() => []);
 
-      const [resC, resS, resB, resSB, resU, resP, resSett] = await Promise.all([
-        pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings
+      const [resC, resS, resB, resSB, resU, resP, resSett, resA] = await Promise.all([
+        pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities
       ]);
 
       setCourts(resC || []);
@@ -195,6 +213,7 @@ const BookingsPage = () => {
       setBookings(resB || []);
       setSpaceBookings(resSB || []);
       setClients(resU || []);
+      setActivities(resA || []);
       setPaymentMethods((resP || []).filter((m: any) => m.isActive));
       
       const openH = parseInt(resSett?.find((s: any) => s.key === 'OpenHour')?.value || '8');
@@ -221,7 +240,8 @@ const BookingsPage = () => {
     if (!searchClient) return [];
     return clients.filter(c => 
       c.fullName.toLowerCase().includes(searchClient.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchClient.toLowerCase())
+      c.email.toLowerCase().includes(searchClient.toLowerCase()) ||
+      (c.dni && c.dni.includes(searchClient))
     ).slice(0, 5);
   }, [clients, searchClient]);
 
@@ -271,6 +291,40 @@ const BookingsPage = () => {
     });
   };
 
+  const getActivityFor = (resourceId: number, type: 'court' | 'space', hour: number) => {
+      if (!activities) return null;
+      const dayOfWeek = selectedDate.getDay();
+      
+      for (const activity of activities) {
+          const schedules = activity.schedules || (activity as any).Schedules;
+          if (!schedules || !Array.isArray(schedules)) continue;
+
+          for (const s of schedules) {
+              const sDay = s.dayOfWeek ?? (s as any).DayOfWeek;
+              
+              if (Number(sDay) === dayOfWeek) {
+                  const sCourtId = s.courtId ?? (s as any).CourtId;
+                  const sSpaceId = s.spaceId ?? (s as any).SpaceId;
+
+                  const matchesResource = type === 'court' 
+                    ? (sCourtId != null && Number(sCourtId) === resourceId)
+                    : (sSpaceId != null && Number(sSpaceId) === resourceId);
+
+                  if (matchesResource) {
+                      const startStr = s.startTime || (s as any).StartTime;
+                      if (startStr) {
+                          const sHour = parseInt(startStr.split(':')[0]);
+                          if (sHour === hour) {
+                              return { activity, schedule: s };
+                          }
+                      }
+                  }
+              }
+          }
+      }
+      return null;
+  };
+
   const getBookingsCountForDay = (day: Date) => {
     return bookings.filter(b => isSameDay(parseISO(b.startTime), day) && b.status !== 2).length;
   };
@@ -318,6 +372,45 @@ const BookingsPage = () => {
     setSelectedTimeSlot({ resource: { type, data: resource }, hour });
     setIsModalOpen(true);
   };
+
+  // Check DNI Realtime
+  useEffect(() => {
+    const checkDni = async () => {
+      if (guestDni.length > 5 && bookingType === 'guest') {
+        try {
+          const response = await api.get(`/api/users/check-dni?dni=${guestDni}`, config);
+          if (response.data) {
+            // "Premium" Experience: Auto-switch to Existing Client
+            setExistingUser(response.data);
+            
+            // Give a tiny delay for the user to see the match before switching
+            setTimeout(() => {
+               setBookingType('existing');
+               setSelectedClientId(response.data.id);
+               // Clear guest fields to keep state clean
+               setGuestName('');
+               setGuestPhone('');
+               setGuestEmail('');
+               setGuestDni('');
+               setExistingUser(null);
+               
+               // Auto-scroll to duration section to speed up workflow
+               setTimeout(() => {
+                 document.getElementById('duration-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+               }, 100);
+            }, 800);
+          }
+        } catch (err) {
+          setExistingUser(null);
+        }
+      } else {
+        setExistingUser(null);
+      }
+    };
+
+    const timer = setTimeout(checkDni, 500);
+    return () => clearTimeout(timer);
+  }, [guestDni, bookingType]);
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -439,6 +532,7 @@ const BookingsPage = () => {
     setGuestPhone('');
     setGuestEmail('');
     setGuestDni('');
+    setExistingUser(null);
     setDuration(60);
     setIsFree(false);
     setIsRecurring(false);
@@ -626,8 +720,14 @@ const BookingsPage = () => {
                                     top: `calc(72px + ${(new Date().getHours() - openHourForIndicator) * 100}px + ${(new Date().getMinutes() / 60) * 100}px)` 
                                 }}
                             >
-                                <div className="w-[120px] pr-4 flex justify-end">
-                                    <span className="bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">AHORA</span>
+                                <div className="w-[120px] pr-4 flex justify-end scale-110">
+                                    <div className="flex items-center gap-1.5 bg-rose-500 text-white px-2.5 py-1 rounded-full shadow-[0_4px_12px_rgba(225,29,72,0.3)] border border-white/20">
+                                        <span className="text-[8px] font-black uppercase tracking-tighter">AHORA</span>
+                                        <div className="w-px h-2 bg-white/30"></div>
+                                        <span className="text-[10px] font-black italic tracking-tighter tabular-nums">
+                                            {format(new Date(), 'HH:mm:ss')}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="flex-1 h-0.5 bg-rose-500/50 relative">
                                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-rose-600 rounded-full shadow-[0_0_10px_rgba(225,29,72,0.8)] animate-pulse"></div>
@@ -670,7 +770,7 @@ const BookingsPage = () => {
                                 }}
                             >
                                 <div className={`p-4 border-r-2 border-b border-zinc-200 flex flex-col items-center justify-center transition-all ${
-                                    (courts.some(c => getBookingFor(c.id, hour)) || spaces.some(s => getSpaceBookingFor(s.id, hour)))
+                                    (courts.some(c => getBookingFor(c.id, hour) || getActivityFor(c.id, 'court', hour)) || spaces.some(s => getSpaceBookingFor(s.id, hour) || getActivityFor(s.id, 'space', hour)))
                                     ? 'bg-black text-white' 
                                     : 'bg-zinc-200/20 text-zinc-800 group-hover:bg-black group-hover:text-white'
                                 }`}>
@@ -681,6 +781,7 @@ const BookingsPage = () => {
                                 </div>
                                 {courts.map((court, idx) => {
                                     const booking = getBookingFor(court.id, hour);
+                                    const activity = getActivityFor(court.id, 'court', hour);
                                     const isStartHour = booking && parseSafeDate(booking.startTime).getHours() === hour;
 
                                     const palette = [
@@ -702,8 +803,16 @@ const BookingsPage = () => {
                                         <div 
                                             key={`court-${court.id}-${hour}`}
                                             className={`border-b border-r-2 border-zinc-200/50 p-2 min-h-[100px] relative hover:bg-zinc-200/30 transition-all cursor-pointer group/cell ${idx % 2 !== 0 ? 'bg-zinc-100/40' : 'bg-white'} ${isStartHour ? 'z-40' : 'z-0'}`}
-                                            onClick={() => handleOpenBooking(court, 'court', hour)}
+                                            onClick={() => !activity && handleOpenBooking(court, 'court', hour)}
                                         >
+                                            {activity && (
+                                                <div className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20">
+                                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
+                                                    <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
+                                                    <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
+                                                    <p className="text-[8px] font-bold text-zinc-400 mt-1 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                </div>
+                                            )}
                                             {booking ? (
                                                 isStartHour && (
                                                     <div 
@@ -776,6 +885,7 @@ const BookingsPage = () => {
                                 })}
                                 {spaces.map((space, idx) => {
                                     const booking = getSpaceBookingFor(space.id, hour);
+                                    const activity = getActivityFor(space.id, 'space', hour);
                                     const isStartHour = booking && parseSafeDate(booking.startTime).getHours() === hour;
 
                                     const start = booking ? parseSafeDate(booking.startTime) : null;
@@ -787,8 +897,16 @@ const BookingsPage = () => {
                                         <div 
                                             key={`space-${space.id}-${hour}`}
                                             className={`border-b border-r-2 border-zinc-200/50 p-2 min-h-[75px] relative hover:bg-amber-100/50 transition-all cursor-pointer group/cell bg-amber-50/20 ${isStartHour ? 'z-40' : 'z-0'}`}
-                                            onClick={() => handleOpenBooking(space, 'space', hour)}
+                                            onClick={() => !activity && handleOpenBooking(space, 'space', hour)}
                                         >
+                                            {activity && (
+                                                <div className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20">
+                                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
+                                                    <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
+                                                    <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
+                                                    <p className="text-[8px] font-bold text-zinc-400 mt-1 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                </div>
+                                            )}
                                             {booking ? (
                                                 isStartHour && (
                                                     <div 
@@ -1039,10 +1157,22 @@ const BookingsPage = () => {
                                         type="text"
                                         value={guestDni}
                                         onChange={(e) => setGuestDni(e.target.value)}
-                                        className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
+                                        className={`w-full px-8 py-5 bg-zinc-50 border rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300 transition-all ${
+                                            existingUser ? 'border-indigo-300 ring-4 ring-indigo-500/5' : 'border-zinc-100'
+                                        }`}
                                         placeholder="Solo números"
                                         required
                                     />
+                                    {existingUser && (
+                                        <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl animate-in fade-in slide-in-from-top-1">
+                                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight">
+                                                ⚠️ CLIENTE DETECTADO: <span className="font-black italic">{existingUser.fullName}</span>
+                                            </p>
+                                            <p className="text-[8px] text-indigo-400 font-bold uppercase tracking-tight leading-none mt-1">
+                                                Ya registrado como {existingUser.membershipName || 'Particular'}. Se usará su cuenta existente.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             
@@ -1097,8 +1227,10 @@ const BookingsPage = () => {
                     <div className="h-px bg-zinc-100 my-4"></div>
 
                     <div className="grid grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Duración</label>
+                        <div className="space-y-4" id="duration-section">
+                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                                Duración <span className="text-[8px] bg-emerald-500 text-black px-2 py-0.5 rounded-full animate-pulse">Siguiente Paso</span>
+                            </label>
                                     <div className="flex gap-2 p-1.5 bg-zinc-100 rounded-2xl overflow-x-auto scrollbar-hide">
                                         {(selectedTimeSlot.resource.type === 'court' ? [60, 120, 180] : [60, 120, 180, 240, 360, 480]).map(d => (
                                             <button

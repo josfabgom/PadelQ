@@ -13,5 +13,6 @@ namespace PadelQ.Application.Common.Interfaces
         Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role, bool canAccessActivities, bool canAccessBookings);
         Task<bool> DeleteUserAsync(string userId);
         Task<(bool Succeeded, string Message)> ChangePasswordAsync(string userId, string newPassword);
+        Task<PadelQ.Application.Common.Models.UserDto?> GetUserByDniAsync(string dni);
     }
 }

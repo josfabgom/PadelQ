@@ -88,6 +88,14 @@ namespace PadelQ.Api.Controllers
 
             if (overlapping) return BadRequest("El espacio ya está reservado para ese horario.");
 
+            // NUEVO: Check overlap with activities
+            var activityOverlapping = await _context.ActivitySchedules
+                .AnyAsync(s => s.SpaceId == request.SpaceId 
+                            && s.DayOfWeek == startTime.DayOfWeek
+                            && ((s.StartTime < endTime.TimeOfDay && s.EndTime > startTime.TimeOfDay)));
+
+            if (activityOverlapping) return BadRequest("El espacio está bloqueado por una actividad programada.");
+
             // Aplicar descuento por membresía si aplica
             decimal membershipDiscount = 0;
             if (!string.IsNullOrEmpty(userId))

@@ -25,6 +25,15 @@ namespace PadelQ.Api.Controllers
             return Ok(users);
         }
 
+        [HttpGet("check-dni")]
+        public async Task<IActionResult> GetByDni([FromQuery] string dni)
+        {
+            if (string.IsNullOrEmpty(dni)) return BadRequest("DNI is required");
+            var user = await _identityService.GetUserByDniAsync(dni);
+            if (user == null) return NotFound();
+            return Ok(user);
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUser(string id)
         {
