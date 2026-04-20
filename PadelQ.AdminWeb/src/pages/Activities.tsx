@@ -52,22 +52,28 @@ const ActivitiesPage = () => {
   }, []);
 
   const fetchActivities = async () => {
+    const token = localStorage.getItem('token');
+    const config = {
+      headers: { Authorization: `Bearer ${token}` }
+    };
+
     try {
-      const [actRes, courtRes, spaceRes] = await Promise.all([
-        api.get('/api/activities', config),
-        api.get('/api/courts', config),
-        api.get('/api/spaces', config)
+      // Pedir datos por separado para evitar que un fallo bloquee todo
+      const [actData, courtData, spaceData] = await Promise.all([
+        api.get('/api/activities', config).then(r => r.data).catch(err => { console.error("Act:", err); return []; }),
+        api.get('/api/courts', config).then(r => r.data).catch(err => { console.error("Courts:", err); return []; }),
+        api.get('/api/spaces', config).then(r => r.data).catch(err => { console.error("Spaces:", err); return []; })
       ]);
-      
-      setActivities(actRes.data);
+
+      setActivities(actData || []);
       
       const combinedResources: Resource[] = [
-          ...courtRes.data.map((c: any) => ({ id: c.id, name: c.name, type: 'court' as const })),
-          ...spaceRes.data.map((s: any) => ({ id: s.id, name: s.name, type: 'space' as const }))
+        ...(courtData || []).map((c: any) => ({ id: c.id, name: c.name, type: 'court' as const })),
+        ...(spaceData || []).map((s: any) => ({ id: s.id, name: s.name, type: 'space' as const }))
       ];
       setResources(combinedResources);
     } catch (err) {
-      console.error("Error al cargar datos", err);
+      console.error("Error general al cargar actividades", err);
     } finally {
       setLoading(false);
     }
