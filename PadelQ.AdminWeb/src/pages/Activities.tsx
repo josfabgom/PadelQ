@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Plus, Calendar, DollarSign, User as UserIcon, X, Trash2, Edit2, CheckCircle2, AlertCircle, ArrowLeft, Users } from 'lucide-react';
+import { Plus, Calendar, DollarSign, User as UserIcon, X, Trash2, Edit2, CheckCircle2, AlertCircle, ArrowLeft, Users, Clock } from 'lucide-react';
 import Header from '../components/Header';
 
 interface ActivitySchedule {
@@ -199,7 +199,7 @@ const ActivitiesPage = () => {
               
               <div className="space-y-3 mt-4">
                 <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <User className="w-4 h-4 text-slate-400" />
+                  <UserIcon className="w-4 h-4 text-slate-400" />
                   <span>Profesor: {activity.instructorName}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-600">
@@ -274,7 +274,7 @@ const ActivitiesPage = () => {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Profesor / Instructor</label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                       <input 
                         type="text" 
                         value={formData.instructorName}
