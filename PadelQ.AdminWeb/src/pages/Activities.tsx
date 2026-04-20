@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users, LogOut, ArrowLeft } from 'lucide-react';
+import { Plus, Calendar, DollarSign, User as UserIcon, X, Trash2, Edit2, CheckCircle2, AlertCircle, ArrowLeft, Users } from 'lucide-react';
 import Header from '../components/Header';
 
 interface ActivitySchedule {
@@ -45,17 +45,12 @@ const ActivitiesPage = () => {
     schedules: []
   });
 
-  const config = getAuthConfig();
-
   useEffect(() => {
     fetchActivities();
   }, []);
 
   const fetchActivities = async () => {
-    const token = localStorage.getItem('token');
-    const config = {
-      headers: { Authorization: `Bearer ${token}` }
-    };
+    const config = getAuthConfig();
 
     try {
       // Pedir datos por separado para evitar que un fallo bloquee todo
@@ -100,6 +95,7 @@ const ActivitiesPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const config = getAuthConfig();
     try {
       if (editingActivity) {
         await api.put(`/api/activities/${editingActivity.id}`, formData, config);
@@ -115,6 +111,7 @@ const ActivitiesPage = () => {
 
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de eliminar esta actividad?')) {
+      const config = getAuthConfig();
       try {
         await api.delete(`/api/activities/${id}`, config);
         fetchActivities();
