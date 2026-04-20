@@ -24,6 +24,6 @@ namespace PadelQ.Domain.Entities
         public virtual Court? Court { get; set; }
 
         [ForeignKey("SpaceId")]
-        public virtual CommonSpace? Space { get; set; }
+        public virtual Space? Space { get; set; }
     }
 }
