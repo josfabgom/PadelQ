@@ -106,8 +106,8 @@ const PaymentMethods = () => {
 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-6">
-          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300">
-            <ArrowLeft className="w-5 h-5 text-black" />
+          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group">
+            <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
           </a>
           <div>
             <h1 className="text-4xl font-black text-black tracking-tight uppercase italic">Medios de Pago</h1>

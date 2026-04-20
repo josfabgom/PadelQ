@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users, LogOut } from 'lucide-react';
+import { Layout, Plus, Edit2, Trash2, Check, X, Calendar, Clock, User, DollarSign, Users, LogOut, ArrowLeft } from 'lucide-react';
 import Header from '../components/Header';
 
 interface ActivitySchedule {
@@ -128,15 +128,17 @@ const ActivitiesPage = () => {
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
       <Header />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Actividades y Clases</h1>
-          <p className="text-slate-500">GESTIONA LAS CLASES GRUPALES Y ACTIVIDADES DEL CLUB</p>
+        <div className="flex items-center gap-6">
+          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group">
+            <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
+          </a>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Actividades y Clases</h1>
+            <p className="text-slate-500 uppercase font-medium tracking-tight">GESTIONA LAS CLASES GRUPALES Y ACTIVIDADES DEL CLUB</p>
+          </div>
         </div>
         
         <div className="flex gap-4">
-          <a href="/dashboard" className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            Volver
-          </a>
           <button 
             onClick={() => handleOpenModal()}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors"

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PadelQ.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using PadelQ.Infrastructure.Persistence;
 namespace PadelQ.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260418102905_AddGuestFieldsV3")]
+    partial class AddGuestFieldsV3
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -277,7 +280,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("PlayerLevel")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Province")
@@ -323,7 +325,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("DepositPaid")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("EndTime")
@@ -339,7 +340,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("Price")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<Guid?>("RecurrenceGroupId")
@@ -391,7 +391,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("Price")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
@@ -421,7 +420,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("PricePerHour")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("SurfaceType")
@@ -454,7 +452,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("MonthlyPrice")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Name")
@@ -494,89 +491,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.ToTable("PaymentMethods");
                 });
 
-            modelBuilder.Entity("PadelQ.Domain.Entities.Space", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("PricePerSlot")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Spaces");
-                });
-
-            modelBuilder.Entity("PadelQ.Domain.Entities.SpaceBooking", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("DepositPaid")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("EndTime")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("GuestAddress")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("GuestEmail")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("GuestName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("GuestPhone")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("Price")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("SpaceId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("StartTime")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SpaceId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("SpaceBookings");
-                });
-
             modelBuilder.Entity("PadelQ.Domain.Entities.SystemSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -603,7 +517,6 @@ namespace PadelQ.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("Date")
@@ -643,9 +556,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsPaid")
                         .HasColumnType("bit");
 
                     b.Property<int>("MembershipId")
@@ -761,23 +671,6 @@ namespace PadelQ.Infrastructure.Migrations
                         .HasForeignKey("UserId");
 
                     b.Navigation("Court");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("PadelQ.Domain.Entities.SpaceBooking", b =>
-                {
-                    b.HasOne("PadelQ.Domain.Entities.Space", "Space")
-                        .WithMany()
-                        .HasForeignKey("SpaceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PadelQ.Domain.Entities.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId");
-
-                    b.Navigation("Space");
 
                     b.Navigation("User");
                 });

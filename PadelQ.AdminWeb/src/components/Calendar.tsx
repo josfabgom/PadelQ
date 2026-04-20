@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { format, parseISO, isSameDay, addHours, startOfHour } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { es } from 'date-fns/locale/es';
 
 interface Booking {
   id: string;

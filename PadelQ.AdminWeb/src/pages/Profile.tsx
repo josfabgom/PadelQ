@@ -44,12 +44,12 @@ const ProfilePage = () => {
             
             <div className="max-w-4xl mx-auto">
                 <div className="flex items-center gap-4 mb-12">
-                    <button 
-                        onClick={() => window.history.back()}
-                        className="p-3 bg-white border border-zinc-200 text-zinc-600 rounded-2xl hover:bg-zinc-50 transition-all shadow-sm group"
+                    <a 
+                        href="/dashboard"
+                        className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group"
                     >
-                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                    </button>
+                        <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
+                    </a>
                     <div>
                         <h1 className="text-3xl font-black text-black">MI PERFIL</h1>
                         <p className="text-zinc-500 text-xs uppercase tracking-widest font-black">Administración de seguridad de cuenta</p>

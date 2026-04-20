@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PadelQ.Application.Common.Interfaces;
@@ -61,10 +62,13 @@ namespace PadelQ.Api.Controllers
         [HttpGet("by-date")]
         public async Task<ActionResult<IEnumerable<Booking>>> GetByDate([FromQuery] DateTime date)
         {
+            var nextDay = date.Date.AddDays(1);
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.User)
-                .Where(b => b.StartTime.Date == date.Date && b.Status != BookingStatus.Cancelled)
+                    .ThenInclude(u => u!.UserMemberships)
+                        .ThenInclude(um => um.Membership)
+                .Where(b => b.StartTime < nextDay && b.EndTime > date.Date && b.Status != BookingStatus.Cancelled)
                 .ToListAsync();
             return Ok(bookings);
         }
@@ -75,6 +79,8 @@ namespace PadelQ.Api.Controllers
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.User)
+                    .ThenInclude(u => u!.UserMemberships)
+                        .ThenInclude(um => um.Membership)
                 .Where(b => b.StartTime >= start && b.StartTime <= end && b.Status != BookingStatus.Cancelled)
                 .ToListAsync();
             return Ok(bookings);
@@ -89,6 +95,9 @@ namespace PadelQ.Api.Controllers
                 var (success, message, bookingIds) = await _bookingService.CreateRecurringBooking(
                     request.UserId,
                     request.GuestName,
+                    request.GuestPhone,
+                    request.GuestEmail,
+                    request.Dni,
                     request.CourtId,
                     request.StartTime,
                     request.DurationMinutes,
@@ -104,6 +113,9 @@ namespace PadelQ.Api.Controllers
                 var (success, message, bookingId) = await _bookingService.CreateAdminBooking(
                     request.UserId,
                     request.GuestName,
+                    request.GuestPhone,
+                    request.GuestEmail,
+                    request.Dni,
                     request.CourtId,
                     request.StartTime,
                     request.DurationMinutes,
@@ -143,6 +155,18 @@ namespace PadelQ.Api.Controllers
             if (!success) return BadRequest(message);
             return Ok(new { Message = message });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/pay")]
+        public async Task<IActionResult> MarkAsPaid(Guid id)
+        {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.DepositPaid = booking.Price;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Reserva marcada como pagada", DepositPaid = booking.DepositPaid });
+        }
     }
 
     public class CreateBookingRequest
@@ -156,6 +180,9 @@ namespace PadelQ.Api.Controllers
     {
         public string? UserId { get; set; }
         public string? GuestName { get; set; }
+        public string? GuestPhone { get; set; }
+        public string? GuestEmail { get; set; }
+        public string? Dni { get; set; }
         public int CourtId { get; set; }
         public DateTime StartTime { get; set; }
         public int DurationMinutes { get; set; }

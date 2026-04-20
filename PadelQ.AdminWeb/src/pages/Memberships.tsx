@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { CreditCard, Plus, Trash2, Edit3, Save, X, RefreshCw, LogOut } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Edit3, Save, X, RefreshCw, LogOut, ArrowLeft } from 'lucide-react';
 import Header from '../components/Header';
 
 interface Membership {
@@ -124,9 +124,14 @@ const MembershipsPage = () => {
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen font-outfit">
       <Header />
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Planes de Membresía</h1>
-          <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Configura los beneficios para tus clientes</p>
+        <div className="flex items-center gap-6">
+          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group">
+            <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
+          </a>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Planes de Membresía</h1>
+            <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Configura los beneficios para tus clientes</p>
+          </div>
         </div>
         <div className="flex gap-4">
           <button 

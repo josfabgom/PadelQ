@@ -21,6 +21,7 @@ namespace PadelQ.Domain.Entities
         public DateTime? EndDate { get; set; }
 
         public bool IsActive { get; set; } = true;
+        public bool IsPaid { get; set; } = false;
 
         [ForeignKey("UserId")]
         public virtual ApplicationUser? User { get; set; }

@@ -39,6 +39,8 @@ const CtaCte = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDesc, setPaymentDesc] = useState('');
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | string>('');
+  const [isMembershipPayment, setIsMembershipPayment] = useState(false);
+  const [memberships, setMemberships] = useState<any[]>([]);
 
   const fetchUsers = async () => {
     try {
@@ -58,9 +60,19 @@ const CtaCte = () => {
     }
   };
 
+  const fetchMemberships = async () => {
+    try {
+      const res = await api.get('/api/membership', getAuthConfig());
+      setMemberships(res.data);
+    } catch (err) {
+      console.error("Error fetching memberships", err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchPaymentMethods();
+    fetchMemberships();
   }, []);
 
 
@@ -95,9 +107,28 @@ const CtaCte = () => {
     fetchUserMembership(user.id);
   };
 
-  const handleQuickPay = (amount: number, description: string) => {
-    setPaymentAmount(amount.toString());
+  const handleQuickPay = (amount: number, description: string, isMembership: boolean = false) => {
+    let finalAmount = amount;
+    
+    // Si es un pago de membresía y el monto es 1 (fallback), intentamos buscar el precio real
+    if (isMembership && (amount === 1 || !amount)) {
+        const mName = userMembership?.membership.name || selectedUser?.membershipName;
+        const found = memberships.find(m => m.name.toLowerCase() === mName?.toLowerCase());
+        if (found) {
+            finalAmount = found.monthlyPrice;
+        }
+    }
+
+    setPaymentAmount(finalAmount.toString());
     setPaymentDesc(description);
+    setIsMembershipPayment(isMembership);
+    setShowPaymentModal(true);
+  };
+
+  const handleOpenGeneralPayment = () => {
+    setPaymentAmount('');
+    setPaymentDesc('');
+    setIsMembershipPayment(false);
     setShowPaymentModal(true);
   };
 
@@ -105,13 +136,20 @@ const CtaCte = () => {
     if (!selectedUser || !paymentAmount) return;
 
     try {
-      await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}&paymentMethodId=${selectedPaymentMethodId}`, {}, getAuthConfig());
+      if (isMembershipPayment) {
+        await api.post(`/api/transaction/membership-payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}`, {}, getAuthConfig());
+      } else {
+        await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}&paymentMethodId=${selectedPaymentMethodId}`, {}, getAuthConfig());
+      }
       setShowPaymentModal(false);
       setPaymentAmount('');
       setPaymentDesc('');
       setSelectedPaymentMethodId('');
+      setIsMembershipPayment(false);
+      setShowPaymentModal(false);
       fetchTransactions(selectedUser.id);
-      fetchUsers(); // Refresh balance in the main list
+      fetchUserMembership(selectedUser.id);
+      fetchUsers(); 
     } catch (err) {
       console.error("Error recording payment", err);
     }
@@ -129,8 +167,8 @@ const CtaCte = () => {
 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-6">
-          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300">
-            <ArrowLeft className="w-5 h-5 text-black" />
+          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group">
+            <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
           </a>
           <div>
             <h1 className="text-4xl font-black text-black tracking-tight uppercase italic">Cuentas Corrientes</h1>
@@ -208,7 +246,7 @@ const CtaCte = () => {
                       <h3 className="text-3xl font-black text-white uppercase italic tracking-tight">{selectedUser.fullName}</h3>
                     </div>
                     <button 
-                      onClick={() => setShowPaymentModal(true)}
+                      onClick={handleOpenGeneralPayment}
                       className="px-6 py-4 bg-white text-black rounded-[20px] text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center gap-3"
                     >
                       <Plus className="w-4 h-4" />
@@ -223,54 +261,80 @@ const CtaCte = () => {
                         ${selectedUser.balance.toLocaleString()}
                       </p>
                     </div>
-                    {userMembership && (
-                      <div className="col-span-2 flex items-center justify-between bg-white/5 border border-white/10 p-6 rounded-[30px] hover:bg-white/10 transition-all cursor-pointer group/card"
-                           onClick={() => handleQuickPay(userMembership.membership.monthlyPrice, `Pago Cuota Mensual - ${userMembership.membership.name}`)}>
-                        <div>
-                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 mb-2">Membresía Activa</p>
-                          <p className="text-xl font-black text-white italic uppercase tracking-tight">{userMembership.membership.name}</p>
-                          <div className="flex gap-4 mt-2">
-                            <div>
-                               <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Cobertura Desde</p>
-                               <p className="text-[10px] font-bold text-white/70 uppercase">
-                                 {new Date(userMembership.coverageStartDate).toLocaleDateString()}
-                               </p>
+                    {/* Membership Segment Segregado */}
+                    {userMembership || (selectedUser.membershipName && selectedUser.membershipName !== 'Sin Club' && selectedUser.membershipName !== 'Visitante') ? (
+                      <div className="col-span-2 bg-white/5 border border-white/10 p-6 rounded-[30px] relative overflow-hidden group/card hover:bg-white/10 transition-all">
+                        {/* Status Badge */}
+                        <div className="absolute top-6 right-6 flex items-center gap-2">
+                           {(!userMembership || !userMembership.isPaid) ? (
+                              <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/20 border border-rose-500/30 rounded-full">
+                                 <AlertCircle className="w-3 h-3 text-rose-400" />
+                                 <span className="text-[9px] font-black text-rose-300 uppercase tracking-widest">IMPAGA / PENDIENTE</span>
+                              </div>
+                           ) : userMembership.isExpired ? (
+                              <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 border border-amber-500/30 rounded-full">
+                                 <Clock className="w-3 h-3 text-amber-400" />
+                                 <span className="text-[9px] font-black text-amber-300 uppercase tracking-widest">VENCIDA</span>
+                              </div>
+                           ) : (
+                              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-full animate-pulse">
+                                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                 <span className="text-[9px] font-black text-emerald-300 uppercase tracking-widest">ACTIVA (PAGA)</span>
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="flex justify-between items-end">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 mb-2">Control de Membresía</p>
+                            <h4 className="text-2xl font-black text-white italic uppercase tracking-tight">
+                                {userMembership?.membership.name || selectedUser.membershipName}
+                            </h4>
+                            <div className="flex gap-6 mt-4">
+                              <div>
+                                <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Estado Actual</p>
+                                <p className={`text-[11px] font-bold ${(!userMembership || !userMembership.isPaid) ? 'text-rose-400' : 'text-white/70'}`}>
+                                  {(!userMembership || !userMembership.isPaid) ? 'Pendiente de Activación' : 'Vence: ' + new Date(userMembership.expiryDate).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="w-px h-6 bg-white/10"></div>
+                              <div>
+                                <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Beneficio</p>
+                                <p className="text-[11px] font-bold text-emerald-400">
+                                    {userMembership ? `-${userMembership.membership.discountPercentage}%` : 'Descuento Variable'} en Alquileres
+                                </p>
+                              </div>
                             </div>
-                            <div className="w-px h-6 bg-white/10 self-end mb-1"></div>
-                            <div>
-                               <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Vencimiento</p>
-                               <p className={`text-[10px] font-bold uppercase ${userMembership.isExpired ? 'text-rose-400' : 'text-white/70'}`}>
-                                 {new Date(userMembership.expiryDate).toLocaleDateString()}
+                            
+                            {(!userMembership || !userMembership.isPaid) && (
+                               <p className="mt-4 text-[9px] font-bold text-rose-400 uppercase italic opacity-80">
+                                 * Registrar pago completo para activar beneficios de socio.
                                </p>
-                            </div>
+                            )}
+                          </div>
+                          
+                          <div className="text-right">
+                             {(!userMembership || !userMembership.isPaid) && (
+                               <button 
+                                 onClick={() => handleQuickPay(userMembership?.membership.monthlyPrice || 1, `Activación Membresía - ${userMembership?.membership.name || selectedUser.membershipName}`, true)}
+                                 className="px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl flex items-center gap-3"
+                               >
+                                 <CreditCard className="w-4 h-4" />
+                                 Pagar Cuota Total
+                               </button>
+                             )}
                           </div>
                         </div>
-                        <div className="text-right">
-                           <p className="text-[9px] font-black text-white/40 mb-2 italic uppercase tracking-widest">CUOTA MENSUAL</p>
-                           <span className="px-5 py-3 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest group-hover/card:scale-105 transition-all flex items-center gap-3">
-                              <CreditCard className="w-4 h-4" />
-                              Pagar ${userMembership.membership.monthlyPrice.toLocaleString()}
-                           </span>
-                        </div>
                       </div>
-                    )}
-                    {/* Display basic membership info if complex data is missing */}
-                    {!userMembership && !membershipLoading && (
-                      <div className="col-span-2">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Membresía</p>
-                        <div className="flex items-center gap-6">
-                            <p className="text-xl font-black text-white italic uppercase">{selectedUser.membershipName || 'Visitante'}</p>
-                            {selectedUser.expiryDate && (
-                                <div className="flex gap-4 items-center bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
-                                    <div className="flex flex-col">
-                                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Vigencia</span>
-                                        <span className="text-[10px] font-bold text-white/70 uppercase">
-                                            {selectedUser.coverageStartDate ? new Date(selectedUser.coverageStartDate).toLocaleDateString() : 'S/D'} - {new Date(selectedUser.expiryDate).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                    ) : (
+                      <div className="col-span-2 bg-white/5 border border-white/5 p-6 rounded-[30px] flex items-center justify-between">
+                         <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Estado de Club</p>
+                            <p className="text-xl font-black text-white italic uppercase tracking-tight">Visitante / Sin Club</p>
+                         </div>
+                         <div className="px-4 py-2 border border-white/10 rounded-xl text-[9px] font-black text-white/30 uppercase tracking-widest">
+                            Sin descuentos activos
+                         </div>
                       </div>
                     )}
                   </div>
@@ -379,12 +443,18 @@ const CtaCte = () => {
                    <div className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-black italic text-zinc-300">$</div>
                    <input 
                     type="number" 
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-[24px] pl-14 pr-8 py-6 text-3xl font-black italic focus:outline-none focus:border-black/10 transition-all font-oak"
+                    readOnly={isMembershipPayment}
+                    className={`w-full bg-zinc-50 border border-zinc-100 rounded-[24px] pl-14 pr-8 py-6 text-3xl font-black italic focus:outline-none focus:border-black/10 transition-all font-oak ${isMembershipPayment ? 'opacity-50 cursor-not-allowed' : ''}`}
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     placeholder="0.00"
                   />
                 </div>
+                {isMembershipPayment && (
+                   <p className="text-[9px] text-amber-600 font-black uppercase mt-2 italic tracking-widest">
+                     * Pago de membresía solo permite Importe Completo
+                   </p>
+                )}
               </div>
 
               <div>

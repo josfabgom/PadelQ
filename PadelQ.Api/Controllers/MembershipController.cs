@@ -139,21 +139,21 @@ namespace PadelQ.Api.Controllers
         [HttpGet("user/{userId}")]
         public async Task<IActionResult> GetUserMembership(string userId)
         {
+            var now = DateTime.UtcNow;
             var userMembership = await _context.UserMemberships
                 .Include(um => um.Membership)
-                .Where(um => um.UserId == userId && um.IsActive)
+                .Where(um => um.UserId == userId 
+                    && um.IsActive 
+                    && um.StartDate <= now
+                    && (um.EndDate == null || um.EndDate >= now))
                 .OrderByDescending(um => um.StartDate)
                 .FirstOrDefaultAsync();
 
-            if (userMembership == null) return NotFound("No active membership found");
-
-            var lastMembershipPayment = await _context.Transactions
-                .Where(t => t.UserId == userId && t.Type == TransactionType.MembershipPayment)
-                .OrderByDescending(t => t.Date)
-                .FirstOrDefaultAsync();
-
-            var isExpired = lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
-            var expiryDate = lastMembershipPayment?.Date.AddDays(30) ?? userMembership.StartDate.AddDays(30);
+            if (userMembership == null) 
+            {
+                // Si no hay membresía activa y paga, devolvemos un estado informativo
+                return NotFound("No active or paid membership found");
+            }
 
             return Ok(new
             {
@@ -161,17 +161,11 @@ namespace PadelQ.Api.Controllers
                 userId = userMembership.UserId,
                 membershipId = userMembership.MembershipId,
                 startDate = userMembership.StartDate,
+                endDate = userMembership.EndDate,
                 isActive = userMembership.IsActive,
+                isPaid = userMembership.IsPaid,
                 membership = userMembership.Membership,
-                expiryDate = expiryDate,
-                coverageStartDate = expiryDate.AddDays(-30),
-                coverageEndDate = expiryDate,
-                isExpired = isExpired,
-                actualDiscount = isExpired ? 0 : (userMembership.Membership?.DiscountPercentage ?? 0),
-                // Compatibility mapping
-                ExpiryDate = expiryDate,
-                CoverageStartDate = expiryDate.AddDays(-30),
-                IsExpired = isExpired
+                actualDiscount = userMembership.Membership?.DiscountPercentage ?? 0
             });
         }
 
@@ -201,32 +195,27 @@ namespace PadelQ.Api.Controllers
             }
 
             var user = await _context.Users.FindAsync(userId);
+            var now = DateTime.UtcNow;
             var membership = await _context.UserMemberships
                 .Include(um => um.Membership)
-                .Where(um => um.UserId == userId && um.IsActive)
+                .Where(um => um.UserId == userId 
+                    && um.IsActive 
+                    && um.IsPaid
+                    && um.StartDate <= now
+                    && (um.EndDate == null || um.EndDate >= now))
                 .FirstOrDefaultAsync();
 
             if (membership == null)
             {
-                return BadRequest("El usuario ya no tiene una membresía activa.");
+                return BadRequest("El usuario no tiene una membresía activa y pagada.");
             }
-
-            var lastMembershipPayment = await _context.Transactions
-                .Where(t => t.UserId == userId && t.Type == TransactionType.MembershipPayment)
-                .OrderByDescending(t => t.Date)
-                .FirstOrDefaultAsync();
-
-            var isExpired = lastMembershipPayment == null || lastMembershipPayment.Date < DateTime.UtcNow.AddDays(-30);
-            var expiryDate = lastMembershipPayment?.Date.AddDays(30) ?? membership.StartDate.AddDays(30);
 
             return Ok(new
             {
                 UserName = user?.FullName ?? "Usuario Desconocido",
                 MembershipName = membership.Membership?.Name,
-                Discount = isExpired ? 0 : (membership.Membership?.DiscountPercentage ?? 0),
-                ExpiryDate = expiryDate,
-                IsExpired = isExpired,
-                Status = isExpired ? "Expired" : "Active"
+                Discount = membership.Membership?.DiscountPercentage ?? 0,
+                Status = "Active"
             });
         }
 

@@ -61,10 +61,14 @@ namespace PadelQ.Infrastructure.Services
             var closeHour = await GetIntSetting("CloseHour", 23);
             var pricePerHour = await GetDecimalSetting("PricePerHour", 25.0m);
 
-            // Verificación de horario operacional dinámico
-            if (startTime.Hour < openHour || endTime.Hour >= closeHour || (endTime.Hour == closeHour && endTime.Minute > 0))
+            // Verificación de horario operacional para usuarios de la APP (opcionalmente más estricta si se requiere)
+            // Permitimos que termine a medianoche (Hour 0, Minute 0)
+            bool isBeforeOpen = startTime.Hour < openHour;
+            bool isAfterClose = endTime.Date == startTime.Date && endTime.Hour > closeHour;
+            
+            if (isBeforeOpen || isAfterClose)
             {
-                return (false, $"El club está cerrado. El horario es de {openHour:00}:00 a {closeHour:00}:00 hs.", Guid.Empty);
+                return (false, $"El club está cerrado en ese horario. Abre a las {openHour:00}:00 hs.", Guid.Empty);
             }
             // Lógica de Alta Concurrencia mediante Transacciones SQL 'Serializable'
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
@@ -92,6 +96,7 @@ namespace PadelQ.Infrastructure.Services
                 var membershipDiscount = await _context.UserMemberships
                     .Include(um => um.Membership)
                     .Where(um => um.UserId == userId && um.IsActive)
+                    .OrderByDescending(um => um.StartDate)
                     .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
                     .FirstOrDefaultAsync();
 
@@ -133,11 +138,44 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
-        public async Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, int courtId, DateTime startTime, int durationMinutes, decimal depositPaid = 0)
+        public async Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, decimal depositPaid = 0)
         {
-            // Forzar la interpretación de la hora como LOCAL absoluta
+            // Forzar la interpretación de la hora como LOCAL absoluta compensando conversiones UTC
+            if (startTime.Kind == DateTimeKind.Utc) {
+                startTime = startTime.ToLocalTime();
+            }
             startTime = DateTime.SpecifyKind(startTime, DateTimeKind.Unspecified);
             var endTime = startTime.AddMinutes(durationMinutes);
+
+            // Nota: Para reservas administrativas omitimos el check de horario operacional 
+            // para permitir flexibilidad al administrador (eventos, cierres tarde, etc.)
+            
+            // Si no hay userId pero hay DNI, intentamos buscar o crear al usuario ""Particular""
+            if (string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(dni))
+            {
+                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Dni == dni);
+                if (existingUser != null)
+                {
+                    userId = existingUser.Id;
+                }
+                else
+                {
+                    var newUser = new ApplicationUser
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserName = dni,
+                        Dni = dni,
+                        FullName = guestName,
+                        PhoneNumber = guestPhone,
+                        Email = guestEmail,
+                        CreatedAt = DateTime.UtcNow,
+                        IsActive = true
+                    };
+                    _context.Users.Add(newUser);
+                    userId = newUser.Id;
+                    await _context.SaveChangesAsync();
+                }
+            }
 
             // Lógica de Alta Concurrencia mediante Transacciones SQL 'Serializable'
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
@@ -166,9 +204,11 @@ namespace PadelQ.Infrastructure.Services
                 decimal membershipDiscount = 0;
                 if (!string.IsNullOrEmpty(userId))
                 {
+                    var now = DateTime.UtcNow;
                     membershipDiscount = await _context.UserMemberships
                         .Include(um => um.Membership)
                         .Where(um => um.UserId == userId && um.IsActive)
+                        .OrderByDescending(um => um.StartDate)
                         .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
                         .FirstOrDefaultAsync();
                 }
@@ -180,6 +220,8 @@ namespace PadelQ.Infrastructure.Services
                 {
                     UserId = userId,
                     GuestName = guestName,
+                    GuestPhone = guestPhone,
+                    GuestEmail = guestEmail,
                     CourtId = courtId,
                     StartTime = startTime,
                     EndTime = endTime,
@@ -230,10 +272,37 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
-        public async Task<(bool Success, string Message, List<Guid> BookingIds)> CreateRecurringBooking(string? userId, string? guestName, int courtId, DateTime startTime, int durationMinutes, DateTime endDate, decimal depositPaid = 0)
+        public async Task<(bool Success, string Message, List<Guid> BookingIds)> CreateRecurringBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, DateTime endDate, decimal depositPaid = 0)
         {
             var bookingIds = new List<Guid>();
             var recurrenceGroupId = Guid.NewGuid();
+
+            // Si no hay userId pero hay DNI, intentamos buscar o crear al usuario ""Particular""
+            if (string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(dni))
+            {
+                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Dni == dni);
+                if (existingUser != null)
+                {
+                    userId = existingUser.Id;
+                }
+                else
+                {
+                    var newUser = new ApplicationUser
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserName = dni,
+                        Dni = dni,
+                        FullName = guestName,
+                        PhoneNumber = guestPhone,
+                        Email = guestEmail,
+                        CreatedAt = DateTime.UtcNow,
+                        IsActive = true
+                    };
+                    _context.Users.Add(newUser);
+                    userId = newUser.Id;
+                    await _context.SaveChangesAsync();
+                }
+            }
             var currentStartTime = startTime;
             
             // Lógica de Alta Concurrencia mediante Transacciones SQL 'Serializable'
@@ -251,6 +320,7 @@ namespace PadelQ.Infrastructure.Services
                     membershipDiscount = await _context.UserMemberships
                         .Include(um => um.Membership)
                         .Where(um => um.UserId == userId && um.IsActive)
+                        .OrderByDescending(um => um.StartDate)
                         .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
                         .FirstOrDefaultAsync();
                 }
@@ -282,6 +352,8 @@ namespace PadelQ.Infrastructure.Services
                     {
                         UserId = userId,
                         GuestName = guestName,
+                        GuestPhone = guestPhone,
+                        GuestEmail = guestEmail,
                         CourtId = courtId,
                         StartTime = currentStartTime,
                         EndTime = currentEndTime,
@@ -332,10 +404,27 @@ namespace PadelQ.Infrastructure.Services
 
         public async Task<bool> CancelBooking(Guid bookingId)
         {
-            var booking = await _context.Bookings.FindAsync(bookingId);
+            var booking = await _context.Bookings
+                .Include(b => b.Court)
+                .FirstOrDefaultAsync(b => b.Id == bookingId);
             if (booking == null) return false;
             
             booking.Status = BookingStatus.Cancelled;
+
+            // Si tenía usuario, compensamos la deuda en su Cta Cte
+            if (!string.IsNullOrEmpty(booking.UserId))
+            {
+                var reversal = new Transaction
+                {
+                    UserId = booking.UserId,
+                    Amount = booking.Price,
+                    Type = TransactionType.Payment, // Resta de la deuda (Cta Cte)
+                    Date = DateTime.UtcNow,
+                    Description = $"Anulación Reserva: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}"
+                };
+                _context.Transactions.Add(reversal);
+            }
+
             await _context.SaveChangesAsync();
             return true;
         }
@@ -343,6 +432,7 @@ namespace PadelQ.Infrastructure.Services
         public async Task<bool> CancelBookingSeries(Guid recurrenceGroupId)
         {
             var bookings = await _context.Bookings
+                .Include(b => b.Court)
                 .Where(b => b.RecurrenceGroupId == recurrenceGroupId && b.Status != BookingStatus.Cancelled)
                 .ToListAsync();
 
@@ -351,6 +441,20 @@ namespace PadelQ.Infrastructure.Services
             foreach (var b in bookings)
             {
                 b.Status = BookingStatus.Cancelled;
+                
+                // Si cada turno tenía un cargo en Cta Cte, lo compensamos uno a uno
+                if (!string.IsNullOrEmpty(b.UserId))
+                {
+                    var reversal = new Transaction
+                    {
+                        UserId = b.UserId,
+                        Amount = b.Price,
+                        Type = TransactionType.Payment,
+                        Date = DateTime.UtcNow,
+                        Description = $"Anulación Serie Recurrente: {b.Court?.Name ?? "Cancha"} del {b.StartTime:dd/MM HH:mm}"
+                    };
+                    _context.Transactions.Add(reversal);
+                }
             }
 
             await _context.SaveChangesAsync();

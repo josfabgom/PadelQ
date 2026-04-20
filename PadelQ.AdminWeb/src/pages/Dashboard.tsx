@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, TrendingDown, 
-  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck
+  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck, LayoutGrid
 } from 'lucide-react';
 
 import Calendar from '../components/Calendar';
@@ -65,7 +65,6 @@ const Dashboard = () => {
         
         <div className="flex flex-wrap gap-2">
           {(isAdmin || isStaff) && <NavButton href="/bookings" icon={<CalendarIcon className="w-4 h-4" />} label="Alquiler" primary />}
-          {(isAdmin || isStaff) && <NavButton href="/courts" icon={<Layout className="w-4 h-4" />} label="Canchas" />}
           {(isAdmin || isStaff) && <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />}
           {(isAdmin || isStaff) && <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />}
           {isAdmin && <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />}

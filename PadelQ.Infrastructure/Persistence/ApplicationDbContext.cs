@@ -20,31 +20,29 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<UserMembership> UserMemberships { get; set; } = null!;
         public DbSet<Transaction> Transactions { get; set; } = null!;
         public DbSet<PaymentMethod> PaymentMethods { get; set; } = null!;
-
+        public DbSet<Space> Spaces { get; set; } = null!;
+        public DbSet<SpaceBooking> SpaceBookings { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
 
-            builder.Entity<ApplicationUser>()
-                .HasIndex(u => u.Dni)
-                .IsUnique()
-                .HasFilter("[Dni] IS NOT NULL");
+            builder.Entity<ApplicationUser>(entity => {
+                entity.HasIndex(u => u.Dni).IsUnique().HasFilter("[Dni] IS NOT NULL");
+                entity.Property(u => u.PlayerLevel).HasPrecision(18, 2);
+            });
 
-            // UTC DateTime Converter
-            var dateTimeConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
-                v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            builder.Entity<ClubActivity>().Property(b => b.Price).HasPrecision(18, 2);
+            builder.Entity<Court>().Property(b => b.PricePerHour).HasPrecision(18, 2);
+            builder.Entity<Booking>().Property(b => b.Price).HasPrecision(18, 2);
+            builder.Entity<Booking>().Property(b => b.DepositPaid).HasPrecision(18, 2);
+            builder.Entity<Membership>().Property(b => b.MonthlyPrice).HasPrecision(18, 2);
+            builder.Entity<Transaction>().Property(b => b.Amount).HasPrecision(18, 2);
+            builder.Entity<Space>().Property(b => b.PricePerSlot).HasPrecision(18, 2);
+            builder.Entity<SpaceBooking>().Property(b => b.Price).HasPrecision(18, 2);
+            builder.Entity<SpaceBooking>().Property(b => b.DepositPaid).HasPrecision(18, 2);
 
-            foreach (var entityType in builder.Model.GetEntityTypes())
-            {
-                foreach (var property in entityType.GetProperties())
-                {
-                    if (property.ClrType == typeof(DateTime) || property.ClrType == typeof(DateTime?))
-                    {
-                        property.SetValueConverter(dateTimeConverter);
-                    }
-                }
-            }
+            // No forzamos UTC de forma global para permitir que las reservas se guarden y lean como 'Wall Clock Time' (Hora Local)
         }
     }
 }

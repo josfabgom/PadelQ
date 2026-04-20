@@ -96,6 +96,12 @@ namespace PadelQ.Infrastructure.Persistence
                 });
                 await context.SaveChangesAsync();
             }
+            // 7. Payment Methods
+            if (!context.PaymentMethods.Any(m => m.Name == "BONIFICADO / SIN COSTO"))
+            {
+                context.PaymentMethods.Add(new PaymentMethod { Name = "BONIFICADO / SIN COSTO", HexColor = "#6366F1", IsActive = true });
+                await context.SaveChangesAsync();
+            }
         }
     }
 }

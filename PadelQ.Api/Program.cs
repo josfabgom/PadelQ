@@ -113,6 +113,7 @@ using (var scope = app.Services.CreateScope())
         await context.Database.MigrateAsync();
         await DbInitializer.SeedAsync(services);
         PadelQ.Api.UserDiagnostic.PrintUsers(services);
+        Diagnostics.DateCheck.Run(services);
     }
     catch (Exception ex)
     {

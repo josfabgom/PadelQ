@@ -258,14 +258,10 @@ const UsersPage = () => {
     <div className="p-8 bg-slate-50 min-h-screen font-outfit">
       <Header />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => window.history.back()}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm group"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-            <span>Volver</span>
-          </button>
+        <div className="flex items-center gap-6">
+          <a href="/dashboard" className="p-4 bg-white rounded-3xl border border-black/5 shadow-sm hover:scale-105 active:scale-95 transition-all duration-300 group">
+            <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
+          </a>
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Gestión de Clientes</h1>
             <p className="text-slate-500 text-xs uppercase tracking-widest font-bold">Listado de usuarios registrados</p>

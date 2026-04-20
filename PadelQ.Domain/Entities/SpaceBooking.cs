@@ -4,18 +4,19 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PadelQ.Domain.Entities
 {
-    public class Booking
+    public class SpaceBooking
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
 
+        public int SpaceId { get; set; }
         public string? UserId { get; set; }
+
+        // Datos del cliente (Particular o App)
         public string? GuestName { get; set; }
+        public string? GuestAddress { get; set; }
         public string? GuestPhone { get; set; }
         public string? GuestEmail { get; set; }
-
-        [Required]
-        public int CourtId { get; set; }
 
         [Required]
         public DateTime StartTime { get; set; }
@@ -26,28 +27,18 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal Price { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal DepositPaid { get; set; } = 0;
+
         public BookingStatus Status { get; set; } = BookingStatus.Pending;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation Properties for EF Core
+        // Navigation Properties
+        [ForeignKey("SpaceId")]
+        public virtual Space? Space { get; set; }
+
         [ForeignKey("UserId")]
         public virtual ApplicationUser? User { get; set; }
-
-        [ForeignKey("CourtId")]
-        public virtual Court? Court { get; set; }
-
-        public Guid? RecurrenceGroupId { get; set; }
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal DepositPaid { get; set; } = 0;
-    }
-
-    public enum BookingStatus
-    {
-        Pending,
-        Confirmed,
-        Cancelled,
-        NoShow
     }
 }
