@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Collections.Generic;
 
 namespace PadelQ.Domain.Entities
 {
@@ -41,6 +42,8 @@ namespace PadelQ.Domain.Entities
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal DepositPaid { get; set; } = 0;
+
+        public virtual ICollection<BookingConsumption> BookingConsumptions { get; set; } = new List<BookingConsumption>();
     }
 
     public enum BookingStatus
@@ -48,6 +51,7 @@ namespace PadelQ.Domain.Entities
         Pending,
         Confirmed,
         Cancelled,
-        NoShow
+        NoShow,
+        Paid
     }
 }

@@ -26,6 +26,14 @@ interface User {
   coverageStartDate?: string;
 }
 
+const formatARS = (amount: number) => {
+    return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0
+    }).format(amount);
+};
+
 const CtaCte = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
@@ -208,7 +216,7 @@ const CtaCte = () => {
                   <div className="flex justify-between w-full mb-1">
                     <span className="text-sm font-black text-black uppercase tracking-tight">{user.fullName}</span>
                     <span className={`text-[11px] font-black ${user.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      ${Math.abs(user.balance).toLocaleString()}
+                      {formatARS(Math.abs(user.balance))}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-zinc-400 mt-2">
@@ -258,7 +266,7 @@ const CtaCte = () => {
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Deuda Pendiente</p>
                       <p className={`text-4xl font-black italic ${selectedUser.balance > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        ${selectedUser.balance.toLocaleString()}
+                        {formatARS(selectedUser.balance)}
                       </p>
                     </div>
                     {/* Membership Segment Segregado */}
@@ -391,7 +399,7 @@ const CtaCte = () => {
                               )}
                             </td>
                             <td className={`px-8 py-6 text-right font-black text-sm ${t.type === 0 ? 'text-black' : 'text-emerald-600'}`}>
-                              {t.type === 0 ? '' : '-'}${t.amount.toLocaleString()}
+                              {t.type === 0 ? '' : '-'}{formatARS(t.amount)}
                             </td>
                           </tr>
                         ))}

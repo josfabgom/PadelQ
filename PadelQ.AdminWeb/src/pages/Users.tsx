@@ -608,6 +608,7 @@ const UsersPage = () => {
                       <>
                         <option value="Staff">Administración (Sin Borrar)</option>
                         <option value="Merchant">Comercio (Solo QR)</option>
+                        <option value="Teacher">Profesores (Gestión Actividades)</option>
                         <option value="Admin">Administrador (Acceso Total)</option>
                       </>
                     )}
@@ -741,6 +742,7 @@ const UsersPage = () => {
                       <>
                         <option value="Staff">Administración (Sin Borrar)</option>
                         <option value="Merchant">Comercio (Solo QR)</option>
+                        <option value="Teacher">Profesores (Gestión Actividades)</option>
                         <option value="Admin">Administrador (Acceso Total)</option>
                       </>
                     )}

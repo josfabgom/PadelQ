@@ -64,7 +64,7 @@ const ActivitiesPage = () => {
       
       const combinedResources: Resource[] = [
         ...(courtData || []).map((c: any) => ({ id: c.id, name: c.name, type: 'court' as const })),
-        ...(spaceData || []).map((s: any) => ({ id: s.id, name: s.name, type: 'space' as const }))
+        ...(spaceData || []).filter((s: any) => (s.showInCalendar ?? s.ShowInCalendar ?? true)).map((s: any) => ({ id: s.id, name: s.name, type: 'space' as const }))
       ];
       setResources(combinedResources);
     } catch (err) {

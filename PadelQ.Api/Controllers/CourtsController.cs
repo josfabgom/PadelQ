@@ -20,9 +20,9 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Court>>> GetCourts()
+        public async Task<ActionResult<IEnumerable<Court>>> GetCourts([FromQuery] bool includeInactive = false)
         {
-            return Ok(await _courtService.GetAllAsync());
+            return Ok(await _courtService.GetAllAsync(includeInactive));
         }
 
         [HttpGet("{id}")]

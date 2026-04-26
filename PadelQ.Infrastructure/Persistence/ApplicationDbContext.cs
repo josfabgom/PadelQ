@@ -22,6 +22,9 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<PaymentMethod> PaymentMethods { get; set; } = null!;
         public DbSet<Space> Spaces { get; set; } = null!;
         public DbSet<SpaceBooking> SpaceBookings { get; set; } = null!;
+        public DbSet<Product> Products { get; set; } = null!;
+        public DbSet<BookingConsumption> BookingConsumptions { get; set; } = null!;
+        public DbSet<ProductStockMovement> ProductStockMovements { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -41,6 +44,9 @@ namespace PadelQ.Infrastructure.Persistence
             builder.Entity<Space>().Property(b => b.PricePerSlot).HasPrecision(18, 2);
             builder.Entity<SpaceBooking>().Property(b => b.Price).HasPrecision(18, 2);
             builder.Entity<SpaceBooking>().Property(b => b.DepositPaid).HasPrecision(18, 2);
+            builder.Entity<Product>().Property(p => p.FinalPrice).HasPrecision(18, 2);
+            builder.Entity<Product>().Property(p => p.CostPrice).HasPrecision(18, 2);
+            builder.Entity<BookingConsumption>().Property(bc => bc.UnitPrice).HasPrecision(18, 2);
 
             // No forzamos UTC de forma global para permitir que las reservas se guarden y lean como 'Wall Clock Time' (Hora Local)
         }

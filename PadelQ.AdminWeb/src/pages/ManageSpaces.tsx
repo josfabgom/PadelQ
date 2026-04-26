@@ -7,7 +7,8 @@ import {
   LayoutGrid,
   Edit2,
   Trash2,
-  ArrowLeft
+  ArrowLeft,
+  Check
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -17,6 +18,7 @@ interface Space {
   description: string;
   pricePerSlot: number;
   isActive: boolean;
+  showInCalendar: boolean;
 }
 
 const ManageSpacesPage = () => {
@@ -24,7 +26,7 @@ const ManageSpacesPage = () => {
   const [loading, setLoading] = useState(true);
   const [isSpaceModalOpen, setIsSpaceModalOpen] = useState(false);
   const [editingSpace, setEditingSpace] = useState<Space | null>(null);
-  const [spaceFormData, setSpaceFormData] = useState({ name: '', description: '', pricePerSlot: 0, isActive: true });
+  const [spaceFormData, setSpaceFormData] = useState({ id: 0, name: '', description: '', pricePerSlot: 0, isActive: true, showInCalendar: true });
 
   const config = getAuthConfig();
 
@@ -47,10 +49,17 @@ const ManageSpacesPage = () => {
   const handleOpenSpaceModal = (space?: Space) => {
     if (space) {
       setEditingSpace(space);
-      setSpaceFormData({ ...space });
+      setSpaceFormData({ 
+        id: space.id,
+        name: space.name, 
+        description: space.description, 
+        pricePerSlot: space.pricePerSlot, 
+        isActive: (space as any).isActive ?? (space as any).IsActive, 
+        showInCalendar: (space as any).showInCalendar ?? (space as any).ShowInCalendar ?? true 
+      });
     } else {
       setEditingSpace(null);
-      setSpaceFormData({ name: '', description: '', pricePerSlot: 0, isActive: true });
+      setSpaceFormData({ id: 0, name: '', description: '', pricePerSlot: 0, isActive: true, showInCalendar: true });
     }
     setIsSpaceModalOpen(true);
   };
@@ -164,6 +173,26 @@ const ManageSpacesPage = () => {
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Precio Base por Alquiler</label>
                         <input type="number" value={spaceFormData.pricePerSlot} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSpaceFormData({...spaceFormData, pricePerSlot: Number(e.target.value)})} required className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-bold" />
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Mostrar en Calendario</label>
+                        <div className="flex bg-zinc-50 p-1 rounded-2xl border border-zinc-100 h-16">
+                            <button 
+                                type="button"
+                                onClick={() => setSpaceFormData({...spaceFormData, showInCalendar: true})}
+                                className={`flex-1 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 ${spaceFormData.showInCalendar ? 'bg-black text-white shadow-lg' : 'text-zinc-400 hover:text-black'}`}
+                            >
+                                Sí, Activo
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setSpaceFormData({...spaceFormData, showInCalendar: false})}
+                                className={`flex-1 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 ${!spaceFormData.showInCalendar ? 'bg-white text-rose-600 shadow-md border border-rose-100' : 'text-zinc-400 hover:text-rose-600'}`}
+                            >
+                                No, Oculto
+                            </button>
+                        </div>
                     </div>
                     <div className="flex gap-4 pt-4">
                         <button type="button" onClick={() => setIsSpaceModalOpen(false)} className="flex-1 py-4 bg-zinc-50 text-zinc-400 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>

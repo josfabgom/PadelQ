@@ -28,6 +28,7 @@ namespace PadelQ.Api.Controllers
             var nextDay = date.Date.AddDays(1);
             var bookings = await _context.SpaceBookings
                 .Include(b => b.Space)
+                .Include(b => b.BookingConsumptions)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)
@@ -149,7 +150,6 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Staff")]
         public async Task<IActionResult> Cancel(Guid id)
         {
             var booking = await _context.SpaceBookings
@@ -158,6 +158,11 @@ namespace PadelQ.Api.Controllers
             
             if (booking == null) return NotFound();
             
+            if (booking.Status == BookingStatus.Paid)
+            {
+                return BadRequest("No se puede anular un alquiler de espacio que ya ha sido pagado completamente.");
+            }
+
             booking.Status = BookingStatus.Cancelled;
 
             // Reversar cargo en Cta Cte si hay un usuario vinculado
@@ -185,9 +190,40 @@ namespace PadelQ.Api.Controllers
             var booking = await _context.SpaceBookings.FindAsync(id);
             if (booking == null) return NotFound();
             
-            booking.DepositPaid = booking.Price;
+            // Calculamos el total incluyendo consumos
+            var consumptionTotal = await _context.BookingConsumptions
+                .Where(c => c.SpaceBookingId == id)
+                .SumAsync(c => c.UnitPrice * c.Quantity);
+
+            booking.DepositPaid = booking.Price + consumptionTotal;
+            booking.Status = BookingStatus.Paid;
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Reserva de espacio marcada como pagada", DepositPaid = booking.DepositPaid });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/reset-payment")]
+        public async Task<IActionResult> ResetPayment(Guid id)
+        {
+            var booking = await _context.SpaceBookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.DepositPaid = 0;
+            booking.Status = BookingStatus.Confirmed;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Pagos de espacio reseteados con éxito." });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/partial-pay")]
+        public async Task<IActionResult> PartialPay(Guid id, [FromQuery] decimal amount)
+        {
+            var booking = await _context.SpaceBookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.DepositPaid += amount;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Pago parcial registrado", DepositPaid = booking.DepositPaid });
         }
     }
 

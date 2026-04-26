@@ -29,6 +29,7 @@ interface Space {
   description: string;
   pricePerSlot: number;
   isActive: boolean;
+  showInCalendar: boolean;
 }
 
 interface SpaceBooking {
@@ -47,6 +48,14 @@ interface SpaceBooking {
   price: number;
   depositPaid: number;
 }
+
+const formatARS = (amount: number) => {
+    return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0
+    }).format(amount);
+};
 
 const SpacesPage = () => {
   const [selectedDate, setSelectedDate] = useState(startOfToday());
@@ -84,7 +93,7 @@ const SpacesPage = () => {
         api.get('/api/spaces', config),
         api.get(`/api/spacebookings/by-date?date=${dateStr}`, config)
       ]);
-      setSpaces(spacesRes.data.filter((s: Space) => s.isActive));
+      setSpaces(spacesRes.data.filter((s: any) => (s.isActive ?? s.IsActive) && (s.showInCalendar ?? s.ShowInCalendar ?? true)));
       setBookings(bookingsRes.data);
     } catch (err) {
       console.error("Error al cargar espacios", err);
@@ -397,18 +406,18 @@ const SpacesPage = () => {
                     <div className="space-y-4">
                         <div className="flex justify-between items-center text-zinc-300 text-[10px] font-black uppercase tracking-[0.3em] font-oak italic">
                             <span>Coste Operativo</span>
-                            <span>${selectedBooking.price.toLocaleString()}</span>
+                            <span>{formatARS(selectedBooking.price)}</span>
                         </div>
                         <div className="flex justify-between items-center text-emerald-500 text-[10px] font-black uppercase tracking-[0.3em] font-oak italic">
                             <span>Crédito Aplicado (Seña)</span>
-                            <span>-${selectedBooking.depositPaid.toLocaleString()}</span>
+                            <span>-{formatARS(selectedBooking.depositPaid)}</span>
                         </div>
                         <div className="h-px bg-zinc-50 my-6"></div>
                         <div className="flex justify-between items-end">
                             <div>
                                 <span className="text-zinc-400 text-[9px] font-black uppercase tracking-[0.3em] block mb-2 italic">SALDO A CANCELAR</span>
                                 <span className="text-5xl font-black italic text-black tracking-tighter">
-                                    ${Math.max(0, selectedBooking.price - selectedBooking.depositPaid).toLocaleString()}
+                                    {formatARS(Math.max(0, selectedBooking.price - selectedBooking.depositPaid))}
                                 </span>
                             </div>
                             <div className="pb-1">

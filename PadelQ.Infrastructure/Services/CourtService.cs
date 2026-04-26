@@ -16,8 +16,12 @@ namespace PadelQ.Infrastructure.Services
             _context = context;
         }
 
-        public async Task<IEnumerable<Court>> GetAllAsync()
+        public async Task<IEnumerable<Court>> GetAllAsync(bool includeInactive = false)
         {
+            if (includeInactive)
+            {
+                return await _context.Courts.ToListAsync();
+            }
             return await _context.Courts.Where(c => c.IsActive).ToListAsync();
         }
 

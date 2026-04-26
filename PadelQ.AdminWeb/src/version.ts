@@ -1,1 +1,1 @@
-export const VERSION = "3.2 LIVE";
+export { SYSTEM_VERSION as VERSION } from './constants/versions';

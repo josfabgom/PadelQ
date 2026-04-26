@@ -22,7 +22,7 @@ const LoginPage = () => {
       const { token, fullName, email: userEmail, roles } = response.data;
       
       // Strict Check for valid Admin Panel roles
-      const allowedRoles = ['Admin', 'Merchant', 'Staff'];
+      const allowedRoles = ['Admin', 'Merchant', 'Staff', 'Teacher'];
       const hasPermission = roles && roles.some((r: string) => allowedRoles.includes(r));
 
       if (!hasPermission) {
@@ -60,7 +60,7 @@ const LoginPage = () => {
             className="h-32 mx-auto mb-8 transform hover:scale-105 transition-transform duration-500"
           />
           <h1 className="text-[10px] uppercase tracking-[0.4em] font-bold text-zinc-500">
-            Premium Management System
+            SISTEMA DE GESTIÓN
           </h1>
         </div>
 

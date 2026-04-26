@@ -264,7 +264,8 @@ namespace PadelQ.Infrastructure.Services
             {
                 // Usamos SQL puro para mayor eficiencia al borrar todo
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Bookings");
-                return (true, "Base de datos de reservas limpiada con éxito.");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM SpaceBookings");
+                return (true, "Base de datos de reservas (Canchas y Espacios) limpiada con éxito.");
             }
             catch (Exception ex)
             {
@@ -304,6 +305,8 @@ namespace PadelQ.Infrastructure.Services
                 }
             }
             var currentStartTime = startTime;
+            // Aseguramos que el endDate incluya todo el día final (hasta 23:59:59)
+            var finalEndDate = endDate.Date.AddDays(1).AddSeconds(-1);
             
             // Lógica de Alta Concurrencia mediante Transacciones SQL 'Serializable'
             using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
@@ -325,7 +328,7 @@ namespace PadelQ.Infrastructure.Services
                         .FirstOrDefaultAsync();
                 }
 
-                while (currentStartTime <= endDate)
+                while (currentStartTime <= finalEndDate)
                 {
                     var currentEndTime = currentStartTime.AddMinutes(durationMinutes);
 

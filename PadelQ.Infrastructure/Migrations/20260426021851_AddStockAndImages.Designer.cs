@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PadelQ.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using PadelQ.Infrastructure.Persistence;
 namespace PadelQ.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260426021851_AddStockAndImages")]
+    partial class AddStockAndImages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -381,7 +384,7 @@ namespace PadelQ.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("BookingId")
+                    b.Property<Guid>("BookingId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAt")
@@ -393,9 +396,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
-                    b.Property<Guid?>("SpaceBookingId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -405,8 +405,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.HasIndex("BookingId");
 
                     b.HasIndex("ProductId");
-
-                    b.HasIndex("SpaceBookingId");
 
                     b.ToTable("BookingConsumptions");
                 });
@@ -916,7 +914,9 @@ namespace PadelQ.Infrastructure.Migrations
                 {
                     b.HasOne("PadelQ.Domain.Entities.Booking", "Booking")
                         .WithMany()
-                        .HasForeignKey("BookingId");
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("PadelQ.Domain.Entities.Product", "Product")
                         .WithMany()
@@ -924,15 +924,9 @@ namespace PadelQ.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PadelQ.Domain.Entities.SpaceBooking", "SpaceBooking")
-                        .WithMany()
-                        .HasForeignKey("SpaceBookingId");
-
                     b.Navigation("Booking");
 
                     b.Navigation("Product");
-
-                    b.Navigation("SpaceBooking");
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ProductStockMovement", b =>

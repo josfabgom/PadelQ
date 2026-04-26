@@ -10,7 +10,7 @@ namespace PadelQ.Api.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/systemsettings")]
     [Authorize(Roles = "Admin,Staff")]
     public class SystemSettingsController : ControllerBase
     {
@@ -32,13 +32,40 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> UpdateSetting([FromBody] SystemSetting setting)
         {
             var dbSetting = await _context.SystemSettings.FindAsync(setting.Key);
-            if (dbSetting == null) return NotFound();
-
-            dbSetting.Value = setting.Value;
-            dbSetting.UpdatedAt = DateTime.UtcNow;
+            if (dbSetting == null)
+            {
+                _context.SystemSettings.Add(setting);
+            }
+            else
+            {
+                dbSetting.Value = setting.Value;
+                dbSetting.UpdatedAt = DateTime.UtcNow;
+            }
 
             await _context.SaveChangesAsync();
-            return NoContent();
+            return Ok(setting);
+        }
+
+        [HttpPost("bulk")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> BulkUpdate([FromBody] List<SystemSetting> settings)
+        {
+            foreach (var setting in settings)
+            {
+                var dbSetting = await _context.SystemSettings.FindAsync(setting.Key);
+                if (dbSetting == null)
+                {
+                    _context.SystemSettings.Add(setting);
+                }
+                else
+                {
+                    dbSetting.Value = setting.Value;
+                    dbSetting.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Configuraciones actualizadas con éxito" });
         }
     }
 }

@@ -34,7 +34,7 @@ const CourtsPage = () => {
 
   const fetchCourts = async () => {
     try {
-      const response = await api.get('/api/courts', config);
+      const response = await api.get('/api/courts?includeInactive=true', config);
       setCourts(response.data);
     } catch (err) {
       console.error("Error al cargar canchas", err);

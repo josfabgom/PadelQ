@@ -65,6 +65,7 @@ namespace PadelQ.Api.Controllers
             var nextDay = date.Date.AddDays(1);
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
+                .Include(b => b.BookingConsumptions)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)
@@ -78,6 +79,7 @@ namespace PadelQ.Api.Controllers
         {
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
+                .Include(b => b.BookingConsumptions)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)
@@ -142,11 +144,17 @@ namespace PadelQ.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Cancel(Guid id)
         {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking != null && booking.Status == BookingStatus.Paid)
+            {
+                return BadRequest("No se puede anular un turno que ya ha sido pagado completamente por seguridad.");
+            }
+
             var success = await _bookingService.CancelBooking(id);
             if (!success) return NotFound();
             return NoContent();
         }
-
+        
         [Authorize(Roles = "Admin,Staff")]
         [HttpPost("wipe-all")]
         public async Task<IActionResult> WipeAllData()
@@ -163,9 +171,40 @@ namespace PadelQ.Api.Controllers
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null) return NotFound();
             
-            booking.DepositPaid = booking.Price;
+            // Calculamos el total incluyendo consumos
+            var consumptionTotal = await _context.BookingConsumptions
+                .Where(c => c.BookingId == id)
+                .SumAsync(c => c.UnitPrice * c.Quantity);
+
+            booking.DepositPaid = booking.Price + consumptionTotal;
+            booking.Status = BookingStatus.Paid;
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Reserva marcada como pagada", DepositPaid = booking.DepositPaid });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/reset-payment")]
+        public async Task<IActionResult> ResetPayment(Guid id)
+        {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.DepositPaid = 0;
+            booking.Status = BookingStatus.Confirmed;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Pagos reseteados con éxito. El turno ahora puede ser modificado." });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/partial-pay")]
+        public async Task<IActionResult> PartialPay(Guid id, [FromQuery] decimal amount)
+        {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.DepositPaid += amount;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Pago parcial registrado", DepositPaid = booking.DepositPaid });
         }
     }
 

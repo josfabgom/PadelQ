@@ -6,29 +6,44 @@ import {
 } from 'recharts';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, TrendingDown, 
-  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck, LayoutGrid
+  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck, LayoutGrid, Box
 } from 'lucide-react';
 
 import Calendar from '../components/Calendar';
 import Header from '../components/Header';
 
 const Dashboard = () => {
-  const [stats, setStats] = useState([]);
-  const [summary, setSummary] = useState({ totalRevenue: 0, totalBookings: 0, totalCourts: 0 });
-  const [detailedBookings, setDetailedBookings] = useState([]);
-  const [courts, setCourts] = useState([]);
+  const [stats, setStats] = useState<any[]>([]);
+  const [summary, setSummary] = useState({ 
+    totalRevenue: 0, 
+    totalBookings: 0, 
+    todayRevenue: 0, 
+    todayBookings: 0, 
+    monthlyRevenue: 0, 
+    monthlyGoal: 0, 
+    monthlyProgress: 0 
+  });
+  const [detailedBookings, setDetailedBookings] = useState<any[]>([]);
+  const [courts, setCourts] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
   const isAdmin = roles.includes('Admin');
   const isMerchant = roles.includes('Merchant');
   const isStaff = roles.includes('Staff');
+  const isTeacher = roles.includes('Teacher');
 
   useEffect(() => {
     // If only merchant, redirect to validate immediately
     if (isMerchant && !isAdmin && !isStaff) {
        window.location.href = '/validate';
        return;
+    }
+
+    // If only teacher, redirect to activities immediately
+    if (isTeacher && !isAdmin && !isStaff) {
+        window.location.href = '/activities';
+        return;
     }
     
     const fetchData = async () => {
@@ -42,10 +57,16 @@ const Dashboard = () => {
           api.get('/api/courts', config)
         ]);
         
-        setStats(revRes.data);
-        setSummary(sumRes.data);
-        setDetailedBookings(detailRes.data);
-        setCourts(courtsRes.data);
+        setStats(Array.isArray(revRes.data) ? revRes.data : []);
+        setSummary(sumRes.data || { 
+          todayRevenue: 0, 
+          todayBookings: 0, 
+          totalRevenue: 0, 
+          monthlyRevenue: 0, 
+          monthlyProgress: 0 
+        });
+        setDetailedBookings(Array.isArray(detailRes.data) ? detailRes.data : []);
+        setCourts(Array.isArray(courtsRes.data) ? courtsRes.data : []);
       } catch (err) {
         console.error("Error al cargar dashboard", err);
       }
@@ -67,81 +88,24 @@ const Dashboard = () => {
           {(isAdmin || isStaff) && <NavButton href="/bookings" icon={<CalendarIcon className="w-4 h-4" />} label="Alquiler" primary />}
           {(isAdmin || isStaff) && <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />}
           {(isAdmin || isStaff) && <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />}
-          {isAdmin && <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />}
+          {(isAdmin || isTeacher) && <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />}
           {isAdmin && <NavButton href="/memberships" icon={<CreditCard className="w-4 h-4" />} label="Membresías" />}
           {isAdmin && <NavButton href="/payment-methods" icon={<ShieldCheck className="w-4 h-4" />} label="Pagos" />}
           {isAdmin && <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />}
           {(isAdmin || isStaff || isMerchant) && <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />}
+          {(isAdmin || isStaff) && <NavButton href="/products" icon={<Box className="w-4 h-4" />} label="Productos" />}
 
           {isAdmin && <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />}
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <StatCard icon={<DollarSign/>} label="Ingresos" value={`$${summary.totalRevenue.toLocaleString()}`} trend="+12%" />
-        <StatCard icon={<CalendarIcon/>} label="Reservas" value={summary.totalBookings} trend="+4%" />
-        <StatCard icon={<Activity/>} label="Ocupación" value="78%" trend="+2%" />
-        <StatCard icon={<Users/>} label="Clientes" value="142" trend="+8%" />
+       {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <StatCard icon={<DollarSign/>} label="Ingreso del día" value={new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRevenue || 0)} trend="Hoy" />
+        <StatCard icon={<CalendarIcon/>} label="Reservas efectivas" value={summary?.todayBookings || 0} trend="Hoy" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
-        {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white p-10 rounded-[40px] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-black/5">
-          <div className="flex justify-between items-center mb-10">
-            <h2 className="text-xl font-black text-black uppercase tracking-tight italic">Flujo de Ingresos</h2>
-            <div className="px-4 py-2 bg-zinc-50 rounded-full border border-zinc-100">
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Últimos 7 días</span>
-            </div>
-          </div>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats}>
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#000000" stopOpacity={0.05}/>
-                    <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#a1a1aa', fontSize: 10, fontWeight: 700}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#a1a1aa', fontSize: 10, fontWeight: 700}} />
-                <Tooltip 
-                    contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 700}}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#000000" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Small Progress Card */}
-        <div className="bg-black p-10 rounded-[40px] shadow-2xl text-white relative overflow-hidden group">
-          <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-white/5 blur-[100px] rounded-full group-hover:bg-white/10 transition-all duration-700"></div>
-          <TrendingUp className="absolute -right-8 -bottom-8 h-48 w-48 text-white/5 rotate-12" />
-          
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 mb-2">Meta Mensual</p>
-          <h3 className="text-4xl font-black text-white italic tracking-tight">$2,500.00</h3>
-          
-          <div className="mt-12 space-y-4">
-              <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/70">Progreso 65%</span>
-                  <span className="text-2xl font-black text-white italic">+$500.00</span>
-              </div>
-              <div className="h-3 bg-white/10 rounded-full">
-                <div className="h-full bg-white rounded-full shadow-[0_0_20px_white]" style={{width: '65%'}}></div>
-              </div>
-          </div>
-          
-          <p className="mt-8 text-[11px] font-medium text-white/50 leading-relaxed uppercase tracking-widest">
-              Estás en camino a superar el objetivo comercial del mes.
-          </p>
-          
-          <button className="mt-10 w-full py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all">
-              Ver Reporte Detallado
-          </button>
-        </div>
-      </div>
+      {/* Bottom section removed as per request */}
     </div>
   );
 };

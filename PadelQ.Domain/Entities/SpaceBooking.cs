@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Collections.Generic;
 
 namespace PadelQ.Domain.Entities
 {
@@ -40,5 +41,7 @@ namespace PadelQ.Domain.Entities
 
         [ForeignKey("UserId")]
         public virtual ApplicationUser? User { get; set; }
+
+        public virtual ICollection<BookingConsumption> BookingConsumptions { get; set; } = new List<BookingConsumption>();
     }
 }

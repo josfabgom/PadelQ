@@ -34,7 +34,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Teacher")]
         public async Task<ActionResult<int>> CreateActivity([FromBody] ClubActivity activity)
         {
             var id = await _activityService.CreateAsync(activity);
@@ -42,7 +42,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Teacher")]
         public async Task<IActionResult> UpdateActivity(int id, [FromBody] ClubActivity activity)
         {
             if (id != activity.Id) return BadRequest();
@@ -64,7 +64,7 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Teacher")]
         public async Task<IActionResult> DeleteActivity(int id)
         {
             await _activityService.DeleteAsync(id);

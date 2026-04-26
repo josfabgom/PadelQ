@@ -174,7 +174,7 @@ namespace PadelQ.Api.Controllers
             return Ok(new { message = $"Se generaron {chargesCreated} nuevas cuotas." });
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         [HttpPost("reset-account/{userId}")]
         public async Task<IActionResult> WipeUserTransactions(string userId)
         {
