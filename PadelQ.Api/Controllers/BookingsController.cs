@@ -41,6 +41,22 @@ namespace PadelQ.Api.Controllers
             return Ok(bookings);
         }
 
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(Guid id)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.User)
+                    .ThenInclude(u => u!.UserMemberships)
+                        .ThenInclude(um => um.Membership)
+                .Include(b => b.Court)
+                .Include(b => b.BookingConsumptions)
+                    .ThenInclude(c => c.Product)
+                .FirstOrDefaultAsync(b => b.Id == id);
+                
+            if (booking == null) return NotFound();
+            return Ok(booking);
+        }
+
         [HttpPost("create")]
         public async Task<IActionResult> Create([FromBody] CreateBookingRequest request)
         {
@@ -66,6 +82,7 @@ namespace PadelQ.Api.Controllers
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.BookingConsumptions)
+                    .ThenInclude(c => c.Product)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)
@@ -80,6 +97,7 @@ namespace PadelQ.Api.Controllers
             var bookings = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.BookingConsumptions)
+                    .ThenInclude(c => c.Product)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)

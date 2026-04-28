@@ -27,14 +27,14 @@ if ($PSScriptRoot -like "* *") {
 Write-Host "`n🚀 Iniciando despliegue automático en Hostinger (Modo Híbrido)...`n" -ForegroundColor Cyan
 
 # 1. Compilar App Móvil (Flutter) - Necesita ruta sin espacios
-Write-Host "📱 Ejecutando code generation (build_runner)..." -ForegroundColor Yellow
-Set-Location "$BUILD_ROOT\PadelQ.MobileApp"
-& $FLUTTER_EXE pub run build_runner build --delete-conflicting-outputs
-if ($LASTEXITCODE -ne 0) { Write-Error "Fallo build_runner"; Set-Location $PSScriptRoot; exit }
+#Write-Host "📱 Ejecutando code generation (build_runner)..." -ForegroundColor Yellow
+#Set-Location "$BUILD_ROOT\PadelQ.MobileApp"
+#& $FLUTTER_EXE pub run build_runner build --delete-conflicting-outputs
+#if ($LASTEXITCODE -ne 0) { Write-Error "Fallo build_runner"; Set-Location $PSScriptRoot; exit }
 
-Write-Host "📱 Compilando App Móvil para producción (Usando puente)..." -ForegroundColor Yellow
-& $FLUTTER_EXE build web --release --dart-define=API_URL=https://api.blackclubdepadel.com.ar
-if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilación de la App Móvil"; Set-Location $PSScriptRoot; exit }
+#Write-Host "📱 Compilando App Móvil para producción (Usando puente)..." -ForegroundColor Yellow
+#& $FLUTTER_EXE build web --release --dart-define=API_URL=https://api.blackclubdepadel.com.ar
+#if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilación de la App Móvil"; Set-Location $PSScriptRoot; exit }
 
 # Volver a la ruta original para el resto (Vite prefiere la ruta real)
 Set-Location $PSScriptRoot

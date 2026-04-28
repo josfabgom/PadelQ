@@ -27,6 +27,11 @@ const AdminSettings = () => {
     email: '',
     website: ''
   });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authEmail, setAuthEmail] = useState(localStorage.getItem('padelq_user_email') || '');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isWiping, setIsWiping] = useState(false);
 
   const fetchSettings = async () => {
     try {
@@ -123,16 +128,36 @@ const AdminSettings = () => {
     }
   };
 
-  const handleWipeAllBookings = async () => {
-    if (!window.confirm('¿ELIMINAR TODAS LAS RESERVAS DEL SISTEMA? Esta acción no se puede deshacer.')) return;
+  const handleWipeAllBookings = () => {
+    if (!window.confirm('¿ELIMINAR TODAS LAS RESERVAS DEL SISTEMA? Esta acción no se puede deshacer y borrará TODO el historial de la cuenta corriente.')) return;
+    setShowAuthModal(true);
+  };
 
+  const confirmWipeWithAuth = async () => {
+    setAuthError('');
+    setIsWiping(true);
     try {
+      const loginRes = await api.post('/api/auth/login', { email: authEmail, password: authPassword });
+      
+      if (!loginRes.data.roles.map((r: string) => r.toLowerCase()).includes('admin')) {
+        setAuthError('Tu usuario no tiene permisos de Administrador.');
+        setIsWiping(false);
+        return;
+      }
+
       await api.post('/api/bookings/wipe-all', {}, getAuthConfig());
-      setMessage({ text: 'Todas las reservas han sido eliminadas', type: 'success' });
+      setMessage({ text: 'Limpieza global ejecutada con éxito. Stock restituido y cuentas en cero.', type: 'success' });
+      setShowAuthModal(false);
+      setAuthPassword('');
     } catch (err: any) {
-      const errorMsg = err.response?.data?.Message || err.response?.data || err.message;
-      setMessage({ text: 'Error: ' + errorMsg, type: 'error' });
-      alert('Error detallado: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
+      if (err.response?.status === 401) {
+        setAuthError('Contraseña incorrecta.');
+      } else {
+        const errorMsg = err.response?.data?.Message || err.response?.data || err.message;
+        setAuthError('Error: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
+      }
+    } finally {
+      setIsWiping(false);
     }
   };
 
@@ -479,6 +504,68 @@ const AdminSettings = () => {
                   <p className="text-[9px] text-rose-400 font-bold uppercase leading-relaxed text-center">* Solo personal autorizado. Acción irreversible.</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Autenticación */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl relative">
+            <button 
+              onClick={() => { setShowAuthModal(false); setAuthPassword(''); setAuthError(''); }}
+              className="absolute right-6 top-6 p-2 text-slate-400 hover:text-rose-500 bg-slate-50 hover:bg-rose-50 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex flex-col items-center text-center mb-8">
+              <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-8 h-8 text-rose-600" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Acción Destructiva</h3>
+              <p className="text-sm text-slate-500 font-medium mt-2">
+                Ingresa tu contraseña de administrador para confirmar la eliminación total de reservas y deudas.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
+                <input 
+                  type="email" 
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-rose-500 transition-all"
+                  placeholder="admin@padelq.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Contraseña</label>
+                <input 
+                  type="password" 
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-rose-500 transition-all"
+                  placeholder="••••••••"
+                  onKeyDown={(e) => e.key === 'Enter' && confirmWipeWithAuth()}
+                />
+              </div>
+
+              {authError && (
+                <p className="text-xs font-bold text-rose-500 bg-rose-50 p-3 rounded-xl border border-rose-100 text-center">
+                  {authError}
+                </p>
+              )}
+
+              <button 
+                onClick={confirmWipeWithAuth}
+                disabled={isWiping || !authPassword}
+                className="w-full bg-rose-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 disabled:opacity-50 mt-4 flex items-center justify-center gap-2"
+              >
+                {isWiping ? 'Procesando...' : 'Confirmar Limpieza Total'}
+              </button>
             </div>
           </div>
         </div>

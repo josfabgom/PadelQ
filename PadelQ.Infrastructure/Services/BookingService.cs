@@ -260,15 +260,34 @@ namespace PadelQ.Infrastructure.Services
 
         public async Task<(bool Success, string Message)> WipeAllBookings()
         {
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Usamos SQL puro para mayor eficiencia al borrar todo
+                // Restituir stock sumando las cantidades de las consumiciones
+                await _context.Database.ExecuteSqlRawAsync(@"
+                    UPDATE Products
+                    SET Stock = Stock + ISNULL((
+                        SELECT SUM(Quantity)
+                        FROM BookingConsumptions
+                        WHERE BookingConsumptions.ProductId = Products.Id
+                    ), 0)
+                    WHERE EXISTS (
+                        SELECT 1 FROM BookingConsumptions WHERE BookingConsumptions.ProductId = Products.Id
+                    )
+                ");
+
+                // Borrar datos en orden para no romper Foreign Keys
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM BookingConsumptions");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Bookings");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM SpaceBookings");
-                return (true, "Base de datos de reservas (Canchas y Espacios) limpiada con éxito.");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM Transactions");
+                
+                await transaction.CommitAsync();
+                return (true, "Base de datos de reservas y cuentas corrientes limpiada con éxito. Stock restituido correctamente.");
             }
             catch (Exception ex)
             {
+                await transaction.RollbackAsync();
                 return (false, "Error al limpiar la base de datos: " + ex.Message);
             }
         }

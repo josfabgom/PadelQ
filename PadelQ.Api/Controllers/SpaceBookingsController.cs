@@ -29,12 +29,29 @@ namespace PadelQ.Api.Controllers
             var bookings = await _context.SpaceBookings
                 .Include(b => b.Space)
                 .Include(b => b.BookingConsumptions)
+                    .ThenInclude(c => c.Product)
                 .Include(b => b.User)
                     .ThenInclude(u => u!.UserMemberships)
                         .ThenInclude(um => um.Membership)
                 .Where(b => b.StartTime < nextDay && b.EndTime > date.Date && b.Status != BookingStatus.Cancelled)
                 .ToListAsync();
             return Ok(bookings);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(Guid id)
+        {
+            var booking = await _context.SpaceBookings
+                .Include(b => b.Space)
+                .Include(b => b.BookingConsumptions)
+                    .ThenInclude(c => c.Product)
+                .Include(b => b.User)
+                    .ThenInclude(u => u!.UserMemberships)
+                        .ThenInclude(um => um.Membership)
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (booking == null) return NotFound();
+            return Ok(booking);
         }
 
         [HttpPost("admin-create")]

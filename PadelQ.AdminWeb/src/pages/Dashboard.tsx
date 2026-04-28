@@ -94,6 +94,7 @@ const Dashboard = () => {
           {isAdmin && <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />}
           {(isAdmin || isStaff || isMerchant) && <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />}
           {(isAdmin || isStaff) && <NavButton href="/products" icon={<Box className="w-4 h-4" />} label="Productos" />}
+          {(isAdmin || isStaff) && <NavButton href="/cash-management" icon={<DollarSign className="w-4 h-4" />} label="Caja" primary />}
 
           {isAdmin && <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />}
         </div>

@@ -53,7 +53,8 @@ namespace PadelQ.Api.Controllers
                 SpaceBookingId = isSpaceBooking ? request.BookingId : null,
                 ProductId = request.ProductId,
                 Quantity = request.Quantity,
-                UnitPrice = product.FinalPrice
+                UnitPrice = product.FinalPrice,
+                Notes = request.Notes
             };
 
             // Stock Control
@@ -90,6 +91,9 @@ namespace PadelQ.Api.Controllers
         {
             var consumption = await _context.BookingConsumptions.FindAsync(id);
             if (consumption == null) return NotFound();
+
+            if (consumption.IsPaid)
+                return BadRequest("No se puede eliminar un consumo que ya ha sido pagado.");
 
             // Verificar si el turno ya está cerrado/pagado
             if (consumption.BookingId.HasValue)
@@ -162,6 +166,18 @@ namespace PadelQ.Api.Controllers
 
             return Ok(new { Message = "Checkout completado con éxito", TotalPaid = totalToPay });
         }
+
+        [HttpPut("{id}/pay")]
+        public async Task<IActionResult> MarkAsPaid(Guid id)
+        {
+            var consumption = await _context.BookingConsumptions.FindAsync(id);
+            if (consumption == null) return NotFound();
+
+            consumption.IsPaid = true;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
     }
 
     public class AddConsumptionRequest
@@ -169,5 +185,6 @@ namespace PadelQ.Api.Controllers
         public Guid BookingId { get; set; }
         public int ProductId { get; set; }
         public int Quantity { get; set; }
+        public string? Notes { get; set; }
     }
 }

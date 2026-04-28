@@ -387,6 +387,12 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
@@ -409,6 +415,66 @@ namespace PadelQ.Infrastructure.Migrations
                     b.HasIndex("SpaceBookingId");
 
                     b.ToTable("BookingConsumptions");
+                });
+
+            modelBuilder.Entity("PadelQ.Domain.Entities.CashClosure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ClosedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ClosingDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("ExpectedCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InitialCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OpenedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("OpeningDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("TotalCardSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("TotalCashSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("TotalOtherSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("TotalTransferSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CashClosures");
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ClubActivity", b =>
@@ -750,6 +816,9 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Property<int?>("PaymentMethodId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ProcessedBy")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("Type")
                         .HasColumnType("int");
 
@@ -915,7 +984,7 @@ namespace PadelQ.Infrastructure.Migrations
             modelBuilder.Entity("PadelQ.Domain.Entities.BookingConsumption", b =>
                 {
                     b.HasOne("PadelQ.Domain.Entities.Booking", "Booking")
-                        .WithMany()
+                        .WithMany("BookingConsumptions")
                         .HasForeignKey("BookingId");
 
                     b.HasOne("PadelQ.Domain.Entities.Product", "Product")
@@ -925,7 +994,7 @@ namespace PadelQ.Infrastructure.Migrations
                         .IsRequired();
 
                     b.HasOne("PadelQ.Domain.Entities.SpaceBooking", "SpaceBooking")
-                        .WithMany()
+                        .WithMany("BookingConsumptions")
                         .HasForeignKey("SpaceBookingId");
 
                     b.Navigation("Booking");
@@ -1006,9 +1075,19 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Navigation("UserMemberships");
                 });
 
+            modelBuilder.Entity("PadelQ.Domain.Entities.Booking", b =>
+                {
+                    b.Navigation("BookingConsumptions");
+                });
+
             modelBuilder.Entity("PadelQ.Domain.Entities.ClubActivity", b =>
                 {
                     b.Navigation("Schedules");
+                });
+
+            modelBuilder.Entity("PadelQ.Domain.Entities.SpaceBooking", b =>
+                {
+                    b.Navigation("BookingConsumptions");
                 });
 #pragma warning restore 612, 618
         }

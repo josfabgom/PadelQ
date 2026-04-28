@@ -52,10 +52,34 @@ namespace PadelQ.Api.Controllers
 
         [HttpPost("payment")]
         [Authorize(Roles = "Admin,Staff")]
-        public async Task<ActionResult<Transaction>> RecordPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description)
+        public async Task<ActionResult<Transaction>> RecordPayment([FromQuery] string? userId, [FromQuery] decimal amount, [FromQuery] string? description, [FromQuery] int? paymentMethodId)
         {
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null) return NotFound("User not found");
+            ApplicationUser? user = null;
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                user = await _context.Users.FindAsync(userId);
+            }
+            
+            // Si no hay usuario o no se encontró, usamos o creamos "Consumidor Final"
+            if (user == null)
+            {
+                user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "particular@padelq.com");
+                if (user == null)
+                {
+                    user = new ApplicationUser
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserName = "particular@padelq.com",
+                        Email = "particular@padelq.com",
+                        FullName = "Consumidor Final (Particular)",
+                        IsActive = true
+                    };
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+                }
+                userId = user.Id;
+            }
 
             var transaction = new Transaction
             {
@@ -63,7 +87,9 @@ namespace PadelQ.Api.Controllers
                 Amount = amount,
                 Date = DateTime.UtcNow,
                 Type = TransactionType.Payment,
-                Description = description
+                Description = description,
+                PaymentMethodId = paymentMethodId,
+                ProcessedBy = User.Identity?.Name ?? "Sistema"
             };
 
             _context.Transactions.Add(transaction);
@@ -74,7 +100,7 @@ namespace PadelQ.Api.Controllers
 
         [HttpPost("membership-payment")]
         [Authorize(Roles = "Admin,Staff")]
-        public async Task<ActionResult<Transaction>> RecordMembershipPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description)
+        public async Task<ActionResult<Transaction>> RecordMembershipPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description, [FromQuery] int? paymentMethodId)
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound("User not found");
@@ -132,7 +158,9 @@ namespace PadelQ.Api.Controllers
                 Amount = amount,
                 Date = DateTime.UtcNow,
                 Type = TransactionType.MembershipPayment,
-                Description = description ?? "Cobro de Cuota Mensual - Membresía Activada"
+                Description = description ?? "Cobro de Cuota Mensual - Membresía Activada",
+                PaymentMethodId = paymentMethodId,
+                ProcessedBy = User.Identity?.Name ?? "Sistema"
             };
 
             _context.Transactions.Add(transaction);

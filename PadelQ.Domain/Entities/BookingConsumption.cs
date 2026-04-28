@@ -26,6 +26,10 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalPrice => UnitPrice * Quantity;
 
+        public string? Notes { get; set; }
+
+        public bool IsPaid { get; set; } = false;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         [ForeignKey("BookingId")]

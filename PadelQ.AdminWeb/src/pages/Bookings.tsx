@@ -52,23 +52,6 @@ interface Court {
     pricePerHour: number;
 }
 
-interface Booking {
-    id: string;
-    startTime: string;
-    endTime: string;
-    courtId: number;
-    court: { name: string };
-    userId?: string;
-    user?: { fullName: string, phoneNumber?: string };
-    guestName?: string;
-    guestPhone?: string;
-    guestEmail?: string;
-    status: number;
-    price: number;
-    depositPaid: number;
-    recurrenceGroupId?: string;
-}
-
 interface Client {
     id: string;
     fullName: string;
@@ -93,7 +76,7 @@ interface SpaceBooking {
     spaceId: number;
     space: { name: string };
     userId?: string;
-    user?: { fullName: string };
+    user?: { fullName: string; phoneNumber?: string };
     guestName?: string;
     guestPhone?: string;
     guestEmail?: string;
@@ -111,13 +94,14 @@ interface Booking {
     courtId: number;
     court: { name: string };
     userId?: string;
-    user?: { fullName: string };
+    user?: { fullName: string; phoneNumber?: string };
     guestName?: string;
     guestPhone?: string;
     guestEmail?: string;
     status: number;
     price: number;
     depositPaid: number;
+    recurrenceGroupId?: string;
     bookingConsumptions?: any[];
 }
 
@@ -143,11 +127,17 @@ const formatARS = (amount: number) => {
     }).format(amount);
 };
 
-const isFullyPaid = (booking: any) => {
-    const consumptionTotal = (booking.bookingConsumptions || []).reduce((sum: number, c: any) => sum + (c.totalPrice || (c.unitPrice * c.quantity)), 0);
-    const total = booking.price + consumptionTotal;
-    return booking.depositPaid >= total;
+const getRentDebt = (booking: any) => Math.max(0, booking.price - booking.depositPaid);
+
+const getConsumptionDebt = (booking: any) => {
+    return (booking.bookingConsumptions || [])
+        .filter((c: any) => !c.isPaid)
+        .reduce((sum: number, c: any) => sum + (c.totalPrice || (c.unitPrice * c.quantity)), 0);
 };
+
+const getTotalDebt = (booking: any) => getRentDebt(booking) + getConsumptionDebt(booking);
+
+const isFullyPaid = (booking: any) => getTotalDebt(booking) <= 0;
 
 const BookingsPage = () => {
     const [view, setView] = useState<'daily' | 'monthly'>('daily');
@@ -172,6 +162,8 @@ const BookingsPage = () => {
     const [bookingConsumptions, setBookingConsumptions] = useState<any[]>([]);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
     const [allProducts, setAllProducts] = useState<any[]>([]);
+    const [barcodeInput, setBarcodeInput] = useState('');
+    const [productSearch, setProductSearch] = useState('');
     const [companyInfo, setCompanyInfo] = useState({
         name: 'PadelQ',
         address: '',
@@ -180,10 +172,10 @@ const BookingsPage = () => {
         website: ''
     });
     const [isClosingCourt, setIsClosingCourt] = useState(false);
-    const [splitCount, setSplitCount] = useState(1);
-    const [fixedSplitAmount, setFixedSplitAmount] = useState<number | null>(null);
-    const [remainingTotalToPay, setRemainingTotalToPay] = useState<number | null>(null);
-
+    const [rentFractionsCount, setRentFractionsCount] = useState(1);
+    const [selectedRentFractions, setSelectedRentFractions] = useState<number[]>([]);
+    const [selectedConsumptionsIds, setSelectedConsumptionsIds] = useState<string[]>([]);
+    const [paymentObservation, setPaymentObservation] = useState('');
     // Form states
     const [bookingType, setBookingType] = useState<'existing' | 'guest'>('existing');
     const [selectedClientId, setSelectedClientId] = useState('');
@@ -243,6 +235,45 @@ const BookingsPage = () => {
     const [isConfirmingSeriesCancel, setIsConfirmingSeriesCancel] = useState(false);
     const [isConfirmingSeriesCancelSeriesId, setIsConfirmingSeriesCancelSeriesId] = useState<string | null>(null);
     const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+
+    const handleAddByBarcode = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && barcodeInput.trim()) {
+            try {
+                let products = allProducts;
+                if (products.length === 0) {
+                    const res = await api.get('/api/products', config);
+                    products = res.data;
+                    setAllProducts(products);
+                }
+
+                const product = products.find(p =>
+                    (p.barcode && p.barcode.toLowerCase() === barcodeInput.trim().toLowerCase()) ||
+                    (p.internalCode && p.internalCode.toLowerCase() === barcodeInput.trim().toLowerCase())
+                );
+
+                if (product) {
+                    const booking = selectedBooking || selectedSpaceBooking;
+                    if (!booking) return;
+
+                    await api.post('/api/consumptions', {
+                        bookingId: booking.id,
+                        productId: product.id,
+                        quantity: 1
+                    }, config);
+
+                    const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, config);
+                    setBookingConsumptions(consRes.data || []);
+                    setBarcodeInput('');
+                } else {
+                    alert("Producto no encontrado");
+                    setBarcodeInput('');
+                }
+            } catch (err: any) {
+                console.error("Error barcode:", err);
+                alert("Error al procesar código de barras");
+            }
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -305,21 +336,21 @@ const BookingsPage = () => {
 
     const filteredClients = useMemo(() => {
         if (!searchClient) return [];
-        
+
         // REGLA: Excluir inactivos y perfiles administrativos/comercio
         const restrictedRoles = ['admin', 'administrador', 'administracion', 'comercio', 'staff'];
-        
+
         return clients.filter(c => {
             // Validar estado activo
             if (c.isActive === false) return false;
-            
+
             // Validar rol restringido
             const userRole = (c.role || '').toLowerCase();
             if (restrictedRoles.includes(userRole)) return false;
 
             return c.fullName.toLowerCase().includes(searchClient.toLowerCase()) ||
-                   c.email.toLowerCase().includes(searchClient.toLowerCase()) ||
-                   (c.dni && c.dni.includes(searchClient));
+                c.email.toLowerCase().includes(searchClient.toLowerCase()) ||
+                (c.dni && c.dni.includes(searchClient));
         }).slice(0, 5);
     }, [clients, searchClient]);
 
@@ -573,7 +604,7 @@ const BookingsPage = () => {
                 await api.post('/api/spacebookings/admin-create', spaceBookingData, config);
             }
             setIsModalOpen(false);
-            
+
             // Preguntar si desea notificar inmediatamente
             const shouldNotify = window.confirm("¡Reserva creada con éxito! ¿Deseas enviar el comprobante por WhatsApp ahora?");
             if (shouldNotify) {
@@ -636,10 +667,10 @@ const BookingsPage = () => {
             const b = booking as any;
             const isSpace = !!b.spaceId || !!b.SpaceId;
             const url = isSpace ? `/api/spacebookings/${b.id}` : `/api/bookings/${b.id}`;
-            
+
             const currentConfig = getAuthConfig();
             await api.delete(url, currentConfig);
-            
+
             setIsDetailsModalOpen(false);
             setIsConfirmingCancel(false);
             resetForm();
@@ -656,7 +687,7 @@ const BookingsPage = () => {
     const handleSendWhatsApp = (booking: any) => {
         const rawPhone = booking.user?.phoneNumber || booking.guestPhone;
         const name = booking.user?.fullName || booking.guestName || "Cliente";
-        
+
         if (!rawPhone) {
             alert("El cliente no tiene un teléfono registrado.");
             return;
@@ -664,7 +695,7 @@ const BookingsPage = () => {
 
         // 1. Limpieza extrema del número (solo dígitos)
         let cleanPhone = rawPhone.replace(/\D/g, '');
-        
+
         // 2. Lógica específica para Argentina (país -03:00)
         // Quitar '0' inicial si lo tiene (ej: 0299 -> 299)
         if (cleanPhone.startsWith('0')) {
@@ -673,14 +704,14 @@ const BookingsPage = () => {
         // Quitar el '15' si está después del código de área o al inicio
         // Si el número tiene 12 dígitos y empieza con 29915... -> 299...
         if (cleanPhone.length > 10 && cleanPhone.includes('15')) {
-             cleanPhone = cleanPhone.replace('15', '');
+            cleanPhone = cleanPhone.replace('15', '');
         }
 
         // 3. Asegurar formato Internacional (54 + 9 + Área + Número)
         // Ejemplo: 2994012345 (10 dígitos) -> 5492994012345
         if (cleanPhone.length === 10) {
             cleanPhone = '549' + cleanPhone;
-        } 
+        }
         // Si ya tiene el 54 pero le falta el 9 (ej: 54299... -> 549299...)
         else if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length === 12) {
             cleanPhone = '549' + cleanPhone.substring(2);
@@ -692,7 +723,7 @@ const BookingsPage = () => {
 
         const message = `Hola ${name}, te recordamos tu turno en PadelQ para el día ${dateStr} a las ${timeStr} en ${courtName}. ¡Te esperamos!`;
         const url = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
-        
+
         // Usamos un nombre de ventana fijo para REUTILIZAR la misma pestaña
         window.open(url, 'PadelQ_WhatsApp_Session');
     };
@@ -717,7 +748,12 @@ const BookingsPage = () => {
         setIsConfirmingSeriesCancel(false);
         setIsConfirmingCancel(false);
         setIsClosingCourt(false);
-        setSplitCount(1);
+        setRentFractionsCount(1);
+        setSelectedRentFractions([]);
+        setSelectedConsumptionsIds([]);
+        setBarcodeInput('');
+        setProductSearch('');
+        setPaymentObservation('');
     };
 
     const handleConfirmPayment = async () => {
@@ -729,64 +765,105 @@ const BookingsPage = () => {
             return;
         }
 
+        const finalPrice = booking.price;
+        const rentRemaining = Math.max(0, finalPrice - booking.depositPaid);
+        const fractionAmount = rentRemaining / rentFractionsCount;
+
+        const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+
+        const totalRentPayment = selectedRentFractions.length * fractionAmount;
+        const selectedConsObjs = unpaidConsumptions.filter(c => selectedConsumptionsIds.includes(c.id));
+        const totalConsumptionsPayment = selectedConsObjs.reduce((acc, c) => acc + c.totalPrice, 0);
+
+        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
+
+        if (currentTransactionTotal <= 0) {
+            alert("Seleccione al menos una parte de cancha o consumición para pagar.");
+            return;
+        }
+
         try {
             setLoading(true);
 
-            const finalPrice = booking.price;
-            const consumptionTotal = bookingConsumptions.reduce((acc, c) => acc + (c.totalPrice || 0), 0);
-            const totalToCollect = Math.max(0, (finalPrice + consumptionTotal) - booking.depositPaid);
-            
-            // Si hay split, usamos el monto fijo calculado o lo calculamos ahora si es el primer pago
-            let paymentAmount = totalToCollect;
-            if (splitCount > 1) {
-                if (fixedSplitAmount) {
-                    paymentAmount = fixedSplitAmount;
-                } else {
-                    paymentAmount = totalToCollect / splitCount;
-                    setFixedSplitAmount(paymentAmount);
+            // Verificar estado de caja antes de cobrar
+            try {
+                const cashRes = await api.get('/api/cash-closures/current-status', config);
+                if (!cashRes.data.activeClosure || !cashRes.data.activeClosure.isOpen) {
+                    if (window.confirm("ATENCIÓN: La caja se encuentra CERRADA. Para registrar este pago, la caja debe estar abierta.\n\n¿Deseas abrir la caja ahora automáticamente (con saldo inicial $0)?")) {
+                        await api.post('/api/cash-closures/open', { initialCash: 0, notes: "Apertura automática por cobro" }, config);
+                    } else {
+                        setLoading(false);
+                        return; // Se cancela el pago
+                    }
                 }
+            } catch (err) {
+                console.error("Error al verificar la caja", err);
             }
 
-            // Si es el último pago, cobramos el saldo exacto para evitar errores de redondeo
-            const isLastPayment = splitCount <= 1 || (totalToCollect - paymentAmount) < 5; // Margen de 5 pesos por redondeo
-            if (isLastPayment) paymentAmount = totalToCollect;
+            const startTimeFormatted = format(parseSafeDate(booking.startTime), 'HH:mm');
+            const endTimeFormatted = format(parseSafeDate(booking.endTime), 'HH:mm');
+            const schedule = `${startTimeFormatted}-${endTimeFormatted}`;
 
             const method = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
-            const description = (method?.name === "BONIFICADO / SIN COSTO")
-                ? `Bonificación: ${isSpace ? (booking as SpaceBooking).space.name : (booking as Booking).court.name}${consumptionTotal > 0 ? ' + Consumos' : ''}`
-                : `Pago ${splitCount > 1 ? 'Parcial' : 'Total'} (${method?.name}): ${isSpace ? (booking as SpaceBooking).space.name : (booking as Booking).court.name}${consumptionTotal > 0 ? ' + Consumos' : ''}`;
 
-            if (paymentAmount > 0) {
-                if (booking.userId) {
-                    await api.post(`/api/transaction/payment?userId=${booking.userId}&amount=${paymentAmount}&description=${description}&paymentMethodId=${selectedPaymentMethod}`, {}, config);
+            // Generar transacción para la cancha
+            if (totalRentPayment > 0) {
+                let rentDesc = `${isSpace ? 'Espacio' : 'Cancha'}: ${isSpace ? (booking as SpaceBooking).space.name : (booking as Booking).court.name} (${schedule})`;
+                if (rentFractionsCount > 1) rentDesc += ` - Pago Parte ${selectedRentFractions.length} de ${rentFractionsCount}`;
+
+                if (method?.name === "BONIFICADO / SIN COSTO") rentDesc = `Bonificación: ` + rentDesc;
+                else rentDesc += ` (${method?.name})`;
+
+                if (paymentObservation) rentDesc += ` - Obs: ${paymentObservation}`;
+
+                await api.post(`/api/transaction/payment?amount=${totalRentPayment}&description=${encodeURIComponent(rentDesc)}&paymentMethodId=${selectedPaymentMethod}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
+
+                if (isSpace) {
+                    await api.post(`/api/spacebookings/${booking.id}/partial-pay?amount=${totalRentPayment}`, {}, config);
+                } else {
+                    await api.post(`/api/bookings/${booking.id}/partial-pay?amount=${totalRentPayment}`, {}, config);
                 }
             }
 
-            // Registrar el pago en la reserva
-            if (isLastPayment) {
-                const payUrl = isSpace ? `/api/spacebookings/${booking.id}/pay` : `/api/bookings/${booking.id}/pay`;
-                await api.post(payUrl, {}, config);
-            } else {
-                const partialPayUrl = isSpace ? `/api/spacebookings/${booking.id}/partial-pay?amount=${paymentAmount}` : `/api/bookings/${booking.id}/partial-pay?amount=${paymentAmount}`;
-                await api.post(partialPayUrl, {}, config);
+            // Generar transacciones para consumiciones seleccionadas
+            for (const c of selectedConsObjs) {
+                let consDesc = `${c.quantity}x ${c.product.name}`;
+                if (c.notes) consDesc += ` (Obs: ${c.notes})`;
+                if (method?.name === "BONIFICADO / SIN COSTO") consDesc = `Bonificación: ` + consDesc;
+                else consDesc += ` (${method?.name})`;
+                if (paymentObservation) consDesc += ` - Obs: ${paymentObservation}`;
+
+                await api.post(`/api/transaction/payment?amount=${c.totalPrice}&description=${encodeURIComponent(consDesc)}&paymentMethodId=${selectedPaymentMethod}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
+
+                await api.put(`/api/consumptions/${c.id}/pay`, {}, config);
             }
 
-            if (isLastPayment) {
+            // Verificar si el turno ya está 100% pagado
+            const checkRes = await api.get(`/api/${isSpace ? 'spacebookings' : 'bookings'}/${booking.id}`, config);
+            const updatedBooking = checkRes.data;
+            const newUnpaidConsumptions = (await api.get(`/api/consumptions/booking/${booking.id}`, config)).data.filter((x: any) => !x.isPaid);
+
+            if (updatedBooking.depositPaid >= updatedBooking.price && newUnpaidConsumptions.length === 0) {
+                await api.post(`/api/${isSpace ? 'spacebookings' : 'bookings'}/${booking.id}/pay`, {}, config);
                 setIsDetailsModalOpen(false);
-                setIsClosingCourt(false);
-                setSplitCount(1);
-                setFixedSplitAmount(null);
-                alert("Pago completado con éxito");
+                resetForm();
+                fetchData();
+                alert("Pago final completado con éxito");
             } else {
-                const remainingPeople = splitCount - 1;
-                setSplitCount(remainingPeople);
-                alert(`Pago parcial de ${formatARS(paymentAmount)} registrado correctamente.\n\nFaltan cobrar ${remainingPeople} ${remainingPeople === 1 ? 'persona' : 'personas'}.`);
+                if (isSpace) setSelectedSpaceBooking(updatedBooking);
+                else setSelectedBooking(updatedBooking);
+                setBookingConsumptions((await api.get(`/api/consumptions/booking/${booking.id}`, config)).data);
+                setSelectedRentFractions([]);
+                setSelectedConsumptionsIds([]);
+                setPaymentObservation('');
+                fetchData();
+                alert(`Pago registrado correctamente.\nQueda saldo pendiente.`);
             }
-            
+
             fetchData();
         } catch (err: any) {
-            console.error("Error al procesar pago", err);
-            alert("Error al registrar el pago: " + (err.response?.data?.message || err.message));
+            console.error("Error al procesar pago:", err);
+            alert("Error al procesar el pago: " + (err.response?.data || err.message));
         } finally {
             setLoading(false);
         }
@@ -799,7 +876,7 @@ const BookingsPage = () => {
         const printWindow = window.open('', '_blank', 'width=300,height=600');
         if (!printWindow) return;
 
-        const rentDetail = selectedBooking 
+        const rentDetail = selectedBooking
             ? `${selectedBooking.court.name} (${format(parseISO(selectedBooking.startTime), 'HH:mm')} a ${format(parseISO(selectedBooking.endTime), 'HH:mm')} hs)`
             : `${selectedSpaceBooking?.space.name} (${format(parseISO(selectedSpaceBooking!.startTime), 'HH:mm')} a ${format(parseISO(selectedSpaceBooking!.endTime), 'HH:mm')} hs)`;
 
@@ -843,7 +920,7 @@ const BookingsPage = () => {
                         ${companyInfo.website ? `<div>${companyInfo.website}</div>` : ''}
                     </div>
                     <div style="font-size: 11px; margin-top: 5px; border-top: 1px solid #eee; padding-top: 5px;">
-                        ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})} hs
+                        ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
                     </div>
                 </div>
                 
@@ -863,23 +940,23 @@ const BookingsPage = () => {
                 <table>
                     <tbody>
                         ${(() => {
-                            const grouped = bookingConsumptions.reduce((acc: any, curr: any) => {
-                                const key = curr.productId;
-                                if (!acc[key]) {
-                                    acc[key] = { ...curr };
-                                } else {
-                                    acc[key].quantity += curr.quantity;
-                                    acc[key].totalPrice += curr.totalPrice;
-                                    acc[key].createdAt = curr.createdAt;
-                                }
-                                return acc;
-                            }, {});
-                            
-                            const sortedGroups = Object.values(grouped).sort((a: any, b: any) => 
-                                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                            );
+                const grouped = bookingConsumptions.reduce((acc: any, curr: any) => {
+                    const key = curr.productId;
+                    if (!acc[key]) {
+                        acc[key] = { ...curr };
+                    } else {
+                        acc[key].quantity += curr.quantity;
+                        acc[key].totalPrice += curr.totalPrice;
+                        acc[key].createdAt = curr.createdAt;
+                    }
+                    return acc;
+                }, {});
 
-                            return sortedGroups.map((c: any) => `
+                const sortedGroups = Object.values(grouped).sort((a: any, b: any) =>
+                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
+
+                return sortedGroups.map((c: any) => `
                                 <tr>
                                     <td>
                                         ${c.product?.name}<br>
@@ -888,7 +965,7 @@ const BookingsPage = () => {
                                     <td class="price">$${c.totalPrice.toLocaleString('es-AR')}</td>
                                 </tr>
                             `).join('');
-                        })()}
+            })()}
                     </tbody>
                 </table>
                 
@@ -1025,8 +1102,8 @@ const BookingsPage = () => {
                                     key={day.toISOString()}
                                     onClick={() => setSelectedDate(day)}
                                     className={`flex-shrink-0 w-24 py-4 rounded-3xl flex flex-col items-center gap-1 transition-all duration-300 border ${isSelected
-                                            ? 'bg-black text-white border-black shadow-xl shadow-black/20'
-                                            : 'bg-white text-zinc-400 border-zinc-100 hover:border-black/10'
+                                        ? 'bg-black text-white border-black shadow-xl shadow-black/20'
+                                        : 'bg-white text-zinc-400 border-zinc-100 hover:border-black/10'
                                         }`}
                                 >
                                     <span className="text-[9px] font-black uppercase tracking-tighter opacity-60">
@@ -1101,8 +1178,8 @@ const BookingsPage = () => {
                                         }}
                                     >
                                         <div className={`p-4 border-r-2 border-b border-zinc-200 flex flex-col items-center justify-center transition-all ${(courts.some(c => getBookingFor(c.id, hour) || getActivityFor(c.id, 'court', hour)) || spaces.some(s => getSpaceBookingFor(s.id, hour) || getActivityFor(s.id, 'space', hour)))
-                                                ? 'bg-black text-white'
-                                                : 'bg-zinc-200/20 text-zinc-800 group-hover:bg-black group-hover:text-white'
+                                            ? 'bg-black text-white'
+                                            : 'bg-zinc-200/20 text-zinc-800 group-hover:bg-black group-hover:text-white'
                                             }`}>
                                             <span className="font-black italic text-sm leading-none">{hour.toString().padStart(2, '0')}:00</span>
                                             <span className={`text-[8px] font-bold uppercase tracking-widest mt-1.5 opacity-50`}>
@@ -1145,63 +1222,105 @@ const BookingsPage = () => {
                                                     )}
                                                     {booking ? (
                                                         isStartHour && (
-                                                            <div
-                                                                style={{
-                                                                    top: `calc(${topOffset}% + 8px)`,
-                                                                    bottom: `calc(${(1 - (dur + topOffset / 100)) * 100}% + 8px)`
-                                                                }}
-                                                                className={`absolute inset-x-2 text-white rounded-2xl p-3 shadow-2xl flex flex-col justify-between overflow-hidden group/item transition-all hover:scale-[1.01] border border-white/10 z-30 bg-gradient-to-br ${colorClass}`}
-                                                            >
-                                                                <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-white/5 rotate-12 pointer-events-none transition-transform group-hover/item:translate-x-full duration-1000"></div>
-
-                                                                <div className="flex justify-between items-start relative z-10">
-                                                                    <div>
-                                                                        <p className="text-[9px] font-black uppercase tracking-tighter text-white/50 mb-1">
-                                                                            {hasActiveMembership(booking) ? 'MEMBRESÍA ACTIVA' : 'CLIENTE PARTICULAR'}
-                                                                        </p>
-                                                                        <p className="text-xs font-black uppercase italic leading-tight truncate max-w-[140px]">
-                                                                            {booking.user?.fullName || booking.guestName || "SIN NOMBRE"}
-                                                                            <span className="ml-1.5 text-[9px] font-bold text-white/60 not-italic">
-                                                                                ({booking.guestPhone || booking.user?.phoneNumber || 'S/T'})
-                                                                            </span>
-                                                                        </p>
-                                                                    </div>
-                                                                    {(isAdmin || booking.depositPaid < booking.price) && (
-                                                                        <button
-                                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
-                                                                            className="p-1.5 bg-white/10 hover:bg-rose-600 rounded-lg transition-colors border border-white/5"
-                                                                        >
-                                                                            <X className="w-3 h-3" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="flex flex-col gap-1 relative z-10 flex-1 justify-center">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className={`w-1.5 h-1.5 rounded-full ${isFullyPaid(booking) ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]' : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,1)] animate-pulse'}`}></div>
-                                                                            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">
-                                                                                {isFullyPaid(booking) ? 'PAGADO' : 'PAGO PENDIENTE'}
-                                                                            </span>
-                                                                        </div>
-                                                                        <span className="text-[10px] font-black italic text-white/90 bg-black/20 px-2 py-0.5 rounded-lg">
-                                                                            {format(parseSafeDate(booking.startTime), 'HH:mm')} - {format(parseSafeDate(booking.endTime), 'HH:mm')}
-                                                                        </span>
+                                                                <div
+                                                                    style={{
+                                                                        top: `calc(${topOffset}% + 8px)`,
+                                                                        bottom: `calc(${(1 - (dur + topOffset / 100)) * 100}% + 8px)`
+                                                                    }}
+                                                                    className={`absolute inset-x-2 text-white rounded-xl shadow-xl flex flex-col transition-all hover:scale-[1.01] hover:z-50 border border-white/10 z-30 group/item`}
+                                                                >
+                                                                    <div className={`absolute inset-0 rounded-xl overflow-hidden pointer-events-none bg-gradient-to-br ${colorClass}`}>
+                                                                        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-white/5 rotate-12 transition-transform group-hover/item:translate-x-full duration-1000"></div>
                                                                     </div>
 
-                                                                    {!booking.userId && booking.guestEmail && (
-                                                                        <div className="flex flex-col gap-0.5 mt-1 border-t border-white/10 pt-1">
-                                                                            <p className="text-[8px] font-bold text-white/80 flex items-center gap-1 truncate"><Mail className="w-2 h-2" /> {booking.guestEmail}</p>
+                                                                    <div className="flex flex-col h-full relative z-10 justify-between p-2">
+                                                                        {/* Cabecera: Cancelar (Top Right) */}
+                                                                        <div className="absolute top-2 right-2 z-20">
+                                                                            {(isAdmin || booking.depositPaid < booking.price) && (
+                                                                                <button
+                                                                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
+                                                                                    className="p-1 bg-white/10 hover:bg-rose-600 rounded transition-colors border border-white/5 backdrop-blur-sm"
+                                                                                >
+                                                                                    <X className="w-3 h-3" />
+                                                                                </button>
+                                                                            )}
                                                                         </div>
-                                                                    )}
 
-                                                                    {booking.depositPaid > 0 && booking.depositPaid < booking.price && (
-                                                                        <p className="text-[8px] font-black text-amber-300 uppercase tracking-widest mt-1">
-                                                                            Seña: ${booking.depositPaid}
-                                                                        </p>
-                                                                    )}
+                                                                        {/* Info Principal: Nombre, Celular, Tipo */}
+                                                                        <div className="pr-5 leading-none flex-1 flex flex-col justify-center">
+                                                                            <div className="flex items-center gap-1 mb-1">
+                                                                                {hasActiveMembership(booking) ? <User className="w-2.5 h-2.5 text-white/60" /> : <Users className="w-2.5 h-2.5 text-white/60" />}
+                                                                                <p className="text-[8px] font-black uppercase tracking-widest text-white/60 truncate">
+                                                                                    {hasActiveMembership(booking) ? 'SOCIO' : 'PARTICULAR'}
+                                                                                </p>
+                                                                            </div>
+                                                                            
+                                                                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                                                                                <p className="text-[11px] sm:text-xs font-black uppercase italic truncate max-w-full">
+                                                                                    {booking.user?.fullName || booking.guestName || "SIN NOMBRE"}
+                                                                                </p>
+                                                                                <p className="text-[8px] font-bold text-white/70">
+                                                                                    {booking.guestPhone || booking.user?.phoneNumber || 'S/T'}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Horario y Estado de Pago */}
+                                                                        <div className="mt-1 pt-1 border-t border-white/10 flex flex-wrap justify-between items-center gap-1">
+                                                                            <span className="text-[8px] font-black italic text-white bg-black/20 px-1 py-0.5 rounded whitespace-nowrap">
+                                                                                {format(parseSafeDate(booking.startTime), 'HH:mm')} - {format(parseSafeDate(booking.endTime), 'HH:mm')}
+                                                                            </span>
+
+                                                                            <div className={`group/debt relative flex items-center gap-1 px-1.5 py-0.5 rounded border cursor-help ${isFullyPaid(booking) ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-200' : 'bg-rose-500/20 border-rose-500/30 text-rose-200'}`}>
+                                                                                <div className={`w-1 h-1 rounded-full ${isFullyPaid(booking) ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`}></div>
+                                                                                <span className="text-[7.5px] font-black uppercase tracking-widest flex items-center gap-1 whitespace-nowrap">
+                                                                                    {isFullyPaid(booking) ? 'PAGADO' : (
+                                                                                        <>
+                                                                                            {getRentDebt(booking) > 0 && <span>ALQ ${getRentDebt(booking).toLocaleString('es-AR')}</span>}
+                                                                                            {getRentDebt(booking) > 0 && getConsumptionDebt(booking) > 0 && <span className="opacity-40">|</span>}
+                                                                                            {getConsumptionDebt(booking) > 0 && <span>BAR ${getConsumptionDebt(booking).toLocaleString('es-AR')}</span>}
+                                                                                        </>
+                                                                                    )}
+                                                                                </span>
+
+                                                                                {/* Custom Tooltip */}
+                                                                                {!isFullyPaid(booking) && (
+                                                                                    <div className="absolute bottom-full right-0 mb-2 w-48 p-2.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl opacity-0 invisible group-hover/debt:opacity-100 group-hover/debt:visible transition-all z-[100] pointer-events-none translate-y-2 group-hover/debt:translate-y-0 text-left">
+                                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2 border-b border-zinc-800 pb-1">Detalle de Deuda</p>
+                                                                                        <div className="space-y-1.5">
+                                                                                            {getRentDebt(booking) > 0 && (
+                                                                                                <div className="flex justify-between items-center">
+                                                                                                    <span className="text-[9px] font-bold text-white">Alquiler Cancha</span>
+                                                                                                    <span className="text-[10px] text-rose-400 font-black">${getRentDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {getConsumptionDebt(booking) > 0 && (
+                                                                                                <div className="pt-1.5 border-t border-zinc-800/50">
+                                                                                                    <div className="flex justify-between items-center mb-1">
+                                                                                                        <span className="text-[9px] font-bold text-white">Consumiciones Bar</span>
+                                                                                                        <span className="text-[10px] text-rose-400 font-black">${getConsumptionDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                                    </div>
+                                                                                                    <div className="space-y-0.5 max-h-24 overflow-y-auto custom-scrollbar">
+                                                                                                        {(booking.bookingConsumptions || []).filter((c:any) => !c.isPaid).map((c:any, idx:number) => (
+                                                                                                            <div key={idx} className="flex justify-between items-center text-[8px] text-zinc-400 pl-2">
+                                                                                                                <span className="truncate pr-2">{c.quantity}x {c.product?.name || 'Producto'}</span>
+                                                                                                                <span className="font-bold">${(c.totalPrice || (c.unitPrice * c.quantity)).toLocaleString('es-AR')}</span>
+                                                                                                            </div>
+                                                                                                        ))}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="flex justify-between items-center text-[10px] font-black mt-2 pt-2 border-t border-zinc-800 text-white">
+                                                                                            <span>TOTAL DEUDA</span>
+                                                                                            <span className="text-rose-500">${getTotalDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
                                                         )
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -1244,44 +1363,96 @@ const BookingsPage = () => {
                                                                     top: `calc(${topOffset}% + 8px)`,
                                                                     bottom: `calc(${(1 - (dur + topOffset / 100)) * 100}% + 8px)`
                                                                 }}
-                                                                className={`absolute inset-x-2 text-white rounded-2xl p-3 shadow-2xl flex flex-col justify-between overflow-hidden group/item transition-all hover:scale-[1.01] border border-white/20 z-30 bg-gradient-to-br from-violet-600 via-violet-700 to-indigo-900 shadow-violet-500/40`}
+                                                                className={`absolute inset-x-2 text-white rounded-xl p-2 shadow-xl flex flex-col justify-between overflow-hidden group/item transition-all hover:scale-[1.01] border border-white/20 z-30 bg-gradient-to-br from-violet-600 via-violet-700 to-indigo-900 shadow-violet-500/40`}
                                                             >
-                                                                <div className="absolute top-0 right-0 p-2 opacity-20">
+                                                                <div className="absolute top-0 right-0 p-2 opacity-20 pointer-events-none">
                                                                     <Layout className="w-8 h-8 text-white rotate-12" />
                                                                 </div>
-                                                                <div className="flex justify-between items-start relative z-10">
-                                                                    <div>
-                                                                        <p className="text-[9px] font-black uppercase tracking-tighter text-amber-100/50 mb-1">
-                                                                            {hasActiveMembership(booking) ? 'MEMBRESÍA ACTIVA' : 'CLIENTE PARTICULAR'}
-                                                                        </p>
-                                                                        <p className="text-xs font-black uppercase italic leading-tight truncate max-w-[140px]">
-                                                                            {booking.user?.fullName || booking.guestName || "SIN NOMBRE"}
-                                                                        </p>
-                                                                        <p className="text-[9px] font-bold text-amber-100/60 mt-0.5">
-                                                                            {booking.guestPhone || 'S/T'}
-                                                                        </p>
+                                                                <div className="flex flex-col h-full relative z-10 justify-between">
+                                                                    {/* Cabecera: Cancelar (Top Right) */}
+                                                                    <div className="absolute top-0 right-0 z-20">
+                                                                        {(isAdmin || booking.depositPaid < booking.price) && (
+                                                                            <button
+                                                                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
+                                                                                className="p-1 bg-white/10 hover:bg-rose-600 rounded transition-colors border border-white/5 backdrop-blur-sm"
+                                                                            >
+                                                                                <X className="w-3 h-3" />
+                                                                            </button>
+                                                                        )}
                                                                     </div>
-                                                                    {booking.depositPaid < booking.price && (
-                                                                        <button
-                                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
-                                                                            className="p-1.5 bg-white/10 hover:bg-rose-600 rounded-lg transition-colors"
-                                                                        >
-                                                                            <X className="w-3 h-3" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
 
-                                                                <div className="flex flex-col gap-1 relative z-10 flex-1 justify-center">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className={`w-1.5 h-1.5 rounded-full ${isFullyPaid(booking) ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]' : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,1)] animate-pulse'}`}></div>
-                                                                            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">
-                                                                                {isFullyPaid(booking) ? 'PAGADO' : 'PAGO PENDIENTE'}
-                                                                            </span>
+                                                                    {/* Info Principal: Nombre, Celular, Tipo */}
+                                                                    <div className="pr-5 leading-none flex-1 flex flex-col justify-center">
+                                                                        <div className="flex items-center gap-1 mb-1">
+                                                                            {hasActiveMembership(booking) ? <User className="w-2.5 h-2.5 text-amber-100/60" /> : <Users className="w-2.5 h-2.5 text-amber-100/60" />}
+                                                                            <p className="text-[8px] font-black uppercase tracking-widest text-amber-100/60 truncate">
+                                                                                {hasActiveMembership(booking) ? 'SOCIO' : 'PARTICULAR'}
+                                                                            </p>
                                                                         </div>
-                                                                        <span className="text-[9px] font-black italic text-white/90 bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                                                        
+                                                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                                                            <p className="text-[11px] sm:text-xs font-black uppercase italic truncate max-w-full text-white">
+                                                                                {booking.user?.fullName || booking.guestName || "SIN NOMBRE"}
+                                                                            </p>
+                                                                            <p className="text-[8px] font-bold text-amber-100/70">
+                                                                                {booking.guestPhone || booking.user?.phoneNumber || 'S/T'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Horario y Estado de Pago */}
+                                                                    <div className="mt-1 pt-1 border-t border-white/10 flex flex-wrap justify-between items-center gap-1">
+                                                                        <span className="text-[8px] font-black italic text-white bg-black/40 px-1 py-0.5 rounded whitespace-nowrap">
                                                                             {format(parseSafeDate(booking.startTime), 'HH:mm')} - {format(parseSafeDate(booking.endTime), 'HH:mm')}
                                                                         </span>
+
+                                                                        <div className={`group/debt relative flex items-center gap-1 px-1.5 py-0.5 rounded border cursor-help ${isFullyPaid(booking) ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-200' : 'bg-rose-500/20 border-rose-500/30 text-rose-200'}`}>
+                                                                            <div className={`w-1 h-1 rounded-full ${isFullyPaid(booking) ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`}></div>
+                                                                            <span className="text-[7.5px] font-black uppercase tracking-widest flex items-center gap-1 whitespace-nowrap">
+                                                                                {isFullyPaid(booking) ? 'PAGADO' : (
+                                                                                    <>
+                                                                                        {getRentDebt(booking) > 0 && <span>ALQ ${getRentDebt(booking).toLocaleString('es-AR')}</span>}
+                                                                                        {getRentDebt(booking) > 0 && getConsumptionDebt(booking) > 0 && <span className="opacity-40">|</span>}
+                                                                                        {getConsumptionDebt(booking) > 0 && <span>BAR ${getConsumptionDebt(booking).toLocaleString('es-AR')}</span>}
+                                                                                    </>
+                                                                                )}
+                                                                            </span>
+
+                                                                            {/* Custom Tooltip */}
+                                                                            {!isFullyPaid(booking) && (
+                                                                                <div className="absolute bottom-full right-0 mb-2 w-48 p-2.5 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl opacity-0 invisible group-hover/debt:opacity-100 group-hover/debt:visible transition-all z-[100] pointer-events-none translate-y-2 group-hover/debt:translate-y-0 text-left">
+                                                                                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2 border-b border-zinc-800 pb-1">Detalle de Deuda</p>
+                                                                                    <div className="space-y-1.5">
+                                                                                        {getRentDebt(booking) > 0 && (
+                                                                                            <div className="flex justify-between items-center">
+                                                                                                <span className="text-[9px] font-bold text-white">Alquiler Espacio</span>
+                                                                                                <span className="text-[10px] text-rose-400 font-black">${getRentDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {getConsumptionDebt(booking) > 0 && (
+                                                                                            <div className="pt-1.5 border-t border-zinc-800/50">
+                                                                                                <div className="flex justify-between items-center mb-1">
+                                                                                                    <span className="text-[9px] font-bold text-white">Consumiciones Bar</span>
+                                                                                                    <span className="text-[10px] text-rose-400 font-black">${getConsumptionDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                                </div>
+                                                                                                <div className="space-y-0.5 max-h-24 overflow-y-auto custom-scrollbar">
+                                                                                                    {(booking.bookingConsumptions || []).filter((c:any) => !c.isPaid).map((c:any, idx:number) => (
+                                                                                                        <div key={idx} className="flex justify-between items-center text-[8px] text-zinc-400 pl-2">
+                                                                                                            <span className="truncate pr-2">{c.quantity}x {c.product?.name || 'Producto'}</span>
+                                                                                                            <span className="font-bold">${(c.totalPrice || (c.unitPrice * c.quantity)).toLocaleString('es-AR')}</span>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="flex justify-between items-center text-[10px] font-black mt-2 pt-2 border-t border-zinc-800 text-white">
+                                                                                        <span>TOTAL DEUDA</span>
+                                                                                        <span className="text-rose-500">${getTotalDebt(booking).toLocaleString('es-AR')}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1458,8 +1629,8 @@ const BookingsPage = () => {
                                                         }
                                                     }}
                                                     className={`w-full p-4 flex items-center justify-between rounded-2xl border transition-all ${selectedClientId === client.id
-                                                            ? 'bg-black text-white border-black'
-                                                            : 'bg-white text-zinc-600 border-zinc-100 hover:border-black/20'
+                                                        ? 'bg-black text-white border-black'
+                                                        : 'bg-white text-zinc-600 border-zinc-100 hover:border-black/20'
                                                         }`}
                                                 >
                                                     <span className="font-bold">{client.fullName}</span>
@@ -1569,8 +1740,8 @@ const BookingsPage = () => {
                                                 type="button"
                                                 onClick={() => setDuration(d)}
                                                 className={`flex-shrink-0 px-4 py-3 rounded-xl text-[10px] font-black tracking-widest transition-all ${duration === d
-                                                        ? 'bg-white text-black shadow-sm'
-                                                        : 'text-zinc-400 hover:bg-zinc-50'
+                                                    ? 'bg-white text-black shadow-sm'
+                                                    : 'text-zinc-400 hover:bg-zinc-50'
                                                     }`}
                                             >
                                                 {d === 60 ? '1 HORA' : `${d / 60} HORAS`}
@@ -1679,10 +1850,10 @@ const BookingsPage = () => {
             {/* Checkout Modal */}
             {isDetailsModalOpen && (selectedBooking || selectedSpaceBooking) && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-50 p-6">
-                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-300 border border-black/5">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-7xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-300 border border-black/5">
                         <div className="p-7 bg-gradient-to-br from-zinc-800 to-black text-white relative">
                             <div className="absolute right-6 top-6 flex items-center gap-3">
-                                <button 
+                                <button
                                     onClick={handlePrintTicket}
                                     className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all flex items-center gap-2 group"
                                     title="Imprimir Ticket"
@@ -1690,19 +1861,40 @@ const BookingsPage = () => {
                                     <Printer className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                                     <span className="text-[9px] font-black uppercase tracking-widest hidden md:inline">Imprimir</span>
                                 </button>
-                                <button onClick={() => { setIsDetailsModalOpen(false); resetForm(); }} className="p-2.5 hover:bg-white/10 rounded-2xl transition-colors">
+                                <button onClick={() => { setIsDetailsModalOpen(false); resetForm(); fetchData(); }} className="p-2.5 hover:bg-white/10 rounded-2xl transition-colors">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/10">
-                                    <DollarSign className="w-4 h-4 text-emerald-400" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Checkout de Alquiler</span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Consumiciones y Cobro</span>
                             </div>
                             <div className="flex justify-between items-end">
                                 <div>
-                                    <p className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30 mb-2">Cliente responsable</p>
+                                    <div className="flex items-center gap-4 mb-2">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30">Cliente responsable</p>
+                                        {userMembership ? (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded-full animate-pulse">
+                                                <div className="w-1 h-1 rounded-full bg-emerald-400"></div>
+                                                <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">
+                                                    {userMembership.name} (-{userMembership.discount}%)
+                                                </span>
+                                            </div>
+                                        ) : (selectedBooking || selectedSpaceBooking)?.userId ? (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full">
+                                                <div className="w-1 h-1 rounded-full bg-amber-400"></div>
+                                                <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest">
+                                                    SIN MEMBRESÍA ACTIVA
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/5 border border-white/10 rounded-full opacity-40">
+                                                <div className="w-1 h-1 rounded-full bg-white/40"></div>
+                                                <span className="text-[8px] font-black text-white/60 uppercase tracking-widest">
+                                                    PARTICULAR
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <h2 className="text-3xl font-black italic uppercase tracking-tight leading-none text-white">
                                         {(selectedBooking || selectedSpaceBooking)?.user?.fullName || (selectedBooking || selectedSpaceBooking)?.guestName || "SIN NOMBRE CARGADO"}
                                     </h2>
@@ -1715,79 +1907,48 @@ const BookingsPage = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-                            {/* Left Column: Info & Consumptions */}
-                            <div className="p-8 border-r border-zinc-100 bg-zinc-50/30 max-h-[60vh] overflow-y-auto">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 relative overflow-hidden">
+                            {/* Left Column: Add Consumptions */}
+                            <div className="p-8 border-r border-zinc-100 max-h-[70vh] overflow-y-auto bg-white custom-scrollbar flex flex-col relative min-h-[500px]">
                                 <div className="space-y-6">
-                                    {/* Membership Info */}
-                                    {userMembership ? (
-                                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-[24px] flex items-center gap-3 animate-pulse">
-                                            <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white scale-90">
-                                                <Check className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[9px] font-black uppercase text-emerald-600 tracking-widest leading-none mb-1">¡Beneficio Socio Black Detectado!</p>
-                                                <p className="text-xs font-black text-emerald-900 uppercase italic">{userMembership.name} (-{userMembership.discount}%)</p>
-                                            </div>
-                                        </div>
-                                    ) : (selectedBooking || selectedSpaceBooking)?.userId ? (
-                                        <div className="p-4 bg-amber-50 border border-amber-100 rounded-[24px] flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 scale-90">
-                                                <AlertCircle className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[9px] font-black uppercase text-amber-600 tracking-widest leading-none mb-1">Membresía Pendiente de Pago</p>
-                                                <p className="text-xs font-black text-amber-900 uppercase italic">Regularizar cuota en Cuenta Corriente para activar beneficio.</p>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="p-4 bg-zinc-50 border border-zinc-100 rounded-[24px] flex items-center gap-3 grayscale opacity-60">
-                                            <div className="w-10 h-10 rounded-full bg-zinc-300 flex items-center justify-center text-white scale-90">
-                                                <X className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest leading-none mb-1">Carga como Particular (Invitado)</p>
-                                                <p className="text-xs font-black text-zinc-600 uppercase italic">Sin cuenta de socio vinculada</p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Consumptions List */}
                                     <div className="space-y-4">
-                                        <div className="flex justify-between items-center">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block italic">Consumiciones</label>
-                                            <button
-                                                onClick={async () => {
-                                                    const res = await api.get('/api/products', config);
-                                                    setAllProducts(res.data);
-                                                    setIsConsumptionModalOpen(true);
-                                                }}
-                                                className="px-4 py-2 bg-black text-white rounded-xl font-black uppercase text-[9px] tracking-[0.1em] transition-all flex items-center gap-2 hover:bg-zinc-800"
-                                            >
-                                                <Plus className="w-3.5 h-3.5" /> Agregar
-                                            </button>
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative group">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                                        <Search className="w-3.5 h-3.5 text-zinc-400" />
+                                                        <div className="w-[1px] h-3 bg-zinc-200"></div>
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={barcodeInput}
+                                                        onChange={(e) => setBarcodeInput(e.target.value)}
+                                                        onKeyDown={handleAddByBarcode}
+                                                        placeholder="CÓDIGO DE BARRAS..."
+                                                        className="pl-11 pr-4 py-2.5 bg-white border border-zinc-200 rounded-2xl text-[9px] font-black tracking-widest focus:ring-4 focus:ring-black/5 outline-none w-44 transition-all hover:border-zinc-300 focus:border-black placeholder:text-zinc-300"
+                                                    />
+                                                </div>
+
+                                                <button
+                                                    onClick={async () => {
+                                                        const res = await api.get('/api/products', config);
+                                                        setAllProducts(res.data);
+                                                        setIsConsumptionModalOpen(true);
+                                                    }}
+                                                    className="px-5 py-2.5 bg-black text-white rounded-2xl font-black uppercase text-[9px] tracking-[0.1em] transition-all flex items-center gap-2 hover:bg-zinc-800 shadow-lg shadow-black/10 active:scale-95"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" /> Agregar
+                                                </button>
+                                            </div>
                                         </div>
-                                        
+
                                         {bookingConsumptions.length > 0 ? (
                                             <div className="bg-white rounded-[28px] border border-zinc-100 overflow-hidden shadow-sm">
-                                                {(() => {
-                                                    const grouped = bookingConsumptions.reduce((acc, c) => {
-                                                        const key = c.productId;
-                                                        if (!acc[key]) {
-                                                            acc[key] = { ...c, ids: [c.id] };
-                                                        } else {
-                                                            acc[key].quantity += c.quantity;
-                                                            acc[key].totalPrice += c.totalPrice;
-                                                            acc[key].ids.push(c.id);
-                                                            acc[key].createdAt = c.createdAt; // Mantener el tiempo de la última compra
-                                                        }
-                                                        return acc;
-                                                    }, {} as Record<string, any>);
-
-                                                    return Object.values(grouped).sort((a: any, b: any) => 
-                                                        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                                                    );
-                                                })().map((c: any, idx) => (
+                                                {bookingConsumptions.sort((a: any, b: any) =>
+                                                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                                                ).map((c: any, idx) => (
                                                     <div key={idx} className="p-6 flex justify-between items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50/50 transition-colors">
                                                         <div className="flex items-center gap-5">
                                                             <div className="w-14 h-14 bg-white rounded-2xl border border-zinc-100 flex items-center justify-center shadow-sm">
@@ -1798,25 +1959,35 @@ const BookingsPage = () => {
                                                                 <p className="text-[10px] font-bold text-zinc-400 mt-0.5">
                                                                     <span className="text-black">{c.quantity}</span> UNIDADES x ${c.unitPrice.toLocaleString()}
                                                                 </p>
+                                                                {c.notes && (
+                                                                    <p className="text-[9px] font-bold text-emerald-500 italic mt-0.5 max-w-[200px] truncate" title={c.notes}>
+                                                                        Obs: {c.notes}
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-6">
                                                             <span className="text-xl font-black italic tracking-tighter text-black">${c.totalPrice.toLocaleString()}</span>
-                                                            {(selectedBooking || selectedSpaceBooking)!.status !== 4 && (
-                                                                <button 
-                                                                    onClick={async () => {
-                                                                        if (window.confirm(`¿Quitar todas las unidades de ${c.product?.name}?`)) {
-                                                                            for (const id of c.ids) {
-                                                                                await api.delete(`/api/consumptions/${id}`, config);
+                                                            
+                                                            {c.isPaid ? (
+                                                                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black tracking-widest uppercase rounded-full whitespace-nowrap">
+                                                                    Pagado
+                                                                </span>
+                                                            ) : (
+                                                                (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            if (window.confirm(`¿Quitar ${c.product?.name}?`)) {
+                                                                                await api.delete(`/api/consumptions/${c.id}`, config);
+                                                                                const consRes = await api.get(`/api/consumptions/booking/${(selectedBooking || selectedSpaceBooking)!.id}`, config);
+                                                                                setBookingConsumptions(consRes.data || []);
                                                                             }
-                                                                            const consRes = await api.get(`/api/consumptions/booking/${(selectedBooking || selectedSpaceBooking)!.id}`, config);
-                                                                            setBookingConsumptions(consRes.data || []);
-                                                                        }
-                                                                    }}
-                                                                    className="p-3 hover:bg-rose-50 text-rose-400 rounded-xl transition-all hover:scale-110 active:scale-90"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
+                                                                        }}
+                                                                        className="p-3 hover:bg-rose-50 text-rose-400 rounded-xl transition-all hover:scale-110 active:scale-90"
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                )
                                                             )}
                                                         </div>
                                                     </div>
@@ -1832,9 +2003,114 @@ const BookingsPage = () => {
                                 </div>
                             </div>
 
-                            {/* Right Column: Checkout & Payment */}
-                            <div className="p-8 max-h-[60vh] overflow-y-auto bg-white">
-                                <div className="space-y-6">
+                            {/* Middle Column: Selections */}
+                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white border-r border-zinc-100">
+                                {(() => {
+                                    const booking = selectedBooking || selectedSpaceBooking;
+                                    if (!booking) return null;
+
+                                    let basePriceForDisplay = booking.price;
+                                    if (selectedBooking) {
+                                        const court = courts.find(c => c.id === selectedBooking.courtId);
+                                        if (court) {
+                                            const start = parseISO(selectedBooking.startTime);
+                                            const end = parseISO(selectedBooking.endTime);
+                                            const durHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                            basePriceForDisplay = durHours * court.pricePerHour;
+                                        }
+                                    } else if (selectedSpaceBooking) {
+                                        const space = spaces.find(s => s.id === selectedSpaceBooking.spaceId);
+                                        if (space) basePriceForDisplay = space.pricePerSlot;
+                                    }
+                                    if (basePriceForDisplay < booking.price) basePriceForDisplay = booking.price;
+
+                                    const rentRemaining = Math.max(0, basePriceForDisplay - booking.depositPaid);
+                                    const fractionAmount = rentRemaining / rentFractionsCount;
+                                    const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+
+                                    return (
+                                        <div className="space-y-6">
+                                            {/* Items Selection */}
+                                            {rentRemaining > 0 && (
+                                                <div className="bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Dividir Cancha</span>
+                                                        <div className="flex items-center gap-4">
+                                                            <button onClick={() => {
+                                                                setRentFractionsCount(Math.max(1, rentFractionsCount - 1));
+                                                                setSelectedRentFractions([]);
+                                                            }} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">-</button>
+                                                            <span className="font-black italic text-sm">{rentFractionsCount} partes</span>
+                                                            <button onClick={() => {
+                                                                setRentFractionsCount(rentFractionsCount + 1);
+                                                                setSelectedRentFractions([]);
+                                                            }} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">+</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {Array.from({ length: rentFractionsCount }).map((_, i) => (
+                                                            <label key={i} className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${selectedRentFractions.includes(i) ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-zinc-200 hover:border-black/20'}`}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedRentFractions.includes(i)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) setSelectedRentFractions([...selectedRentFractions, i]);
+                                                                        else setSelectedRentFractions(selectedRentFractions.filter(x => x !== i));
+                                                                    }}
+                                                                    className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500"
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[10px] font-black uppercase">Parte {i + 1}</span>
+                                                                    <span className="text-xs font-black text-zinc-500 italic">{formatARS(fractionAmount)}</span>
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {unpaidConsumptions.length > 0 && (
+                                                <div className="bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 space-y-3">
+                                                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Consumiciones Pendientes</span>
+                                                    <div className="space-y-2">
+                                                        {unpaidConsumptions.map((c: any) => (
+                                                            <label key={c.id} className={`flex justify-between items-center p-3 rounded-2xl border cursor-pointer transition-all ${selectedConsumptionsIds.includes(c.id) ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-zinc-200 hover:border-black/20'}`}>
+                                                                <div className="flex items-center gap-3">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedConsumptionsIds.includes(c.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) setSelectedConsumptionsIds([...selectedConsumptionsIds, c.id]);
+                                                                            else setSelectedConsumptionsIds(selectedConsumptionsIds.filter(id => id !== c.id));
+                                                                        }}
+                                                                        className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500"
+                                                                    />
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[10px] font-black uppercase">{c.quantity}x {c.product.name}</span>
+                                                                        {c.notes && <span className="text-[9px] text-emerald-600 font-bold truncate max-w-[150px]">Obs: {c.notes}</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <span className="text-sm font-black italic text-zinc-700">{formatARS(c.totalPrice)}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {rentRemaining <= 0 && unpaidConsumptions.length === 0 && (
+                                                <div className="py-12 border-2 border-dashed border-zinc-100 rounded-[32px] flex flex-col items-center justify-center text-zinc-300 h-full">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest">Todo está pagado</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Right Column: Summary & Payment */}
+                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white flex flex-col">
+                                <div className="space-y-6 mt-auto">
                                     {/* Price Breakdown */}
                                     {(() => {
                                         const booking = selectedBooking || selectedSpaceBooking;
@@ -1856,140 +2132,124 @@ const BookingsPage = () => {
                                         if (basePriceForDisplay < booking.price) basePriceForDisplay = booking.price;
 
                                         const totalConsumption = bookingConsumptions.reduce((acc, c) => acc + (c.totalPrice || 0), 0);
-                                        const totalToCollect = Math.max(0, (booking.price + totalConsumption) - booking.depositPaid);
-                                        const perPerson = totalToCollect / splitCount;
+                                        const paidConsumptionsTotal = bookingConsumptions.filter(c => c.isPaid).reduce((acc, c) => acc + (c.totalPrice || 0), 0);
+
+                                        const rentRemaining = Math.max(0, basePriceForDisplay - booking.depositPaid);
+                                        const fractionAmount = rentRemaining / rentFractionsCount;
+                                        const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+
+                                        const totalRentPayment = selectedRentFractions.length * fractionAmount;
+                                        const totalConsumptionsPayment = unpaidConsumptions
+                                            .filter(c => selectedConsumptionsIds.includes(c.id))
+                                            .reduce((acc, c) => acc + c.totalPrice, 0);
+
+                                        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
 
                                         return (
                                             <div className="space-y-4">
                                                 <div className="space-y-3 bg-zinc-50 p-6 rounded-[32px] border border-zinc-100">
                                                     <div className="flex justify-between items-center text-zinc-400 text-[10px] font-black uppercase tracking-widest">
-                                                        <span>Reserva</span>
+                                                        <span>Cancha Total</span>
                                                         <span className="font-outfit text-zinc-600">{formatARS(booking.price)}</span>
                                                     </div>
                                                     {totalConsumption > 0 && (
                                                         <div className="flex justify-between items-center text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                                                            <span>Consumos</span>
+                                                            <span>Consumos Totales</span>
                                                             <span className="font-outfit">+{formatARS(totalConsumption)}</span>
                                                         </div>
                                                     )}
                                                     {booking.depositPaid > 0 && (
                                                         <div className="flex justify-between items-center text-blue-600 text-[10px] font-black uppercase tracking-widest pt-1 border-t border-zinc-200/50">
-                                                            <span>Pagado Anteriormente</span>
+                                                            <span>Cancha Pagada</span>
                                                             <span className="font-bold">-{formatARS(booking.depositPaid)}</span>
+                                                        </div>
+                                                    )}
+                                                    {paidConsumptionsTotal > 0 && (
+                                                        <div className="flex justify-between items-center text-blue-600 text-[10px] font-black uppercase tracking-widest">
+                                                            <span>Consumos Pagados</span>
+                                                            <span className="font-bold">-{formatARS(paidConsumptionsTotal)}</span>
                                                         </div>
                                                     )}
                                                     <div className="pt-4 flex justify-between items-end">
                                                         <div>
-                                                            <p className="text-zinc-400 text-[9px] font-black uppercase tracking-[0.3em] mb-1">TOTAL PENDIENTE</p>
-                                                            {splitCount > 1 && (
-                                                                <p className="text-[10px] text-emerald-600 font-black uppercase italic">
-                                                                    Individual: {formatARS(fixedSplitAmount || perPerson)}
-                                                                </p>
-                                                            )}
+                                                            <p className="text-zinc-400 text-[9px] font-black uppercase tracking-[0.3em] mb-1">DEUDA RESTANTE</p>
                                                         </div>
                                                         <span className="text-3xl font-black italic text-black tracking-tighter">
-                                                            {formatARS(totalToCollect)}
+                                                            {formatARS(rentRemaining + unpaidConsumptions.reduce((acc, c) => acc + c.totalPrice, 0))}
                                                         </span>
                                                     </div>
                                                 </div>
 
-                                                {!isClosingCourt ? (
-                                                    <button
-                                                        onClick={() => setIsClosingCourt(true)}
-                                                        className="w-full py-6 bg-emerald-500 text-white rounded-[32px] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center justify-center gap-3"
-                                                    >
-                                                        <Clock className="w-5 h-5" /> Cerrar y Pagar
-                                                    </button>
-                                                ) : (
-                                                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
-                                                        {/* Split Control */}
-                                                        <div className="bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 flex items-center justify-between">
-                                                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Dividir</span>
-                                                            <div className="flex items-center gap-4">
-                                                                <button onClick={() => setSplitCount(Math.max(1, splitCount - 1))} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">-</button>
-                                                                <span className="font-black italic text-sm">{splitCount} pers.</span>
-                                                                <button onClick={() => setSplitCount(splitCount + 1)} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">+</button>
-                                                            </div>
-                                                        </div>
+                                                <div className="flex justify-between items-end pt-2 pb-2">
+                                                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Total de Selección</span>
+                                                    <span className="text-3xl font-black italic text-emerald-500 tracking-tighter">{formatARS(currentTransactionTotal)}</span>
+                                                </div>
 
-                                                        {/* Payment Methods */}
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            {paymentMethods
-                                                                .filter(m => (selectedBooking ? m.name !== "BONIFICADO / SIN COSTO" : true))
-                                                                .map(method => (
-                                                                    <button
-                                                                        key={method.id}
-                                                                        onClick={() => setSelectedPaymentMethod(method.id.toString())}
-                                                                        className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex items-center justify-center gap-2 ${selectedPaymentMethod === method.id.toString()
-                                                                                ? 'bg-black text-white border-black shadow-lg'
-                                                                                : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
-                                                                            }`}
-                                                                    >
-                                                                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: method.hexColor }}></div>
-                                                                        {method.name}
-                                                                    </button>
-                                                                ))}
-                                                        </div>
+                                                {/* Observation Input */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-2">Observación (Opcional)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={paymentObservation}
+                                                        onChange={(e) => setPaymentObservation(e.target.value)}
+                                                        placeholder="Ej: Transferencia de Juan..."
+                                                        className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-4 focus:ring-black/5 outline-none text-xs font-bold text-black placeholder:text-zinc-300"
+                                                    />
+                                                </div>
 
-                                                        <div className="flex gap-3">
-                                                            {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
-                                                                <button
-                                                                    onClick={() => handleCancelBooking(selectedBooking || selectedSpaceBooking!)}
-                                                                    className={`flex-1 py-5 rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-all ${
-                                                                        isConfirmingCancel 
-                                                                        ? "bg-rose-600 text-white animate-pulse" 
-                                                                        : "bg-rose-50 text-rose-500"
+                                                {/* Payment Methods */}
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {paymentMethods
+                                                        .filter(m => (selectedBooking ? m.name !== "BONIFICADO / SIN COSTO" : true))
+                                                        .map(method => (
+                                                            <button
+                                                                key={method.id}
+                                                                onClick={() => setSelectedPaymentMethod(method.id.toString())}
+                                                                className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex items-center justify-center gap-2 ${selectedPaymentMethod === method.id.toString()
+                                                                    ? 'bg-black text-white border-black shadow-lg'
+                                                                    : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
                                                                     }`}
-                                                                >
-                                                                    {isConfirmingCancel ? "Confirmar" : "Anular"}
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={handleConfirmPayment}
-                                                                disabled={!selectedPaymentMethod || ((selectedBooking || selectedSpaceBooking)!.depositPaid >= (selectedBooking || selectedSpaceBooking)!.price + totalConsumption)}
-                                                                className="flex-[2] py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                                                             >
-                                                                {splitCount > 1 ? `Pagar 1 de ${splitCount}` : 'Cobrar Saldo'}
+                                                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: method.hexColor }}></div>
+                                                                {method.name}
                                                             </button>
-                                                        </div>
+                                                        ))}
+                                                </div>
 
-                                                        {selectedBooking?.recurrenceGroupId && (
-                                                            <button
-                                                                onClick={() => handleCancelSeries(selectedBooking.recurrenceGroupId!)}
-                                                                className={`w-full py-4 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-3 border-2 ${
-                                                                    isConfirmingSeriesCancel
-                                                                    ? 'bg-rose-500 text-white border-rose-500 animate-pulse'
-                                                                    : 'border-zinc-200 text-zinc-400 hover:border-rose-200 hover:text-rose-500'
+                                                <div className="flex gap-3">
+                                                    {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
+                                                        <button
+                                                            onClick={() => handleCancelBooking(selectedBooking || selectedSpaceBooking!)}
+                                                            className={`flex-1 py-5 rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-all ${isConfirmingCancel
+                                                                ? "bg-rose-600 text-white animate-pulse"
+                                                                : "bg-rose-50 text-rose-500"
                                                                 }`}
-                                                            >
-                                                                {isConfirmingSeriesCancel ? '¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
-                                                            </button>
-                                                        )}
+                                                        >
+                                                            {isConfirmingCancel ? "Confirmar" : "Anular"}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={handleConfirmPayment}
+                                                        disabled={!selectedPaymentMethod || currentTransactionTotal <= 0}
+                                                        className="flex-[2] py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                                                    >
+                                                        Efectuar Pago
+                                                    </button>
+                                                </div>
 
-                                                        {(selectedBooking || selectedSpaceBooking)!.depositPaid > 0 && (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    if (!window.confirm("¿Seguro que quieres borrar TODOS los pagos registrados? El turno volverá a estar pendiente de cobro.")) return;
-                                                                    try {
-                                                                        const id = (selectedBooking || selectedSpaceBooking)!.id;
-                                                                        const url = selectedBooking ? `/api/bookings/${id}/reset-payment` : `/api/spacebookings/${id}/reset-payment`;
-                                                                        await api.post(url, {}, config);
-                                                                        alert("Pagos reseteados con éxito");
-                                                                        fetchData();
-                                                                        // Actualizamos el objeto local para que el modal refleje el cambio
-                                                                        if (selectedBooking) setSelectedBooking({...selectedBooking, depositPaid: 0, status: 1});
-                                                                        if (selectedSpaceBooking) setSelectedSpaceBooking({...selectedSpaceBooking, depositPaid: 0, status: 1});
-                                                                    } catch (err: any) {
-                                                                        alert("Error al resetear pagos: " + (err.response?.data || err.message));
-                                                                    }
-                                                                }}
-                                                                className="w-full py-3 border-2 border-dashed border-zinc-200 text-zinc-400 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all flex items-center justify-center gap-2"
-                                                            >
-                                                                <RefreshCw className="w-3.5 h-3.5" /> Limpiar Pagos (Reset)
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                {selectedBooking?.recurrenceGroupId && (
+                                                    <button
+                                                        onClick={() => handleCancelSeries(selectedBooking.recurrenceGroupId!)}
+                                                        className={`w-full py-4 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-3 border-2 ${isConfirmingSeriesCancel
+                                                            ? 'bg-rose-500 text-white border-rose-500 animate-pulse'
+                                                            : 'border-zinc-200 text-zinc-400 hover:border-rose-200 hover:text-rose-500'
+                                                            }`}
+                                                    >
+                                                        {isConfirmingSeriesCancel ? '¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
+                                                    </button>
                                                 )}
+
+
                                             </div>
                                         );
                                     })()}
@@ -2009,37 +2269,62 @@ const BookingsPage = () => {
                                 <X className="w-4 h-4" />
                             </button>
                             <h2 className="text-2xl font-black italic uppercase tracking-tight">Agregar Consumisión</h2>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Toca un producto para cargarlo</p>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1 mb-6">Toca un producto para cargarlo</p>
+
+                            <div className="relative group">
+                                <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                                    <Search className="w-5 h-5 text-white/30" />
+                                    <div className="w-[1px] h-4 bg-white/10"></div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={productSearch}
+                                    onChange={(e) => setProductSearch(e.target.value)}
+                                    placeholder="BUSCAR POR NOMBRE O CÓDIGO DE BARRAS..."
+                                    className="w-full pl-16 pr-6 py-5 bg-white/5 border border-white/10 rounded-[28px] text-[10px] font-black tracking-widest text-white focus:ring-4 focus:ring-white/5 outline-none transition-all hover:bg-white/10 focus:bg-white/10 placeholder:text-white/20"
+                                    autoFocus
+                                />
+                            </div>
                         </div>
-                        
-                        <div className="p-8 max-h-[70vh] overflow-y-auto">
+
+                        <div className="p-8 max-h-[60vh] overflow-y-auto">
                             {Object.entries(
-                                allProducts.reduce((acc, p) => {
-                                    const cat = p.category || 'Otros';
-                                    if (!acc[cat]) acc[cat] = [];
-                                    acc[cat].push(p);
-                                    return acc;
-                                }, {} as Record<string, any[]>)
+                                allProducts
+                                    .filter(p =>
+                                        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                                        (p.barcode && p.barcode.toLowerCase().includes(productSearch.toLowerCase())) ||
+                                        (p.internalCode && p.internalCode.toLowerCase().includes(productSearch.toLowerCase()))
+                                    )
+                                    .reduce((acc, p) => {
+                                        const cat = p.category || 'Otros';
+                                        if (!acc[cat]) acc[cat] = [];
+                                        acc[cat].push(p);
+                                        return acc;
+                                    }, {} as Record<string, any[]>)
                             ).map(([category, products]) => (
                                 <div key={category} className="mb-8 last:mb-0">
                                     <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mb-4 border-b border-zinc-100 pb-2 italic">{category}</h3>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {products.map(product => (
+                                        {(products as any[]).map((product: any) => (
                                             <button
                                                 key={product.id}
                                                 onClick={async () => {
                                                     try {
-                                                        const qty = 1; 
-                                                        
+                                                        const obs = window.prompt(`Agregar observación para ${product.name} (Opcional):`);
+                                                        if (obs === null) return; // Se canceló
+
+                                                        const qty = 1;
+
                                                         await api.post('/api/consumptions', {
                                                             bookingId: (selectedBooking || selectedSpaceBooking)!.id,
                                                             productId: product.id,
-                                                            quantity: qty
+                                                            quantity: qty,
+                                                            notes: obs
                                                         }, config);
-                                                        
+
                                                         const consRes = await api.get(`/api/consumptions/booking/${(selectedBooking || selectedSpaceBooking)!.id}`, config);
                                                         setBookingConsumptions(consRes.data || []);
-                                                        
+
                                                         // Cerramos el modal por pedido del usuario
                                                         setIsConsumptionModalOpen(false);
                                                     } catch (err: any) {
@@ -2050,13 +2335,13 @@ const BookingsPage = () => {
                                                 className="flex flex-col items-center justify-center p-4 bg-zinc-50 border border-zinc-100 rounded-[32px] hover:border-black hover:bg-white hover:shadow-2xl hover:-translate-y-1 transition-all group aspect-square relative overflow-hidden"
                                             >
                                                 <div className="absolute top-0 right-0 w-12 h-12 bg-black/5 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:bg-black group-hover:scale-150 duration-500"></div>
-                                                
+
                                                 <div className="p-4 bg-white rounded-2xl border border-zinc-100 mb-3 group-hover:bg-black group-hover:text-white transition-all shadow-sm z-10">
                                                     <Package className="w-6 h-6" />
                                                 </div>
                                                 <p className="text-[10px] font-black uppercase italic text-center leading-tight mb-1 z-10">{product.name}</p>
                                                 <p className="text-base font-black italic text-black z-10">${product.finalPrice}</p>
-                                                
+
                                                 <div className="absolute bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <span className="text-[8px] font-black uppercase tracking-widest bg-black text-white px-2 py-1 rounded-full">Agregar +</span>
                                                 </div>

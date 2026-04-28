@@ -25,6 +25,7 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<BookingConsumption> BookingConsumptions { get; set; } = null!;
         public DbSet<ProductStockMovement> ProductStockMovements { get; set; } = null!;
+        public DbSet<CashClosure> CashClosures { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -47,6 +48,16 @@ namespace PadelQ.Infrastructure.Persistence
             builder.Entity<Product>().Property(p => p.FinalPrice).HasPrecision(18, 2);
             builder.Entity<Product>().Property(p => p.CostPrice).HasPrecision(18, 2);
             builder.Entity<BookingConsumption>().Property(bc => bc.UnitPrice).HasPrecision(18, 2);
+
+            builder.Entity<CashClosure>(entity => {
+                entity.Property(p => p.InitialCash).HasPrecision(18, 2);
+                entity.Property(p => p.ExpectedCash).HasPrecision(18, 2);
+                entity.Property(p => p.ActualCash).HasPrecision(18, 2);
+                entity.Property(p => p.TotalCashSales).HasPrecision(18, 2);
+                entity.Property(p => p.TotalTransferSales).HasPrecision(18, 2);
+                entity.Property(p => p.TotalCardSales).HasPrecision(18, 2);
+                entity.Property(p => p.TotalOtherSales).HasPrecision(18, 2);
+            });
 
             // No forzamos UTC de forma global para permitir que las reservas se guarden y lean como 'Wall Clock Time' (Hora Local)
         }

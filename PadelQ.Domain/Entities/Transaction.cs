@@ -32,6 +32,7 @@ namespace PadelQ.Domain.Entities
         [ForeignKey("PaymentMethodId")]
         public virtual PaymentMethod? PaymentMethod { get; set; }
 
+        public string? ProcessedBy { get; set; }
     }
 
     public enum TransactionType
