@@ -14,7 +14,8 @@ import {
     isSameMonth,
     addMonths,
     subMonths,
-    addMinutes
+    addMinutes,
+    areIntervalsOverlapping
 } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import {
@@ -38,11 +39,13 @@ import {
     Mail,
     Box,
     Layout,
-    MessageCircle,
+
     AlertCircle,
     Package,
     RefreshCw,
-    Printer
+    Printer,
+    Minus,
+    Layers
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -81,6 +84,7 @@ interface SpaceBooking {
     guestPhone?: string;
     guestEmail?: string;
     guestAddress?: string;
+    guestDni?: string;
     status: number;
     price: number;
     depositPaid: number;
@@ -98,6 +102,7 @@ interface Booking {
     guestName?: string;
     guestPhone?: string;
     guestEmail?: string;
+    guestDni?: string;
     status: number;
     price: number;
     depositPaid: number;
@@ -159,8 +164,17 @@ const BookingsPage = () => {
     const [userMembership, setUserMembership] = useState<{ name: string, discount: number } | null>(null);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
+    const [isMixedPayment, setIsMixedPayment] = useState(false);
+    const [isMixedPaymentModalOpen, setIsMixedPaymentModalOpen] = useState(false);
+    const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>('');
+    const [firstMethodAmount, setFirstMethodAmount] = useState<number>(0);
     const [bookingConsumptions, setBookingConsumptions] = useState<any[]>([]);
+    const [relatedBookings, setRelatedBookings] = useState<any[]>([]);
+    const [selectedRelatedBookingIds, setSelectedRelatedBookingIds] = useState<string[]>([]);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
+    const [isAddingConsumption, setIsAddingConsumption] = useState<number | null>(null);
+    const [productForObservation, setProductForObservation] = useState<any | null>(null);
+    const [tempObservation, setTempObservation] = useState('');
     const [allProducts, setAllProducts] = useState<any[]>([]);
     const [barcodeInput, setBarcodeInput] = useState('');
     const [productSearch, setProductSearch] = useState('');
@@ -172,12 +186,21 @@ const BookingsPage = () => {
         website: ''
     });
     const [isClosingCourt, setIsClosingCourt] = useState(false);
-    const [rentFractionsCount, setRentFractionsCount] = useState(1);
-    const [selectedRentFractions, setSelectedRentFractions] = useState<number[]>([]);
-    const [selectedConsumptionsIds, setSelectedConsumptionsIds] = useState<string[]>([]);
+    const [paymentSuccessInfo, setPaymentSuccessInfo] = useState<{
+        isOpen: boolean;
+        amount: number;
+        remaining: number;
+        isPartial: boolean;
+    } | null>(null);
+    const [courtFractions, setCourtFractions] = useState<Record<string, number>>({});
+    const [selectedCourtParts, setSelectedCourtParts] = useState<Record<string, number[]>>({});
+    const [consumptionFractions, setConsumptionFractions] = useState<Record<string, number>>({});
+    const [selectedConsumptionParts, setSelectedConsumptionParts] = useState<Record<string, number[]>>({});
+    const [globalFractionsCount, setGlobalFractionsCount] = useState(1);
+    const [selectedGlobalFractions, setSelectedGlobalFractions] = useState<number[]>([0]);
     const [paymentObservation, setPaymentObservation] = useState('');
     // Form states
-    const [bookingType, setBookingType] = useState<'existing' | 'guest'>('existing');
+    const [bookingType, setBookingType] = useState<'existing' | 'guest'>('guest');
     const [selectedClientId, setSelectedClientId] = useState('');
     const [guestName, setGuestName] = useState('');
     const [guestPhone, setGuestPhone] = useState('');
@@ -189,6 +212,20 @@ const BookingsPage = () => {
     const [searchClient, setSearchClient] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isRecurring, setIsRecurring] = useState(false);
+    const [multiCourtSuggestion, setMultiCourtSuggestion] = useState<{
+        isOpen: boolean;
+        startTime: string;
+        duration: number;
+        bookingType: 'existing' | 'guest';
+        clientId: string;
+        guestName: string;
+        guestPhone: string;
+        guestEmail: string;
+        guestDni: string;
+        isRecurring: boolean;
+        endDate: string | null;
+        originalCourtId: number;
+    } | null>(null);
 
     const canCancel = (booking: any) => {
         if (!booking) return false;
@@ -445,6 +482,12 @@ const BookingsPage = () => {
                 setSelectedBooking(existing);
                 setSelectedSpaceBooking(null);
                 setIsDetailsModalOpen(true);
+                // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
+                setSelectedCourtParts({ [existing.id]: [0] });
+                setCourtFractions({ [existing.id]: 1 });
+                setSelectedConsumptionParts({});
+                setConsumptionFractions({});
+                setSelectedRelatedBookingIds([]);
 
                 if (existing.userId) {
                     try {
@@ -464,13 +507,46 @@ const BookingsPage = () => {
                     setUserMembership(null);
                 }
 
-                // Fetch consumptions
+                // BUSCAR OTRAS RESERVAS DEL MISMO CLIENTE HOY (COBRO CONJUNTO)
+                const otherB = (bookings || []).filter(b => 
+                    b.id !== existing.id && 
+                    b.status !== 2 &&
+                    ((b.userId && b.userId === existing.userId) || 
+                     (b.guestDni && b.guestDni === existing.guestDni) ||
+                     (b.guestName && b.guestName === existing.guestName))
+                );
+                const otherSB = (spaceBookings || []).filter(sb => 
+                    sb.id !== existing.id && 
+                    sb.status !== 2 &&
+                    ((sb.userId && sb.userId === existing.userId) || 
+                     (sb.guestDni && sb.guestDni === existing.guestDni) ||
+                     (sb.guestName && sb.guestName === existing.guestName))
+                );
+
+                const allR = [...otherB, ...otherSB];
+                setRelatedBookings(allR);
+                if (allR.length > 0) {
+                    setSelectedRelatedBookingIds(allR.map(x => x.id));
+                    setCourtFractions({ ...courtFractions, ['consolidated-rent']: 1 });
+                    setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [0] });
+                }
+
+                // Fetch consumptions for all related bookings
                 try {
-                    const consRes = await api.get(`/api/consumptions/booking/${existing.id}`, config);
-                    setBookingConsumptions(consRes.data || []);
+                    const mainConsRes = await api.get(`/api/consumptions/booking/${existing.id}`, config);
+                    const mainCons = (mainConsRes.data || []).map((c: any) => ({ ...c, sourceName: existing.court.name }));
+                    
+                    let allCons = [...mainCons];
+                    for (const rb of allR) {
+                        const rbConsRes = await api.get(`/api/consumptions/booking/${rb.id}`, config);
+                        const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (rb as any).court?.name || (rb as any).space?.name }));
+                        allCons = [...allCons, ...rbCons];
+                    }
+                    setBookingConsumptions(allCons);
                 } catch (e) {
                     setBookingConsumptions([]);
                 }
+
                 return;
             }
         } else {
@@ -479,7 +555,52 @@ const BookingsPage = () => {
                 setSelectedSpaceBooking(existing);
                 setSelectedBooking(null);
                 setIsDetailsModalOpen(true);
+                // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
+                setSelectedCourtParts({ [existing.id]: [0] });
+                setCourtFractions({ [existing.id]: 1 });
+                setSelectedConsumptionParts({});
+                setConsumptionFractions({});
+                setSelectedRelatedBookingIds([]);
                 setUserMembership(null);
+
+                // BUSCAR OTRAS RESERVAS DEL MISMO CLIENTE HOY (COBRO CONJUNTO)
+                const otherB = (bookings || []).filter(b => 
+                    b.status !== 2 &&
+                    ((b.userId && b.userId === existing.userId) || 
+                     (b.guestDni && b.guestDni === existing.guestDni) ||
+                     (b.guestName && b.guestName === existing.guestName))
+                );
+                const otherSB = (spaceBookings || []).filter(sb => 
+                    sb.id !== existing.id && 
+                    sb.status !== 2 &&
+                    ((sb.userId && sb.userId === existing.userId) || 
+                     (sb.guestDni && sb.guestDni === existing.guestDni) ||
+                     (sb.guestName && sb.guestName === existing.guestName))
+                );
+
+                const allR = [...otherB, ...otherSB];
+                setRelatedBookings(allR);
+                if (allR.length > 0) {
+                    setSelectedRelatedBookingIds(allR.map(x => x.id));
+                    setCourtFractions({ ...courtFractions, ['consolidated-rent']: 1 });
+                    setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [0] });
+                }
+
+                // Fetch consumptions for all related bookings
+                try {
+                    const mainConsRes = await api.get(`/api/consumptions/booking/${existing.id}`, config);
+                    const mainCons = (mainConsRes.data || []).map((c: any) => ({ ...c, sourceName: existing.space.name }));
+                    
+                    let allCons = [...mainCons];
+                    for (const rb of allR) {
+                        const rbConsRes = await api.get(`/api/consumptions/booking/${rb.id}`, config);
+                        const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (rb as any).court?.name || (rb as any).space?.name }));
+                        allCons = [...allCons, ...rbCons];
+                    }
+                    setBookingConsumptions(allCons);
+                } catch (e) {
+                    setBookingConsumptions([]);
+                }
                 return;
             }
         }
@@ -542,8 +663,8 @@ const BookingsPage = () => {
         e.preventDefault();
         if (!selectedTimeSlot) return;
 
-        if (bookingType === 'guest' && (!guestName || !guestDni || !guestPhone)) {
-            alert('Nombre, DNI y Teléfono son obligatorios para clientes particulares');
+        if (bookingType === 'guest' && !guestName) {
+            alert('El nombre es obligatorio para clientes particulares');
             return;
         }
 
@@ -573,10 +694,10 @@ const BookingsPage = () => {
             if (selectedTimeSlot.resource.type === 'court') {
                 const payload = {
                     courtId: selectedTimeSlot.resource.data.id,
-                    guestName: bookingType === 'guest' ? guestName : null,
-                    guestPhone: bookingType === 'guest' ? guestPhone : null,
-                    guestEmail: bookingType === 'guest' ? guestEmail : null,
-                    dni: bookingType === 'guest' ? guestDni : null,
+                    guestName: bookingType === 'guest' ? (guestName || null) : null,
+                    guestPhone: bookingType === 'guest' ? (guestPhone || null) : null,
+                    guestEmail: bookingType === 'guest' ? (guestEmail || null) : null,
+                    dni: bookingType === 'guest' ? (guestDni || null) : null,
                     userId: bookingType === 'existing' ? selectedClientId : null,
                     startTime: startTimeStr,
                     durationMinutes: duration,
@@ -589,10 +710,10 @@ const BookingsPage = () => {
             } else {
                 const spaceBookingData = {
                     spaceId: (selectedTimeSlot.resource.data as Space).id,
-                    guestName: bookingType === 'guest' ? guestName : null,
-                    guestPhone: guestPhone,
-                    guestEmail: guestEmail,
-                    dni: guestDni,
+                    guestName: bookingType === 'guest' ? (guestName || null) : null,
+                    guestPhone: bookingType === 'guest' ? (guestPhone || null) : null,
+                    guestEmail: bookingType === 'guest' ? (guestEmail || null) : null,
+                    dni: bookingType === 'guest' ? (guestDni || null) : null,
                     userId: bookingType === 'existing' ? selectedClientId : null,
                     startTime: startTimeStr,
                     endTime: endTimeStr,
@@ -604,22 +725,34 @@ const BookingsPage = () => {
                 await api.post('/api/spacebookings/admin-create', spaceBookingData, config);
             }
             setIsModalOpen(false);
+            
+            // Guardar info para sugerencia de multi-cancha (solo si es cancha y no es recurrente por ahora para evitar complejidad)
+            const isCourt = selectedTimeSlot.resource.type === 'court';
+            const suggestionData = (isCourt && !isRecurring) ? {
+                isOpen: true,
+                startTime: startTimeStr,
+                duration: duration,
+                bookingType,
+                clientId: selectedClientId,
+                guestName,
+                guestPhone,
+                guestEmail,
+                guestDni,
+                isRecurring: false,
+                endDate: null,
+                originalCourtId: selectedTimeSlot.resource.data.id
+            } : null;
 
-            // Preguntar si desea notificar inmediatamente
-            const shouldNotify = window.confirm("¡Reserva creada con éxito! ¿Deseas enviar el comprobante por WhatsApp ahora?");
-            if (shouldNotify) {
-                handleSendWhatsApp({
-                    user: existingUser,
-                    guestName: guestName,
-                    guestPhone: guestPhone,
-                    startTime: startTimeStr,
-                    court: selectedTimeSlot.resource.data,
-                    spaceId: selectedTimeSlot.resource.type === 'space' ? (selectedTimeSlot.resource.data as Space).id : null
-                });
-            }
-
+            // Resetear formulario y recargar datos
             resetForm();
             fetchData();
+            
+            if (suggestionData) {
+                setMultiCourtSuggestion(suggestionData as any);
+            } else {
+                alert("¡Reserva creada con éxito!");
+            }
+
         } catch (err: any) {
             console.error("Error creating booking:", err);
             const errorMsg = err.response?.data?.message || err.response?.data || "Error al crear la reserva";
@@ -684,49 +817,7 @@ const BookingsPage = () => {
         }
     };
 
-    const handleSendWhatsApp = (booking: any) => {
-        const rawPhone = booking.user?.phoneNumber || booking.guestPhone;
-        const name = booking.user?.fullName || booking.guestName || "Cliente";
 
-        if (!rawPhone) {
-            alert("El cliente no tiene un teléfono registrado.");
-            return;
-        }
-
-        // 1. Limpieza extrema del número (solo dígitos)
-        let cleanPhone = rawPhone.replace(/\D/g, '');
-
-        // 2. Lógica específica para Argentina (país -03:00)
-        // Quitar '0' inicial si lo tiene (ej: 0299 -> 299)
-        if (cleanPhone.startsWith('0')) {
-            cleanPhone = cleanPhone.substring(1);
-        }
-        // Quitar el '15' si está después del código de área o al inicio
-        // Si el número tiene 12 dígitos y empieza con 29915... -> 299...
-        if (cleanPhone.length > 10 && cleanPhone.includes('15')) {
-            cleanPhone = cleanPhone.replace('15', '');
-        }
-
-        // 3. Asegurar formato Internacional (54 + 9 + Área + Número)
-        // Ejemplo: 2994012345 (10 dígitos) -> 5492994012345
-        if (cleanPhone.length === 10) {
-            cleanPhone = '549' + cleanPhone;
-        }
-        // Si ya tiene el 54 pero le falta el 9 (ej: 54299... -> 549299...)
-        else if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length === 12) {
-            cleanPhone = '549' + cleanPhone.substring(2);
-        }
-
-        const dateStr = format(parseSafeDate(booking.startTime), 'EEEE dd/MM', { locale: es });
-        const timeStr = format(parseSafeDate(booking.startTime), 'HH:mm');
-        const courtName = booking.court?.name || (booking.spaceId ? 'Espacio Común' : 'Cancha');
-
-        const message = `Hola ${name}, te recordamos tu turno en PadelQ para el día ${dateStr} a las ${timeStr} en ${courtName}. ¡Te esperamos!`;
-        const url = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
-
-        // Usamos un nombre de ventana fijo para REUTILIZAR la misma pestaña
-        window.open(url, 'PadelQ_WhatsApp_Session');
-    };
 
     const resetForm = () => {
         setSearchClient('');
@@ -748,12 +839,19 @@ const BookingsPage = () => {
         setIsConfirmingSeriesCancel(false);
         setIsConfirmingCancel(false);
         setIsClosingCourt(false);
-        setRentFractionsCount(1);
-        setSelectedRentFractions([]);
-        setSelectedConsumptionsIds([]);
+        setGlobalFractionsCount(1);
+        setSelectedGlobalFractions([0]);
         setBarcodeInput('');
         setProductSearch('');
         setPaymentObservation('');
+        setIsMixedPayment(false);
+        setIsMixedPaymentModalOpen(false);
+        setSecondPaymentMethod('');
+        setFirstMethodAmount(0);
+        setRelatedBookings([]);
+        setSelectedRelatedBookingIds([]);
+        setGlobalFractionsCount(1);
+        setSelectedGlobalFractions([0]);
     };
 
     const handleConfirmPayment = async () => {
@@ -765,20 +863,99 @@ const BookingsPage = () => {
             return;
         }
 
-        const finalPrice = booking.price;
-        const rentRemaining = Math.max(0, finalPrice - booking.depositPaid);
-        const fractionAmount = rentRemaining / rentFractionsCount;
+        // --- CÁLCULO DE PAGO GRANULAR ---
+        let totalRentPayment = 0;
+        let totalConsumptionsPayment = 0;
+        const groupPayments: { productId: number, amount: number, desc: string, ids: string[] }[] = [];
+        const relatedBookingsPayments: { id: string, amount: number, desc: string }[] = [];
 
-        const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+        // --- CÁLCULO DE PAGO DE RENTA (CONSOLIDADA O INDIVIDUAL) ---
+        const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
+        const isConsolidated = selectedRelatedBookingIds.length > 0;
+        
+        if (isConsolidated) {
+            const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
+            const fractions = courtFractions['consolidated-rent'] || 1;
+            const selectedParts = selectedCourtParts['consolidated-rent'] || [];
+            
+            if (totalConsolidatedDebt > 0 && selectedParts.length > 0) {
+                const totalPaidForRent = (totalConsolidatedDebt / fractions) * selectedParts.length;
+                totalRentPayment = totalPaidForRent;
 
-        const totalRentPayment = selectedRentFractions.length * fractionAmount;
-        const selectedConsObjs = unpaidConsumptions.filter(c => selectedConsumptionsIds.includes(c.id));
-        const totalConsumptionsPayment = selectedConsObjs.reduce((acc, c) => acc + c.totalPrice, 0);
+                // Distribuir el pago proporcionalmente entre las reservas involucradas
+                selectedRentals.forEach(r => {
+                    const rDebt = (r.price || 0) - (r.depositPaid || 0);
+                    if (rDebt > 0) {
+                        const rRatio = rDebt / totalConsolidatedDebt;
+                        const rAmount = totalPaidForRent * rRatio;
+                        relatedBookingsPayments.push({
+                            id: r.id,
+                            amount: rAmount,
+                            desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(r as any).court?.name || (r as any).space?.name} (${format(parseSafeDate(r.startTime), 'HH:mm')}-${format(parseSafeDate(r.endTime), 'HH:mm')})`
+                        });
+                    }
+                });
+            }
+        } else {
+            // Pago Individual (solo la principal)
+            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+            const mainFractions = courtFractions[booking.id] || 1;
+            const mainSelectedParts = selectedCourtParts[booking.id] || [];
+            if (mainRentDebt > 0 && mainSelectedParts.length > 0) {
+                totalRentPayment = (mainRentDebt / mainFractions) * mainSelectedParts.length;
+                relatedBookingsPayments.push({
+                    id: booking.id,
+                    amount: totalRentPayment,
+                    desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(booking as any).court?.name || (booking as any).space?.name} (${format(parseSafeDate(booking.startTime), 'HH:mm')}-${format(parseSafeDate(booking.endTime), 'HH:mm')})`
+                });
+            }
+        }
 
-        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
+        // 3. Pago de Consumiciones (Agrupadas por Producto)
+        const unpaidConsumptions = (bookingConsumptions || []).filter(c => !c.isPaid);
+        const grouped = unpaidConsumptions.reduce((acc, c) => {
+            const pid = c.productId;
+            if (!acc[pid]) {
+                acc[pid] = {
+                    productId: pid,
+                    productName: c.product?.name || "Producto",
+                    totalPrice: 0,
+                    totalDeposit: 0,
+                    quantity: 0,
+                    records: []
+                };
+            }
+            acc[pid].totalPrice += (c.totalPrice || 0);
+            acc[pid].totalDeposit += (c.depositPaid || 0);
+            acc[pid].quantity += (c.quantity || 1);
+            acc[pid].records.push(c);
+            return acc;
+        }, {} as Record<number, any>);
+
+        Object.values(grouped).forEach((g: any) => {
+            const groupKey = `group-${g.productId}`;
+            const partsCount = consumptionFractions[groupKey] || 1;
+            const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
+            
+            if (selectedPartsCount > 0) {
+                const remainingPrice = g.totalPrice - g.totalDeposit;
+                const partPrice = remainingPrice / partsCount;
+                const amount = partPrice * selectedPartsCount;
+                totalConsumptionsPayment += amount;
+                
+                groupPayments.push({ 
+                    productId: g.productId, 
+                    amount, 
+                    desc: `${g.quantity}x ${g.productName}${partsCount > 1 ? ` (Parte ${selectedPartsCount}/${partsCount})` : ''}`,
+                    ids: g.records.map((r: any) => r.id)
+                });
+            }
+        });
+
+        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment + relatedBookingsPayments.reduce((acc, p) => acc + p.amount, 0);
 
         if (currentTransactionTotal <= 0) {
-            alert("Seleccione al menos una parte de cancha o consumición para pagar.");
+            alert("Seleccione al menos una parte de algún ítem para cobrar.");
             return;
         }
 
@@ -802,67 +979,177 @@ const BookingsPage = () => {
 
             const startTimeFormatted = format(parseSafeDate(booking.startTime), 'HH:mm');
             const endTimeFormatted = format(parseSafeDate(booking.endTime), 'HH:mm');
-            const schedule = `${startTimeFormatted}-${endTimeFormatted}`;
 
             const method = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
+            const method2 = isMixedPayment ? paymentMethods.find(m => m.id.toString() === secondPaymentMethod) : null;
 
-            // Generar transacción para la cancha
-            if (totalRentPayment > 0) {
-                let rentDesc = `${isSpace ? 'Espacio' : 'Cancha'}: ${isSpace ? (booking as SpaceBooking).space.name : (booking as Booking).court.name} (${schedule})`;
-                if (rentFractionsCount > 1) rentDesc += ` - Pago Parte ${selectedRentFractions.length} de ${rentFractionsCount}`;
+            if (isMixedPayment && (!method2 || firstMethodAmount <= 0 || firstMethodAmount >= currentTransactionTotal)) {
+                alert("Por favor configure correctamente el pago mixto (monto y segundo medio de pago)");
+                setLoading(false);
+                return;
+            }
 
-                if (method?.name === "BONIFICADO / SIN COSTO") rentDesc = `Bonificación: ` + rentDesc;
-                else rentDesc += ` (${method?.name})`;
+            // Función auxiliar para registrar pagos (puede ser uno o dos)
+            const registerPayment = async (amount: number, methodId: string, descriptionPrefix: string) => {
+                const m = paymentMethods.find(p => p.id.toString() === methodId);
+                let desc = descriptionPrefix;
+                if (m?.name === "BONIFICADO / SIN COSTO") desc = `Bonificación: ` + desc;
+                else desc += ` (${m?.name})`;
+                if (paymentObservation) desc += ` - Obs: ${paymentObservation}`;
 
-                if (paymentObservation) rentDesc += ` - Obs: ${paymentObservation}`;
+                await api.post(`/api/transaction/payment?amount=${amount}&description=${encodeURIComponent(desc)}&paymentMethodId=${methodId}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
+            };
 
-                await api.post(`/api/transaction/payment?amount=${totalRentPayment}&description=${encodeURIComponent(rentDesc)}&paymentMethodId=${selectedPaymentMethod}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
-
-                if (isSpace) {
-                    await api.post(`/api/spacebookings/${booking.id}/partial-pay?amount=${totalRentPayment}`, {}, config);
+            // 1. Pagar Rentas (Individuales o Consolidadas)
+            for (const rp of relatedBookingsPayments) {
+                if (!isMixedPayment) {
+                    await registerPayment(rp.amount, selectedPaymentMethod, rp.desc);
                 } else {
-                    await api.post(`/api/bookings/${booking.id}/partial-pay?amount=${totalRentPayment}`, {}, config);
+                    const txRatio = rp.amount / currentTransactionTotal;
+                    const p1 = firstMethodAmount * txRatio;
+                    const p2 = rp.amount - p1;
+                    await registerPayment(p1, selectedPaymentMethod, rp.desc + " (Parte Mixta 1)");
+                    await registerPayment(p2, secondPaymentMethod, rp.desc + " (Parte Mixta 2)");
+                }
+
+                const rb = [booking, ...relatedBookings].find(x => x.id === rp.id);
+                const rbIsSpace = rb && (rb.spaceId || rb.SpaceId || (rb as any).space);
+                if (rbIsSpace) await api.post(`/api/spacebookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
+                else await api.post(`/api/bookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
+            }
+
+            // 3. Pagar Consumiciones Agrupadas
+            for (const gp of groupPayments) {
+                if (!isMixedPayment) {
+                    await registerPayment(gp.amount, selectedPaymentMethod, gp.desc);
+                } else {
+                    const txRatio = gp.amount / currentTransactionTotal;
+                    const p1 = firstMethodAmount * txRatio;
+                    const p2 = gp.amount - p1;
+                    await registerPayment(p1, selectedPaymentMethod, gp.desc + " (Parte Mixta 1)");
+                    await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)");
+                }
+
+                // Distribuir el pago entre los registros individuales
+                let remainingPaymentToDistribute = gp.amount;
+                const records = grouped[gp.productId].records.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+                for (const record of records) {
+                    if (remainingPaymentToDistribute <= 0) break;
+                    const recordRemaining = record.totalPrice - (record.depositPaid || 0);
+                    if (recordRemaining <= 0) continue;
+
+                    const paymentForThisRecord = Math.min(remainingPaymentToDistribute, recordRemaining);
+                    if (paymentForThisRecord >= recordRemaining) {
+                        await api.put(`/api/consumptions/${record.id}/pay`, {}, config);
+                    } else {
+                        await api.post(`/api/consumptions/${record.id}/partial-pay?amount=${paymentForThisRecord}`, {}, config);
+                    }
+                    remainingPaymentToDistribute -= paymentForThisRecord;
                 }
             }
 
-            // Generar transacciones para consumiciones seleccionadas
-            for (const c of selectedConsObjs) {
-                let consDesc = `${c.quantity}x ${c.product.name}`;
-                if (c.notes) consDesc += ` (Obs: ${c.notes})`;
-                if (method?.name === "BONIFICADO / SIN COSTO") consDesc = `Bonificación: ` + consDesc;
-                else consDesc += ` (${method?.name})`;
-                if (paymentObservation) consDesc += ` - Obs: ${paymentObservation}`;
+                // Actualizar todas las reservas involucradas (Principal + Relacionadas seleccionadas)
+                const bookingsToReload = [booking.id, ...selectedRelatedBookingIds];
+                const updatedBookingsData: any[] = [];
+                
+                for (const idToReload of bookingsToReload) {
+                    const isS = [booking, ...relatedBookings].find(x => x.id === idToReload)?.spaceId || [booking, ...relatedBookings].find(x => x.id === idToReload)?.SpaceId;
+                    const res = await api.get(isS ? `/api/spacebookings/${idToReload}` : `/api/bookings/${idToReload}`, config);
+                    updatedBookingsData.push(res.data);
+                }
 
-                await api.post(`/api/transaction/payment?amount=${c.totalPrice}&description=${encodeURIComponent(consDesc)}&paymentMethodId=${selectedPaymentMethod}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
+                const updatedMain = updatedBookingsData.find(x => x.id === booking.id);
+                const updatedRelated = updatedBookingsData.filter(x => x.id !== booking.id);
 
-                await api.put(`/api/consumptions/${c.id}/pay`, {}, config);
+                if (isSpace) setSelectedSpaceBooking(updatedMain);
+                else setSelectedBooking(updatedMain);
+                
+                // Actualizar la lista de relatedBookings con los datos nuevos
+                setRelatedBookings(prev => prev.map(rb => {
+                    const updated = updatedRelated.find(u => u.id === rb.id);
+                    return updated || rb;
+                }));
+
+                const rentRemainingFinal = updatedBookingsData.reduce((sum, b) => sum + ((b.price || 0) - (b.depositPaid || 0)), 0);
+            
+            // Recargar consumos para todos los seleccionados
+            let finalCons: any[] = [];
+            for (const bId of bookingsToReload) {
+                const bRef = [booking, ...relatedBookings].find(x => x.id === bId);
+                const rbConsRes = await api.get(`/api/consumptions/booking/${bId}`, config);
+                const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (bRef as any).court?.name || (bRef as any).space?.name || (bRef as any).courtName }));
+                finalCons = [...finalCons, ...rbCons];
             }
+            
+            const consRemainingFinal = finalCons.filter((c: any) => !c.isPaid).reduce((acc: number, c: any) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
 
-            // Verificar si el turno ya está 100% pagado
-            const checkRes = await api.get(`/api/${isSpace ? 'spacebookings' : 'bookings'}/${booking.id}`, config);
-            const updatedBooking = checkRes.data;
-            const newUnpaidConsumptions = (await api.get(`/api/consumptions/booking/${booking.id}`, config)).data.filter((x: any) => !x.isPaid);
+            const totalRemaining = rentRemainingFinal + consRemainingFinal;
 
-            if (updatedBooking.depositPaid >= updatedBooking.price && newUnpaidConsumptions.length === 0) {
-                await api.post(`/api/${isSpace ? 'spacebookings' : 'bookings'}/${booking.id}/pay`, {}, config);
-                setIsDetailsModalOpen(false);
+            if (totalRemaining <= 0) {
+                setPaymentSuccessInfo({
+                    isOpen: true,
+                    amount: currentTransactionTotal,
+                    remaining: 0,
+                    isPartial: false
+                });
+
                 resetForm();
                 fetchData();
-                alert("Pago final completado con éxito");
             } else {
-                if (isSpace) setSelectedSpaceBooking(updatedBooking);
-                else setSelectedBooking(updatedBooking);
-                setBookingConsumptions((await api.get(`/api/consumptions/booking/${booking.id}`, config)).data);
-                setSelectedRentFractions([]);
-                setSelectedConsumptionsIds([]);
-                setPaymentObservation('');
-                fetchData();
-                alert(`Pago registrado correctamente.\nQueda saldo pendiente.`);
-            }
+                if (isSpace) setSelectedSpaceBooking(updatedMain);
+                else setSelectedBooking(updatedMain);
+                setBookingConsumptions(finalCons);
+                
+                // Actualizar fracciones restantes
+                const newCourtFractions = { ...courtFractions };
+                const newSelectedCourtParts = { ...selectedCourtParts };
+                
+                if (selectedRelatedBookingIds.length > 0) {
+                    const cf = courtFractions['consolidated-rent'] || 1;
+                    const cs = (selectedCourtParts['consolidated-rent'] || []).length;
+                    if (cs > 0) {
+                        newCourtFractions['consolidated-rent'] = Math.max(1, cf - cs);
+                        newSelectedCourtParts['consolidated-rent'] = [];
+                    }
+                } else {
+                    const mainF = courtFractions[booking.id] || 1;
+                    const mainS = (selectedCourtParts[booking.id] || []).length;
+                    if (mainS > 0) {
+                        newCourtFractions[booking.id] = Math.max(1, mainF - mainS);
+                        newSelectedCourtParts[booking.id] = [];
+                    }
+                }
 
-            fetchData();
+                // Para consumiciones
+                const newConsFractions = { ...consumptionFractions };
+                const newSelectedConsParts = { ...selectedConsumptionParts };
+                groupPayments.forEach(gp => {
+                    const groupKey = `group-${gp.productId}`;
+                    const cf = consumptionFractions[groupKey] || 1;
+                    const cs = (selectedConsumptionParts[groupKey] || []).length;
+                    if (cs > 0) {
+                        newConsFractions[groupKey] = Math.max(1, cf - cs);
+                        newSelectedConsParts[groupKey] = [];
+                    }
+                });
+
+                setCourtFractions(newCourtFractions);
+                setSelectedCourtParts(newSelectedCourtParts);
+                setConsumptionFractions(newConsFractions);
+                setSelectedConsumptionParts(newSelectedConsParts);
+
+                setPaymentObservation('');
+                
+                setPaymentSuccessInfo({
+                    isOpen: true,
+                    amount: currentTransactionTotal,
+                    remaining: totalRemaining,
+                    isPartial: true
+                });
+            }
         } catch (err: any) {
-            console.error("Error al procesar pago:", err);
+            console.error("Error al confirmar pago", err);
             alert("Error al procesar el pago: " + (err.response?.data || err.message));
         } finally {
             setLoading(false);
@@ -1576,17 +1863,17 @@ const BookingsPage = () => {
                             <div className="grid grid-cols-2 gap-4 p-2 bg-zinc-100 rounded-[24px]">
                                 <button
                                     type="button"
-                                    onClick={() => setBookingType('existing')}
-                                    className={`py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'existing' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
-                                >
-                                    <Users className="w-4 h-4 inline-block mr-2" /> CLIENTE APP
-                                </button>
-                                <button
-                                    type="button"
                                     onClick={() => setBookingType('guest')}
                                     className={`py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'guest' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
                                 >
                                     <User className="w-4 h-4 inline-block mr-2" /> PARTICULAR
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBookingType('existing')}
+                                    className={`py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'existing' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                >
+                                    <Users className="w-4 h-4 inline-block mr-2" /> CLIENTE APP
                                 </button>
                             </div>
 
@@ -1644,7 +1931,7 @@ const BookingsPage = () => {
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nombre Completo *</label>
+                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nombre Completo (Obligatorio)</label>
                                             <input
                                                 type="text"
                                                 value={guestName}
@@ -1655,7 +1942,7 @@ const BookingsPage = () => {
                                             />
                                         </div>
                                         <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">DNI (Único) *</label>
+                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">DNI (Opcional)</label>
                                             <input
                                                 type="text"
                                                 value={guestDni}
@@ -1663,7 +1950,6 @@ const BookingsPage = () => {
                                                 className={`w-full px-8 py-5 bg-zinc-50 border rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300 transition-all ${existingUser ? 'border-indigo-300 ring-4 ring-indigo-500/5' : 'border-zinc-100'
                                                     }`}
                                                 placeholder="Solo números"
-                                                required
                                             />
                                             {existingUser && (
                                                 <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl animate-in fade-in slide-in-from-top-1">
@@ -1680,14 +1966,13 @@ const BookingsPage = () => {
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Teléfono *</label>
+                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Teléfono (Opcional)</label>
                                             <input
                                                 type="tel"
                                                 value={guestPhone}
                                                 onChange={(e) => setGuestPhone(e.target.value)}
                                                 className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
                                                 placeholder="Ej: 381..."
-                                                required
                                             />
                                         </div>
                                         <div className="space-y-4">
@@ -1959,11 +2244,12 @@ const BookingsPage = () => {
                                                                 <p className="text-[10px] font-bold text-zinc-400 mt-0.5">
                                                                     <span className="text-black">{c.quantity}</span> UNIDADES x ${c.unitPrice.toLocaleString()}
                                                                 </p>
-                                                                {c.notes && (
-                                                                    <p className="text-[9px] font-bold text-emerald-500 italic mt-0.5 max-w-[200px] truncate" title={c.notes}>
-                                                                        Obs: {c.notes}
+                                                                {c.notes || c.sourceName ? (
+                                                                    <p className="text-[9px] font-bold text-emerald-500 italic mt-0.5 max-w-[200px] truncate" title={`${c.sourceName ? `[${c.sourceName}] ` : ''}${c.notes || ''}`}>
+                                                                        {c.sourceName && <span className="bg-emerald-500 text-white px-1 rounded-sm not-italic mr-1">[{c.sourceName}]</span>}
+                                                                        {c.notes ? `Obs: ${c.notes}` : ''}
                                                                     </p>
-                                                                )}
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-6">
@@ -2002,181 +2288,337 @@ const BookingsPage = () => {
                                     </div>
                                 </div>
                             </div>
-
+                            
                             {/* Middle Column: Selections */}
-                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white border-r border-zinc-100">
-                                {(() => {
-                                    const booking = selectedBooking || selectedSpaceBooking;
-                                    if (!booking) return null;
+                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white border-r border-zinc-100 space-y-8">
+                                <div>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Items en esta cuenta</span>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {(() => {
+                                            const booking = selectedBooking || selectedSpaceBooking;
+                                            if (!booking) return null;
 
-                                    let basePriceForDisplay = booking.price;
-                                    if (selectedBooking) {
-                                        const court = courts.find(c => c.id === selectedBooking.courtId);
-                                        if (court) {
-                                            const start = parseISO(selectedBooking.startTime);
-                                            const end = parseISO(selectedBooking.endTime);
-                                            const durHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                            basePriceForDisplay = durHours * court.pricePerHour;
-                                        }
-                                    } else if (selectedSpaceBooking) {
-                                        const space = spaces.find(s => s.id === selectedSpaceBooking.spaceId);
-                                        if (space) basePriceForDisplay = space.pricePerSlot;
-                                    }
-                                    if (basePriceForDisplay < booking.price) basePriceForDisplay = booking.price;
+                                            const rentRemaining = Math.max(0, (booking.price || 0) - (booking.depositPaid || 0));
+                                            const unpaidConsumptions = (bookingConsumptions || []).filter(c => !c.isPaid);
 
-                                    const rentRemaining = Math.max(0, basePriceForDisplay - booking.depositPaid);
-                                    const fractionAmount = rentRemaining / rentFractionsCount;
-                                    const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+                                            // Agrupar consumos
+                                            const grouped = unpaidConsumptions.reduce((acc, c) => {
+                                                const pid = c.productId;
+                                                if (!acc[pid]) {
+                                                    acc[pid] = {
+                                                        productId: pid,
+                                                        productName: c.product?.name || "Producto",
+                                                        totalPrice: 0,
+                                                        totalDeposit: 0,
+                                                        quantity: 0
+                                                    };
+                                                }
+                                                acc[pid].totalPrice += (c.totalPrice || 0);
+                                                acc[pid].totalDeposit += (c.depositPaid || 0);
+                                                acc[pid].quantity += (c.quantity || 1);
+                                                return acc;
+                                            }, {} as Record<number, any>);
 
-                                    return (
-                                        <div className="space-y-6">
-                                            {/* Items Selection */}
-                                            {rentRemaining > 0 && (
-                                                <div className="bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 space-y-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Dividir Cancha</span>
-                                                        <div className="flex items-center gap-4">
-                                                            <button onClick={() => {
-                                                                setRentFractionsCount(Math.max(1, rentFractionsCount - 1));
-                                                                setSelectedRentFractions([]);
-                                                            }} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">-</button>
-                                                            <span className="font-black italic text-sm">{rentFractionsCount} partes</span>
-                                                            <button onClick={() => {
-                                                                setRentFractionsCount(rentFractionsCount + 1);
-                                                                setSelectedRentFractions([]);
-                                                            }} className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center font-black">+</button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {Array.from({ length: rentFractionsCount }).map((_, i) => (
-                                                            <label key={i} className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${selectedRentFractions.includes(i) ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-zinc-200 hover:border-black/20'}`}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={selectedRentFractions.includes(i)}
-                                                                    onChange={(e) => {
-                                                                        if (e.target.checked) setSelectedRentFractions([...selectedRentFractions, i]);
-                                                                        else setSelectedRentFractions(selectedRentFractions.filter(x => x !== i));
-                                                                    }}
-                                                                    className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500"
-                                                                />
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-[10px] font-black uppercase">Parte {i + 1}</span>
-                                                                    <span className="text-xs font-black text-zinc-500 italic">{formatARS(fractionAmount)}</span>
-                                                                </div>
-                                                            </label>
+                                            const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], totalAmount: number, onPartsChange: (parts: number[]) => void) => {
+                                                const partPrice = totalAmount / Math.max(1, partsCount);
+                                                return (
+                                                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-black/5">
+                                                        {Array.from({ length: Math.max(1, partsCount) }).map((_, i) => (
+                                                            <button
+                                                                key={i}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (selectedParts.includes(i)) onPartsChange(selectedParts.filter(p => p !== i));
+                                                                    else onPartsChange([...selectedParts, i]);
+                                                                }}
+                                                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${selectedParts.includes(i) ? 'bg-black text-white shadow-md' : 'bg-white text-zinc-400 border border-zinc-100 hover:border-black/20'}`}
+                                                            >
+                                                                <span className={selectedParts.includes(i) ? 'text-white/50' : 'text-zinc-300'}>P.{i + 1}</span>
+                                                                <span>{formatARS(partPrice)}</span>
+                                                            </button>
                                                         ))}
                                                     </div>
-                                                </div>
-                                            )}
+                                                );
+                                            };
 
-                                            {unpaidConsumptions.length > 0 && (
-                                                <div className="bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 space-y-3">
-                                                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Consumiciones Pendientes</span>
-                                                    <div className="space-y-2">
-                                                        {unpaidConsumptions.map((c: any) => (
-                                                            <label key={c.id} className={`flex justify-between items-center p-3 rounded-2xl border cursor-pointer transition-all ${selectedConsumptionsIds.includes(c.id) ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-zinc-200 hover:border-black/20'}`}>
-                                                                <div className="flex items-center gap-3">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={selectedConsumptionsIds.includes(c.id)}
-                                                                        onChange={(e) => {
-                                                                            if (e.target.checked) setSelectedConsumptionsIds([...selectedConsumptionsIds, c.id]);
-                                                                            else setSelectedConsumptionsIds(selectedConsumptionsIds.filter(id => id !== c.id));
-                                                                        }}
-                                                                        className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500"
-                                                                    />
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-[10px] font-black uppercase">{c.quantity}x {c.product.name}</span>
-                                                                        {c.notes && <span className="text-[9px] text-emerald-600 font-bold truncate max-w-[150px]">Obs: {c.notes}</span>}
+                                            const renderFractionControl = (id: string, current: number, onChange: (n: number) => void, isDark: boolean = false) => {
+                                                return (
+                                                    <div className={`flex items-center gap-2 ${isDark ? 'bg-white/10 border-white/10' : 'bg-white/50 border-zinc-100'} p-1 rounded-xl border`}>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); onChange(Math.max(1, current - 1)); }}
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDark ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-white hover:bg-zinc-50 text-zinc-400 shadow-sm'}`}
+                                                        >
+                                                            <Minus className="w-3 h-3" />
+                                                        </button>
+                                                        <span className={`text-[10px] font-black min-w-[20px] text-center ${isDark ? 'text-white' : 'text-zinc-600'}`}>{current}</span>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); onChange(current + 1); }}
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDark ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-white hover:bg-zinc-50 text-zinc-400 shadow-sm'}`}
+                                                        >
+                                                            <Plus className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            };
+
+                                            return (
+                                                <>
+                                                    {/* 1 & 2. Rentas (Main + Selected Related) */}
+                                                    {(() => {
+                                                        const isConsolidated = selectedRelatedBookingIds.length > 0;
+                                                        const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
+                                                        const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
+
+                                                        if (totalConsolidatedDebt <= 0) return null;
+
+                                                        if (isConsolidated) {
+                                                            // RENDER CONSOLIDADO
+                                                            return (
+                                                                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-[40px] shadow-2xl relative group">
+                                                                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                                                                        <Layers className="w-12 h-12 text-white" />
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between relative z-10">
+                                                                        <div className="flex items-center gap-4">
+                                                                            <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                                                                                <Calendar className="w-6 h-6 text-white" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-[11px] font-black text-white uppercase tracking-widest mb-1">Renta Consolidada</p>
+                                                                                <p className="text-[9px] font-bold text-zinc-500 italic max-w-[200px] truncate">
+                                                                                    {selectedRentals.map(r => (r as any).court?.name || (r as any).space?.name).join(' + ')}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-3">
+                                                                            <div className="text-right">
+                                                                                <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Total Saldo</p>
+                                                                                <p className="text-xl font-black text-white italic tracking-tighter">{formatARS(totalConsolidatedDebt)}</p>
+                                                                            </div>
+                                                                            {renderFractionControl('consolidated-rent', courtFractions['consolidated-rent'] || 1, (n) => {
+                                                                                setCourtFractions({ ...courtFractions, ['consolidated-rent']: n });
+                                                                                setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [] });
+                                                                            }, true)}
+                                                                        </div>
+                                                                    </div>
+                                                                    {renderPartsSelector('consolidated-rent', courtFractions['consolidated-rent'] || 1, selectedCourtParts['consolidated-rent'] || [], totalConsolidatedDebt, (parts) => {
+                                                                        setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: parts });
+                                                                    })}
+                                                                    
+                                                                    {/* Lista de canchas incluidas para deseleccionar */}
+                                                                    <div className="mt-4 pt-4 border-t border-zinc-800/50 grid grid-cols-2 gap-2">
+                                                                        {relatedBookings.map(rb => {
+                                                                            const isIncluded = selectedRelatedBookingIds.includes(rb.id);
+                                                                            if (!isIncluded) return null;
+                                                                            return (
+                                                                                <button 
+                                                                                    key={`inc-${rb.id}`}
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setSelectedRelatedBookingIds(selectedRelatedBookingIds.filter(id => id !== rb.id));
+                                                                                    }}
+                                                                                    className="flex items-center justify-between px-3 py-2 bg-zinc-800/50 rounded-xl hover:bg-zinc-800 transition-colors"
+                                                                                >
+                                                                                    <span className="text-[9px] font-black text-zinc-400 uppercase">{(rb as any).court?.name || (rb as any).space?.name}</span>
+                                                                                    <X className="w-2.5 h-2.5 text-zinc-600" />
+                                                                                </button>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                 </div>
-                                                                <span className="text-sm font-black italic text-zinc-700">{formatARS(c.totalPrice)}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                                            );
+                                                        } else {
+                                                            // RENDER INDIVIDUAL (Solo la principal)
+                                                            return (
+                                                                <>
+                                                                    <div className="p-5 bg-zinc-50 border border-zinc-100 rounded-[32px] group hover:border-black/10 transition-all">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center">
+                                                                                    <Calendar className="w-5 h-5 text-white" />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <p className="text-[10px] font-black uppercase tracking-tight">Renta: {(booking as any).court?.name || (booking as any).space?.name}</p>
+                                                                                    <p className="text-[9px] font-bold text-zinc-400 italic">{format(parseSafeDate(booking.startTime), 'HH:mm')} a {format(parseSafeDate(booking.endTime), 'HH:mm')} hs</p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-4">
+                                                                                <div className="text-right">
+                                                                                    <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-0.5">Saldo</p>
+                                                                                    <p className="text-sm font-black italic tracking-tighter">{formatARS(totalConsolidatedDebt)}</p>
+                                                                                </div>
+                                                                                {renderFractionControl(booking.id, courtFractions[booking.id] || 1, (n) => {
+                                                                                    setCourtFractions({ ...courtFractions, [booking.id]: n });
+                                                                                    setSelectedCourtParts({ ...selectedCourtParts, [booking.id]: [] });
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                        {renderPartsSelector(booking.id, courtFractions[booking.id] || 1, selectedCourtParts[booking.id] || [], totalConsolidatedDebt, (parts) => {
+                                                                            setSelectedCourtParts({ ...selectedCourtParts, [booking.id]: parts });
+                                                                        })}
+                                                                    </div>
+                                                                    
+                                                                    {/* Sugerencias de Consolidación */}
+                                                                    {relatedBookings.length > 0 && (
+                                                                        <div className="space-y-3 mt-4">
+                                                                            <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-4 mb-2">Sugerencias para Consolidar</p>
+                                                                            {relatedBookings.map(rb => {
+                                                                                const rbDebt = getTotalDebt(rb);
+                                                                                if (rbDebt <= 0) return null;
+                                                                                return (
+                                                                                    <button 
+                                                                                        key={rb.id}
+                                                                                        onClick={() => setSelectedRelatedBookingIds([...selectedRelatedBookingIds, rb.id])}
+                                                                                        className="w-full p-4 bg-white border border-zinc-100 rounded-3xl flex items-center justify-between hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                                                                                    >
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className="w-8 h-8 rounded-xl bg-zinc-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                                                                                                <Plus className="w-4 h-4 text-zinc-400 group-hover:text-indigo-500" />
+                                                                                            </div>
+                                                                                            <div className="text-left">
+                                                                                                <p className="text-[10px] font-black uppercase text-zinc-600">{(rb as any).court?.name || (rb as any).space?.name}</p>
+                                                                                                <p className="text-[8px] font-bold text-zinc-400 italic">{format(parseSafeDate(rb.startTime), 'HH:mm')} hs</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <p className="text-[10px] font-black italic text-zinc-400 group-hover:text-indigo-600">{formatARS(rbDebt)}</p>
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            );
+                                                        }
+                                                    })()}
 
-                                            {rentRemaining <= 0 && unpaidConsumptions.length === 0 && (
-                                                <div className="py-12 border-2 border-dashed border-zinc-100 rounded-[32px] flex flex-col items-center justify-center text-zinc-300 h-full">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest">Todo está pagado</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
+                                                    {/* 3. Grouped Consumptions */}
+                                                    {Object.values(grouped).map((g: any) => {
+                                                        const groupKey = `group-${g.productId}`;
+                                                        const remaining = g.totalPrice - g.totalDeposit;
+                                                        if (remaining <= 0) return null;
+
+                                                        return (
+                                                            <div key={groupKey} className="p-5 bg-zinc-50 border border-zinc-100 rounded-[32px] group hover:border-black/10 transition-all">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center">
+                                                                            <Package className="w-5 h-5 text-white" />
+                                                                        </div>
+                                                                        <div className="text-left">
+                                                                            <p className="text-[10px] font-black uppercase tracking-tight">{g.productName}</p>
+                                                                            <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{g.quantity} unidad(es)</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="text-right">
+                                                                            <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-0.5">Saldo</p>
+                                                                            <p className="text-sm font-black italic tracking-tighter">{formatARS(remaining)}</p>
+                                                                        </div>
+                                                                        {renderFractionControl(groupKey, consumptionFractions[groupKey] || 1, (n) => {
+                                                                            setConsumptionFractions({ ...consumptionFractions, [groupKey]: n });
+                                                                            setSelectedConsumptionParts({ ...selectedConsumptionParts, [groupKey]: [] });
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                                {renderPartsSelector(groupKey, consumptionFractions[groupKey] || 1, selectedConsumptionParts[groupKey] || [], remaining, (parts) => {
+                                                                    setSelectedConsumptionParts({ ...selectedConsumptionParts, [groupKey]: parts });
+                                                                })}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Right Column: Summary & Payment */}
                             <div className="p-8 max-h-[70vh] overflow-y-auto bg-white flex flex-col">
                                 <div className="space-y-6 mt-auto">
-                                    {/* Price Breakdown */}
                                     {(() => {
                                         const booking = selectedBooking || selectedSpaceBooking;
                                         if (!booking) return null;
 
-                                        let basePriceForDisplay = booking.price;
-                                        if (selectedBooking) {
-                                            const court = courts.find(c => c.id === selectedBooking.courtId);
-                                            if (court) {
-                                                const start = parseISO(selectedBooking.startTime);
-                                                const end = parseISO(selectedBooking.endTime);
-                                                const durHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                                basePriceForDisplay = durHours * court.pricePerHour;
-                                            }
-                                        } else if (selectedSpaceBooking) {
-                                            const space = spaces.find(s => s.id === selectedSpaceBooking.spaceId);
-                                            if (space) basePriceForDisplay = space.pricePerSlot;
+                                        const unpaidConsumptions = (bookingConsumptions || []).filter(c => !c.isPaid);
+                                        const paidConsumptionsTotal = (bookingConsumptions || []).filter(c => c.isPaid).reduce((acc, c) => acc + (c.totalPrice || 0), 0);
+
+                                        // --- CÁLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
+                                        let currentTransactionTotal = 0;
+
+                                        // 1 & 2. Rentas (Consolidada o Individual)
+                                        if (selectedRelatedBookingIds.length > 0) {
+                                            const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
+                                            const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
+                                            const fractions = courtFractions['consolidated-rent'] || 1;
+                                            const selectedParts = selectedCourtParts['consolidated-rent'] || [];
+                                            if (totalConsolidatedDebt > 0) currentTransactionTotal += (totalConsolidatedDebt / fractions) * selectedParts.length;
+                                        } else {
+                                            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+                                            const mainFractions = courtFractions[booking.id] || 1;
+                                            const mainSelectedParts = selectedCourtParts[booking.id] || [];
+                                            if (mainRentDebt > 0) currentTransactionTotal += (mainRentDebt / mainFractions) * mainSelectedParts.length;
                                         }
-                                        if (basePriceForDisplay < booking.price) basePriceForDisplay = booking.price;
 
-                                        const totalConsumption = bookingConsumptions.reduce((acc, c) => acc + (c.totalPrice || 0), 0);
-                                        const paidConsumptionsTotal = bookingConsumptions.filter(c => c.isPaid).reduce((acc, c) => acc + (c.totalPrice || 0), 0);
+                                        // 3. Consumiciones Agrupadas
+                                        const grouped = unpaidConsumptions.reduce((acc, c) => {
+                                            const pid = c.productId;
+                                            if (!acc[pid]) acc[pid] = { totalPrice: 0, totalDeposit: 0 };
+                                            acc[pid].totalPrice += (c.totalPrice || 0);
+                                            acc[pid].totalDeposit += (c.depositPaid || 0);
+                                            return acc;
+                                        }, {} as Record<number, any>);
 
-                                        const rentRemaining = Math.max(0, basePriceForDisplay - booking.depositPaid);
-                                        const fractionAmount = rentRemaining / rentFractionsCount;
-                                        const unpaidConsumptions = bookingConsumptions.filter(c => !c.isPaid);
+                                        Object.keys(grouped).forEach(pid => {
+                                            const groupKey = `group-${pid}`;
+                                            const partsCount = consumptionFractions[groupKey] || 1;
+                                            const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
+                                            const remaining = grouped[Number(pid)].totalPrice - grouped[Number(pid)].totalDeposit;
+                                            if (remaining > 0) currentTransactionTotal += (remaining / partsCount) * selectedPartsCount;
+                                        });
 
-                                        const totalRentPayment = selectedRentFractions.length * fractionAmount;
-                                        const totalConsumptionsPayment = unpaidConsumptions
-                                            .filter(c => selectedConsumptionsIds.includes(c.id))
-                                            .reduce((acc, c) => acc + c.totalPrice, 0);
+                                        const totalRentRemaining = (booking.price || 0) - (booking.depositPaid || 0);
+                                        const totalConsumptionRemaining = unpaidConsumptions.reduce((acc, c) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
+                                        const relatedBookingsTotalDebt = relatedBookings
+                                            .filter(rb => selectedRelatedBookingIds.includes(rb.id))
+                                            .reduce((acc, rb) => acc + getTotalDebt(rb), 0);
 
-                                        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
+                                        const totalAccountDebt = totalRentRemaining + totalConsumptionRemaining + relatedBookingsTotalDebt;
 
                                         return (
                                             <div className="space-y-4">
-                                                <div className="space-y-3 bg-zinc-50 p-6 rounded-[32px] border border-zinc-100">
-                                                    <div className="flex justify-between items-center text-zinc-400 text-[10px] font-black uppercase tracking-widest">
-                                                        <span>Cancha Total</span>
-                                                        <span className="font-outfit text-zinc-600">{formatARS(booking.price)}</span>
+                                                <div className="space-y-4 bg-zinc-50 p-7 rounded-[32px] border border-zinc-100 shadow-sm">
+                                                    <div className="flex justify-between items-center text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                                                        <span>Deuda Total Seleccionada</span>
+                                                        <span className="font-outfit">{formatARS(totalAccountDebt)}</span>
                                                     </div>
-                                                    {totalConsumption > 0 && (
-                                                        <div className="flex justify-between items-center text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                                                            <span>Consumos Totales</span>
-                                                            <span className="font-outfit">+{formatARS(totalConsumption)}</span>
+
+                                                    <div className="space-y-2 pt-3 border-t border-zinc-200/50">
+                                                        {(booking.depositPaid + paidConsumptionsTotal) > 0 && (
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className="flex justify-between items-center text-[10px] text-blue-500 font-black uppercase tracking-widest">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                                                                        <span>Pagos Realizados</span>
+                                                                    </div>
+                                                                    <span className="font-bold">-{formatARS(booking.depositPaid + paidConsumptionsTotal)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-[8px] text-blue-400 font-bold uppercase tracking-widest pl-3">
+                                                                    <span>({formatARS(booking.depositPaid)} cancha + {formatARS(paidConsumptionsTotal)} consumos)</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="pt-5 flex justify-between items-end border-t border-zinc-200">
+                                                            <div>
+                                                                <p className="text-zinc-900 text-[9px] font-black uppercase tracking-[0.3em] mb-1">DEUDA RESTANTE</p>
+                                                            </div>
+                                                            <span className="text-4xl font-black italic text-black tracking-tighter">
+                                                                {formatARS(totalAccountDebt)}
+                                                            </span>
                                                         </div>
-                                                    )}
-                                                    {booking.depositPaid > 0 && (
-                                                        <div className="flex justify-between items-center text-blue-600 text-[10px] font-black uppercase tracking-widest pt-1 border-t border-zinc-200/50">
-                                                            <span>Cancha Pagada</span>
-                                                            <span className="font-bold">-{formatARS(booking.depositPaid)}</span>
-                                                        </div>
-                                                    )}
-                                                    {paidConsumptionsTotal > 0 && (
-                                                        <div className="flex justify-between items-center text-blue-600 text-[10px] font-black uppercase tracking-widest">
-                                                            <span>Consumos Pagados</span>
-                                                            <span className="font-bold">-{formatARS(paidConsumptionsTotal)}</span>
-                                                        </div>
-                                                    )}
-                                                    <div className="pt-4 flex justify-between items-end">
-                                                        <div>
-                                                            <p className="text-zinc-400 text-[9px] font-black uppercase tracking-[0.3em] mb-1">DEUDA RESTANTE</p>
-                                                        </div>
-                                                        <span className="text-3xl font-black italic text-black tracking-tighter">
-                                                            {formatARS(rentRemaining + unpaidConsumptions.reduce((acc, c) => acc + c.totalPrice, 0))}
-                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -2185,20 +2627,32 @@ const BookingsPage = () => {
                                                     <span className="text-3xl font-black italic text-emerald-500 tracking-tighter">{formatARS(currentTransactionTotal)}</span>
                                                 </div>
 
-                                                {/* Observation Input */}
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-2">Observación (Opcional)</label>
-                                                    <input
-                                                        type="text"
-                                                        value={paymentObservation}
-                                                        onChange={(e) => setPaymentObservation(e.target.value)}
-                                                        placeholder="Ej: Transferencia de Juan..."
-                                                        className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-4 focus:ring-black/5 outline-none text-xs font-bold text-black placeholder:text-zinc-300"
-                                                    />
+                                                {currentTransactionTotal > 0 && currentTransactionTotal < totalAccountDebt && (
+                                                    <div className="flex justify-between items-center mb-4 px-4 py-2 bg-zinc-50 rounded-2xl border border-zinc-100">
+                                                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Saldo Pendiente Después</span>
+                                                        <span className="text-sm font-black italic text-zinc-600">{formatARS(totalAccountDebt - currentTransactionTotal)}</span>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Medio de Pago Principal</span>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (!selectedPaymentMethod) {
+                                                                alert("Primero selecciona el medio de pago principal");
+                                                                return;
+                                                            }
+                                                            if (!isMixedPayment) setFirstMethodAmount(currentTransactionTotal / 2);
+                                                            setIsMixedPaymentModalOpen(true);
+                                                        }}
+                                                        className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${isMixedPayment ? 'bg-black text-white' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'}`}
+                                                    >
+                                                        {isMixedPayment ? '✓ Editar Pago Mixto' : '+ Dividir Pago'}
+                                                    </button>
                                                 </div>
 
-                                                {/* Payment Methods */}
-                                                <div className="grid grid-cols-2 gap-3">
+                                                {/* Payment Methods Grid */}
+                                                <div className="grid grid-cols-2 gap-2">
                                                     {paymentMethods
                                                         .filter(m => (selectedBooking ? m.name !== "BONIFICADO / SIN COSTO" : true))
                                                         .map(method => (
@@ -2216,7 +2670,30 @@ const BookingsPage = () => {
                                                         ))}
                                                 </div>
 
-                                                <div className="flex gap-3">
+                                                {isMixedPayment && !isMixedPaymentModalOpen && (
+                                                    <div className="mt-2 p-3 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center">
+                                                                <DollarSign className="w-4 h-4 text-white" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Configuración Mixta</p>
+                                                                <p className="text-[10px] font-black italic">
+                                                                    {paymentMethods.find(m => m.id.toString() === selectedPaymentMethod)?.name}: {formatARS(firstMethodAmount)} + {paymentMethods.find(m => m.id.toString() === secondPaymentMethod)?.name}: {formatARS(currentTransactionTotal - firstMethodAmount)}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => setIsMixedPayment(false)}
+                                                            className="p-1.5 hover:bg-rose-50 text-rose-400 rounded-lg transition-colors"
+                                                            title="Anular Pago Mixto"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex gap-3 pt-4">
                                                     {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
                                                         <button
                                                             onClick={() => handleCancelBooking(selectedBooking || selectedSpaceBooking!)}
@@ -2230,10 +2707,10 @@ const BookingsPage = () => {
                                                     )}
                                                     <button
                                                         onClick={handleConfirmPayment}
-                                                        disabled={!selectedPaymentMethod || currentTransactionTotal <= 0}
+                                                        disabled={!selectedPaymentMethod || (isMixedPayment && !secondPaymentMethod) || currentTransactionTotal <= 0}
                                                         className="flex-[2] py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                                                     >
-                                                        Efectuar Pago
+                                                        {isMixedPayment ? 'Efectuar Pago Mixto' : 'Efectuar Pago'}
                                                     </button>
                                                 </div>
 
@@ -2248,8 +2725,6 @@ const BookingsPage = () => {
                                                         {isConfirmingSeriesCancel ? '¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
                                                     </button>
                                                 )}
-
-
                                             </div>
                                         );
                                     })()}
@@ -2268,7 +2743,7 @@ const BookingsPage = () => {
                             <button onClick={() => setIsConsumptionModalOpen(false)} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
                                 <X className="w-4 h-4" />
                             </button>
-                            <h2 className="text-2xl font-black italic uppercase tracking-tight">Agregar Consumisión</h2>
+                            <h2 className="text-2xl font-black italic uppercase tracking-tight">Agregar Consumición</h2>
                             <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1 mb-6">Toca un producto para cargarlo</p>
 
                             <div className="relative group">
@@ -2308,48 +2783,399 @@ const BookingsPage = () => {
                                         {(products as any[]).map((product: any) => (
                                             <button
                                                 key={product.id}
-                                                onClick={async () => {
-                                                    try {
-                                                        const obs = window.prompt(`Agregar observación para ${product.name} (Opcional):`);
-                                                        if (obs === null) return; // Se canceló
-
-                                                        const qty = 1;
-
-                                                        await api.post('/api/consumptions', {
-                                                            bookingId: (selectedBooking || selectedSpaceBooking)!.id,
-                                                            productId: product.id,
-                                                            quantity: qty,
-                                                            notes: obs
-                                                        }, config);
-
-                                                        const consRes = await api.get(`/api/consumptions/booking/${(selectedBooking || selectedSpaceBooking)!.id}`, config);
-                                                        setBookingConsumptions(consRes.data || []);
-
-                                                        // Cerramos el modal por pedido del usuario
-                                                        setIsConsumptionModalOpen(false);
-                                                    } catch (err: any) {
-                                                        console.error("Error al agregar consumo:", err);
-                                                        alert("Error al agregar: " + (err.response?.data || err.message));
-                                                    }
+                                                disabled={isAddingConsumption === product.id}
+                                                onClick={() => {
+                                                    setProductForObservation(product);
+                                                    setTempObservation('');
                                                 }}
-                                                className="flex flex-col items-center justify-center p-4 bg-zinc-50 border border-zinc-100 rounded-[32px] hover:border-black hover:bg-white hover:shadow-2xl hover:-translate-y-1 transition-all group aspect-square relative overflow-hidden"
+                                                className={`flex flex-col items-center justify-center p-4 bg-zinc-50 border border-zinc-100 rounded-[32px] hover:border-black hover:bg-white hover:shadow-2xl hover:-translate-y-1 transition-all group aspect-square relative overflow-hidden ${isAddingConsumption === product.id ? 'opacity-50 cursor-wait' : ''}`}
                                             >
                                                 <div className="absolute top-0 right-0 w-12 h-12 bg-black/5 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:bg-black group-hover:scale-150 duration-500"></div>
 
                                                 <div className="p-4 bg-white rounded-2xl border border-zinc-100 mb-3 group-hover:bg-black group-hover:text-white transition-all shadow-sm z-10">
-                                                    <Package className="w-6 h-6" />
+                                                    {isAddingConsumption === product.id ? (
+                                                        <RefreshCw className="w-6 h-6 animate-spin" />
+                                                    ) : (
+                                                        <Package className="w-6 h-6" />
+                                                    )}
                                                 </div>
                                                 <p className="text-[10px] font-black uppercase italic text-center leading-tight mb-1 z-10">{product.name}</p>
-                                                <p className="text-base font-black italic text-black z-10">${product.finalPrice}</p>
+                                                <p className="text-base font-black italic text-black z-10">${product.finalPrice || product.FinalPrice}</p>
 
                                                 <div className="absolute bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <span className="text-[8px] font-black uppercase tracking-widest bg-black text-white px-2 py-1 rounded-full">Agregar +</span>
+                                                    <span className="text-[8px] font-black uppercase tracking-widest bg-black text-white px-2 py-1 rounded-full">
+                                                        {isAddingConsumption === product.id ? 'Cargando...' : 'Agregar +'}
+                                                    </span>
                                                 </div>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Observation Sub-Modal */}
+            {productForObservation && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-8 bg-black text-white">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                    <Package className="w-5 h-5 text-emerald-400" />
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">{productForObservation.name}</h3>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿Deseas agregar alguna nota u observación?</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] ml-2">Observaciones</label>
+                                <textarea
+                                    autoFocus
+                                    value={tempObservation}
+                                    onChange={(e) => setTempObservation(e.target.value)}
+                                    placeholder="Ej: Sin hielo, Muy caliente, etc..."
+                                    className="w-full px-6 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm min-h-[120px] resize-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setProductForObservation(null)}
+                                    className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    disabled={isAddingConsumption !== null}
+                                    onClick={async () => {
+                                        try {
+                                            setIsAddingConsumption(productForObservation.id);
+                                            const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                            
+                                            await api.post('/api/consumptions', {
+                                                bookingId: bookingId,
+                                                productId: productForObservation.id,
+                                                quantity: 1,
+                                                notes: tempObservation
+                                            }, getAuthConfig());
+
+                                            const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
+                                            setBookingConsumptions(consRes.data || []);
+                                            
+                                            setProductForObservation(null);
+                                            setIsConsumptionModalOpen(false);
+                                        } catch (err: any) {
+                                            console.error("Error al agregar:", err);
+                                            alert("Error: " + (err.response?.data?.message || err.message));
+                                        } finally {
+                                            setIsAddingConsumption(null);
+                                        }
+                                    }}
+                                    className="flex-[2] py-5 bg-black text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isAddingConsumption === productForObservation.id ? (
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Check className="w-4 h-4" />
+                                            Confirmar
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Modal de Éxito de Pago */}
+            {/* Mixed Payment Modal */}
+            {isMixedPaymentModalOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-[110] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/10">
+                        <div className="p-8 bg-zinc-900 text-white relative">
+                            <button onClick={() => setIsMixedPaymentModalOpen(false)} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-emerald-500/20 rounded-xl">
+                                    <RefreshCw className="w-5 h-5 text-emerald-400" />
+                                </div>
+                                <h2 className="text-2xl font-black italic uppercase tracking-tight">Dividir Pago</h2>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Configuración de montos y medios de pago</p>
+                        </div>
+
+                        {(() => {
+                            const booking = selectedBooking || selectedSpaceBooking;
+                            if (!booking) return null;
+
+                            // --- CÁLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
+                            let transactionTotal = 0;
+
+                            // 1. Renta Principal
+                            const mainRentDebt = booking.price - (booking.depositPaid || 0);
+                            const mainFractions = courtFractions[booking.id] || 1;
+                            const mainSelectedParts = selectedCourtParts[booking.id] || [];
+                            if (mainRentDebt > 0) transactionTotal += (mainRentDebt / mainFractions) * mainSelectedParts.length;
+
+                            // 2. Canchas Relacionadas
+                            relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id)).forEach(rb => {
+                                const rbDebt = getTotalDebt(rb);
+                                const rbFractions = courtFractions[rb.id] || 1;
+                                const rbSelectedParts = selectedCourtParts[rb.id] || [];
+                                if (rbDebt > 0) transactionTotal += (rbDebt / rbFractions) * rbSelectedParts.length;
+                            });
+
+                            // 3. Consumiciones Agrupadas
+                            const grouped = (bookingConsumptions || []).filter(c => !c.isPaid).reduce((acc, c) => {
+                                const pid = c.productId;
+                                if (!acc[pid]) acc[pid] = { totalPrice: 0, totalDeposit: 0 };
+                                acc[pid].totalPrice += (c.totalPrice || 0);
+                                acc[pid].totalDeposit += (c.depositPaid || 0);
+                                return acc;
+                            }, {} as Record<number, any>);
+
+                            Object.keys(grouped).forEach(pid => {
+                                const groupKey = `group-${pid}`;
+                                const partsCount = consumptionFractions[groupKey] || 1;
+                                const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
+                                const remaining = grouped[Number(pid)].totalPrice - grouped[Number(pid)].totalDeposit;
+                                if (remaining > 0) transactionTotal += (remaining / partsCount) * selectedPartsCount;
+                            });
+
+                            return (
+                                <div className="p-8 space-y-8">
+                                    {/* Summary Header */}
+                                    <div className="flex justify-between items-end bg-zinc-50 p-6 rounded-3xl border border-zinc-100">
+                                        <div>
+                                            <p className="text-zinc-400 text-[9px] font-black uppercase tracking-widest mb-1">TOTAL A DIVIDIR</p>
+                                            <p className="text-3xl font-black italic text-black tracking-tighter">{formatARS(transactionTotal)}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-zinc-400 text-[9px] font-black uppercase tracking-widest mb-1">REMANENTE</p>
+                                            <p className="text-xl font-black italic text-emerald-500 tracking-tighter">{formatARS(Math.max(0, transactionTotal - firstMethodAmount))}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Amount Selection */}
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-black text-zinc-900 uppercase tracking-widest">
+                                                Monto para {paymentMethods.find(m => m.id.toString() === selectedPaymentMethod)?.name || 'Medio 1'}
+                                            </label>
+                                            <div className="flex gap-1.5">
+                                                {[0.25, 0.5, 0.75].map(p => (
+                                                    <button 
+                                                        key={p}
+                                                        onClick={() => setFirstMethodAmount(transactionTotal * p)}
+                                                        className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 rounded-full text-[8px] font-black text-zinc-600 transition-colors"
+                                                    >
+                                                        {p * 100}%
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-zinc-300 text-xl">$</span>
+                                            <input
+                                                type="number"
+                                                value={firstMethodAmount}
+                                                onChange={(e) => setFirstMethodAmount(Math.min(transactionTotal, Number(e.target.value)))}
+                                                className="w-full pl-12 pr-6 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-8 focus:ring-black/5 outline-none font-black text-2xl tracking-tighter"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Second Payment Method */}
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-zinc-900 uppercase tracking-widest ml-2">Segundo Medio de Pago</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {paymentMethods
+                                                .filter(m => m.name !== "BONIFICADO / SIN COSTO")
+                                                .map((m) => (
+                                                <button
+                                                    key={`second-modal-${m.id}`}
+                                                    disabled={selectedPaymentMethod === m.id.toString()}
+                                                    onClick={() => setSecondPaymentMethod(m.id.toString())}
+                                                    className={`p-4 rounded-[24px] border transition-all text-[10px] font-black uppercase flex items-center justify-center gap-2 ${secondPaymentMethod === m.id.toString() ? 'bg-emerald-500 border-emerald-500 text-white shadow-xl shadow-emerald-500/20' : 'bg-white border-zinc-100 hover:border-black/10 text-zinc-400'} ${selectedPaymentMethod === m.id.toString() ? 'opacity-20 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${secondPaymentMethod === m.id.toString() ? 'bg-white' : 'bg-zinc-200'}`}></div>
+                                                    {m.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4 pt-4">
+                                        <button
+                                            onClick={() => {
+                                                setIsMixedPayment(false);
+                                                setIsMixedPaymentModalOpen(false);
+                                            }}
+                                            className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                        >
+                                            Anular División
+                                        </button>
+                                        <button
+                                            disabled={!secondPaymentMethod || firstMethodAmount <= 0 || firstMethodAmount >= transactionTotal}
+                                            onClick={() => {
+                                                setIsMixedPayment(true);
+                                                setIsMixedPaymentModalOpen(false);
+                                            }}
+                                            className="flex-[2] py-5 bg-black text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-black/20 hover:bg-zinc-800 transition-all disabled:opacity-30"
+                                        >
+                                            Confirmar División
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
+            {paymentSuccessInfo?.isOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[100] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-10 flex flex-col items-center text-center">
+                            <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/30">
+                                <Check className="w-10 h-10 text-white" />
+                            </div>
+                            
+                            <h3 className="text-2xl font-black italic uppercase tracking-tight mb-2">
+                                {paymentSuccessInfo.isPartial ? 'Cobro Parcial' : 'Cobro Finalizado'}
+                            </h3>
+                            <p className="text-zinc-400 text-[10px] font-black uppercase tracking-widest mb-8">Transacción completada con éxito</p>
+
+                            <div className="w-full bg-zinc-50 rounded-3xl p-6 mb-8 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-zinc-400 uppercase">Monto Cobrado</span>
+                                    <span className="text-lg font-black text-emerald-600">{formatARS(paymentSuccessInfo.amount)}</span>
+                                </div>
+                                {paymentSuccessInfo.isPartial && (
+                                    <div className="flex justify-between items-center pt-4 border-t border-zinc-100">
+                                        <span className="text-[10px] font-black text-zinc-400 uppercase">Deuda Restante</span>
+                                        <span className="text-lg font-black text-zinc-900">{formatARS(paymentSuccessInfo.remaining)}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    const wasPartial = paymentSuccessInfo.isPartial;
+                                    setPaymentSuccessInfo(null);
+                                    if (!wasPartial) {
+                                        setIsDetailsModalOpen(false);
+                                    }
+                                }}
+                                className="w-full py-5 bg-black text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-800 transition-all shadow-xl shadow-black/20"
+                            >
+                                {paymentSuccessInfo.isPartial ? 'Continuar Cobrando' : 'Finalizar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Multi-Court Suggestion Modal */}
+            {multiCourtSuggestion?.isOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-[120] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/10">
+                        <div className="p-8 bg-black text-white relative text-center">
+                            <button onClick={() => setMultiCourtSuggestion(null)} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                            <div className="w-16 h-16 bg-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/20">
+                                <Check className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-black italic uppercase tracking-tight mb-2">¡Turno Reservado!</h2>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">¿Deseas alquilar otra cancha a la misma hora?</p>
+                        </div>
+
+                        <div className="p-8 space-y-6">
+                            <div className="bg-zinc-50 p-4 rounded-3xl border border-zinc-100 flex items-center justify-center gap-6">
+                                <div className="text-center">
+                                    <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">HORARIO</p>
+                                    <p className="text-sm font-black italic">{format(parseISO(multiCourtSuggestion.startTime), 'HH:mm')} hs</p>
+                                </div>
+                                <div className="w-px h-8 bg-zinc-200"></div>
+                                <div className="text-center">
+                                    <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">DURACIÓN</p>
+                                    <p className="text-sm font-black italic">{multiCourtSuggestion.duration} min</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <label className="text-[10px] font-black text-zinc-900 uppercase tracking-widest ml-2">Selecciona Canchas Disponibles</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {courts
+                                        .filter(c => c.id !== multiCourtSuggestion.originalCourtId)
+                                        .map(c => {
+                                            const start = parseISO(multiCourtSuggestion.startTime);
+                                            const end = addMinutes(start, multiCourtSuggestion.duration);
+                                            const isBusy = bookings.some(b => 
+                                                b.courtId === c.id && 
+                                                b.status !== 2 && 
+                                                areIntervalsOverlapping(
+                                                    { start: parseISO(b.startTime), end: parseISO(b.endTime) },
+                                                    { start: start, end: end }
+                                                )
+                                            );
+
+                                            if (isBusy) return null;
+
+                                            return (
+                                                <button
+                                                    key={`extra-court-${c.id}`}
+                                                    onClick={async () => {
+                                                        try {
+                                                            setLoading(true);
+                                                            const payload = {
+                                                                courtId: c.id,
+                                                                guestName: multiCourtSuggestion.guestName || null,
+                                                                guestPhone: multiCourtSuggestion.guestPhone || null,
+                                                                guestEmail: multiCourtSuggestion.guestEmail || null,
+                                                                dni: multiCourtSuggestion.guestDni || null,
+                                                                userId: multiCourtSuggestion.bookingType === 'existing' ? multiCourtSuggestion.clientId : null,
+                                                                startTime: multiCourtSuggestion.startTime,
+                                                                durationMinutes: multiCourtSuggestion.duration,
+                                                                isRecurring: false,
+                                                                endDate: null,
+                                                                price: (multiCourtSuggestion.duration / 60) * c.pricePerHour,
+                                                                depositPaid: 0
+                                                            };
+                                                            await api.post('/api/bookings/admin-create', payload, config);
+                                                            fetchData();
+                                                            // No cerramos el modal, solo quitamos la cancha de la lista de sugerencias marcándola como "procesada"
+                                                            // o simplemente dejando que el filtro isBusy actúe tras el fetchData.
+                                                            // Pero como fetchData es asíncrono y los bookings tardan en actualizarse en el state local:
+                                                            setBookings(prev => [...prev, { ...payload, id: 'temp-' + Date.now(), court: { name: c.name }, endTime: addMinutes(parseISO(payload.startTime), payload.durationMinutes).toISOString(), status: 1 } as any]);
+                                                            alert(`¡Turno en ${c.name} reservado con éxito!`);
+                                                        } catch (err: any) {
+                                                            alert("Error: " + (err.response?.data || err.message));
+                                                        } finally {
+                                                            setLoading(false);
+                                                        }
+                                                    }}
+                                                    className="p-4 bg-white border border-zinc-100 rounded-[24px] hover:border-black hover:shadow-xl transition-all group flex flex-col items-center gap-1"
+                                                >
+                                                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest group-hover:text-black transition-colors">{c.name}</span>
+                                                    <span className="text-[10px] font-black italic text-emerald-500">Disponible</span>
+                                                </button>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setMultiCourtSuggestion(null)}
+                                className="w-full py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                            >
+                                No, terminar aquí
+                            </button>
                         </div>
                     </div>
                 </div>

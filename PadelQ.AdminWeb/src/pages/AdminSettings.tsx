@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe } from 'lucide-react';
+import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X } from 'lucide-react';
 import Header from '../components/Header';
 import { UPDATE_HISTORY, SYSTEM_VERSION } from '../constants/versions';
 
@@ -488,6 +488,32 @@ const AdminSettings = () => {
                   </div>
                 </div>
               </div>
+              <div className="p-6 bg-indigo-50/30 rounded-[32px] border border-indigo-100 space-y-6 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Importación de Precios</h4>
+                  <p className="text-sm font-bold text-indigo-800 leading-tight">Actualizar lista de productos y precios según la última lista de proveedores.</p>
+                </div>
+                <div className="space-y-4">
+                  <button 
+                    onClick={async () => {
+                      if (!window.confirm('¿Deseas importar/actualizar la lista de 28 productos con los nuevos precios?')) return;
+                      try {
+                        const res = await api.post('/api/products/bulk-import', {}, getAuthConfig());
+                        alert(`¡Éxito! Actualizados: ${res.data.updated}, Creados: ${res.data.created}`);
+                        window.location.reload();
+                      } catch (err: any) {
+                        alert("Error al importar: " + (err.response?.data?.Message || err.message));
+                      }
+                    }}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-95"
+                  >
+                    <History className="w-4 h-4" />
+                    Ejecutar Importación Masiva
+                  </button>
+                  <p className="text-[9px] text-indigo-400 font-bold uppercase leading-relaxed text-center">* Se actualizarán precios de Pepsi, Cervezas, Combos y Accesorios.</p>
+                </div>
+              </div>
+
               <div className="p-6 bg-rose-50/30 rounded-[32px] border border-rose-100 space-y-6 flex flex-col justify-between">
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-widest text-rose-400 mb-2">Limpieza Global</h4>

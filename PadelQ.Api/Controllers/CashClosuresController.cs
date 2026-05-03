@@ -43,17 +43,17 @@ namespace PadelQ.Api.Controllers
                 .Where(t => t.Date >= lastClosureDate && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment))
                 .ToListAsync();
 
-            var summary = transactions
-                .GroupBy(t => new { 
-                    Name = t.PaymentMethod?.Name ?? "No Especificado", 
-                    Color = t.PaymentMethod?.HexColor ?? "#888888" 
-                })
-                .Select(g => new {
-                    Method = g.Key.Name,
-                    Color = g.Key.Color,
-                    Total = g.Sum(t => t.Amount),
-                    Count = g.Count(),
-                    Transactions = g.OrderByDescending(t => t.Date).Select(t => new {
+            var activeMethods = await _context.PaymentMethods.Where(m => m.IsActive).ToListAsync();
+
+            var summary = activeMethods.Select(m => {
+                var methodTransactions = transactions.Where(t => t.PaymentMethodId == m.Id).ToList();
+                return new {
+                    Method = m.Name,
+                    MethodId = m.Id,
+                    Color = m.HexColor ?? "#888888",
+                    Total = methodTransactions.Sum(t => t.Amount),
+                    Count = methodTransactions.Count(),
+                    Transactions = methodTransactions.OrderByDescending(t => t.Date).Select(t => new {
                         t.Id,
                         t.Amount,
                         t.Date,
@@ -61,13 +61,34 @@ namespace PadelQ.Api.Controllers
                         t.ProcessedBy,
                         UserName = t.User != null ? t.User.FullName : "Particular"
                     }).ToList()
-                })
-                .ToList();
+                };
+            }).ToList();
+
+            // Agregar "No Especificado" si hay transacciones sin método
+            var unassignedTrans = transactions.Where(t => t.PaymentMethodId == null).ToList();
+            if (unassignedTrans.Any())
+            {
+                summary.Add(new {
+                    Method = "No Especificado",
+                    MethodId = 0,
+                    Color = "#888888",
+                    Total = unassignedTrans.Sum(t => t.Amount),
+                    Count = unassignedTrans.Count(),
+                    Transactions = unassignedTrans.OrderByDescending(t => t.Date).Select(t => new {
+                        t.Id,
+                        t.Amount,
+                        t.Date,
+                        t.Description,
+                        t.ProcessedBy,
+                        UserName = t.User != null ? t.User.FullName : "Particular"
+                    }).ToList()
+                });
+            }
 
             return Ok(new {
                 activeClosure,
                 summary,
-                totalAmount = summary.Sum(s => s.Total),
+                totalAmount = transactions.Sum(t => t.Amount),
                 lastClosureDate
             });
         }
@@ -108,13 +129,9 @@ namespace PadelQ.Api.Controllers
                 .Where(t => t.Date >= closure.OpeningDate && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment))
                 .ToListAsync();
 
-            closure.TotalCashSales = transactions.Where(t => t.PaymentMethod?.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase) == true).Sum(t => t.Amount);
-            closure.TotalTransferSales = transactions.Where(t => t.PaymentMethod?.Name.Contains("Transferencia", StringComparison.OrdinalIgnoreCase) == true).Sum(t => t.Amount);
-            closure.TotalCardSales = transactions.Where(t => t.PaymentMethod?.Name.Contains("Tarjeta", StringComparison.OrdinalIgnoreCase) == true).Sum(t => t.Amount);
-            closure.TotalOtherSales = transactions.Sum(t => t.Amount) - (closure.TotalCashSales + closure.TotalTransferSales + closure.TotalCardSales);
-
-            closure.ExpectedCash = closure.InitialCash + closure.TotalCashSales; // El esperado físico suele ser lo inicial + ventas en efectivo
+            closure.ExpectedCash = closure.InitialCash + closure.TotalCashSales;
             closure.ActualCash = request.ActualCash;
+            closure.ActualTotals = request.ActualTotals; // Se recibe como JSON desde el front
             closure.ClosingDate = DateTime.UtcNow;
             closure.ClosedBy = User.Identity?.Name ?? "Admin";
             closure.IsOpen = false;
@@ -174,6 +191,7 @@ namespace PadelQ.Api.Controllers
 
     public class CloseCashRequest {
         public decimal ActualCash { get; set; }
+        public string? ActualTotals { get; set; } // JSON format
         public string? Notes { get; set; }
     }
 }

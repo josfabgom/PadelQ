@@ -173,10 +173,28 @@ namespace PadelQ.Api.Controllers
             var consumption = await _context.BookingConsumptions.FindAsync(id);
             if (consumption == null) return NotFound();
 
+            consumption.DepositPaid = consumption.TotalPrice;
             consumption.IsPaid = true;
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/partial-pay")]
+        public async Task<IActionResult> PartialPay(Guid id, [FromQuery] decimal amount)
+        {
+            var consumption = await _context.BookingConsumptions.FindAsync(id);
+            if (consumption == null) return NotFound();
+
+            consumption.DepositPaid += amount;
+            if (consumption.DepositPaid >= consumption.TotalPrice)
+            {
+                consumption.IsPaid = true;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Pago parcial de consumo registrado", DepositPaid = consumption.DepositPaid });
         }
     }
 

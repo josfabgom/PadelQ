@@ -31,6 +31,7 @@ interface CashClosure {
     expectedCash?: number;
     actualCash?: number;
     notes?: string;
+    actualTotals?: string;
     openedBy: string;
     closedBy?: string;
     isOpen: boolean;
@@ -46,6 +47,7 @@ const CashManagement = () => {
     // Form states
     const [initialCash, setInitialCash] = useState<number>(0);
     const [actualCash, setActualCash] = useState<number>(0);
+    const [actualTotals, setActualTotals] = useState<{[key: string]: number}>({});
     const [notes, setNotes] = useState('');
     const [selectedMethodDetail, setSelectedMethodDetail] = useState<any>(null);
 
@@ -176,9 +178,14 @@ const CashManagement = () => {
 
     const handleCloseCash = async () => {
         try {
-            const res = await api.post('/api/cash-closures/close', { actualCash, notes }, config);
+            const res = await api.post('/api/cash-closures/close', { 
+                actualCash, 
+                notes,
+                actualTotals: JSON.stringify(actualTotals)
+            }, config);
             setIsClosing(false);
             setActualCash(0);
+            setActualTotals({});
             setNotes('');
             
             // Auto generate PDF on close
@@ -424,7 +431,7 @@ const CashManagement = () => {
                             <h2 className="text-2xl font-black italic uppercase tracking-tight text-rose-400">Cierre de Caja</h2>
                             <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Verifica el efectivo físico disponible</p>
                         </div>
-                        <div className="p-8 space-y-6">
+                        <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
                             <div className="p-6 bg-rose-50 border border-rose-100 rounded-[32px] space-y-2">
                                 <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Efectivo Esperado (Teórico)</p>
                                 <h4 className="text-3xl font-black text-rose-600 italic tracking-tighter">
@@ -446,6 +453,27 @@ const CashManagement = () => {
                                     />
                                 </div>
                             </div>
+
+                            {currentStatus?.summary.filter((s:any) => !s.method.includes('Efectivo')).map((s: any) => (
+                                <div key={s.methodId} className="space-y-4">
+                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                                        Total Real {s.method} ($) - Esperado: {formatARS(s.total)}
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute left-6 top-1/2 -translate-y-1/2">
+                                            {s.method.includes('Transferencia') ? <ArrowRightLeft className="w-5 h-5 text-zinc-400" /> : <CreditCard className="w-5 h-5 text-zinc-400" />}
+                                        </div>
+                                        <input 
+                                            type="number" 
+                                            value={actualTotals[s.method] || ''}
+                                            onChange={(e) => setActualTotals({ ...actualTotals, [s.method]: Number(e.target.value) })}
+                                            className="w-full pl-16 pr-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[24px] focus:ring-4 focus:ring-black/5 outline-none text-lg font-black italic"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Notas de Cierre</label>
                                 <textarea 

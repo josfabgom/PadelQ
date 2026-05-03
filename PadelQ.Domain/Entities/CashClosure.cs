@@ -44,5 +44,7 @@ namespace PadelQ.Domain.Entities
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? TotalOtherSales { get; set; }
+
+        public string? ActualTotals { get; set; } // Stores JSON: { "MethodName": amount } or { "MethodId": amount }
     }
 }

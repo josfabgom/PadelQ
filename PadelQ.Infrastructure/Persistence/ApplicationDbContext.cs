@@ -48,6 +48,7 @@ namespace PadelQ.Infrastructure.Persistence
             builder.Entity<Product>().Property(p => p.FinalPrice).HasPrecision(18, 2);
             builder.Entity<Product>().Property(p => p.CostPrice).HasPrecision(18, 2);
             builder.Entity<BookingConsumption>().Property(bc => bc.UnitPrice).HasPrecision(18, 2);
+            builder.Entity<BookingConsumption>().Property(bc => bc.DepositPaid).HasPrecision(18, 2);
 
             builder.Entity<CashClosure>(entity => {
                 entity.Property(p => p.InitialCash).HasPrecision(18, 2);

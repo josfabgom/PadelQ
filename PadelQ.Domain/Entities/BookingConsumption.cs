@@ -29,6 +29,9 @@ namespace PadelQ.Domain.Entities
         public string? Notes { get; set; }
 
         public bool IsPaid { get; set; } = false;
+        
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal DepositPaid { get; set; } = 0;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

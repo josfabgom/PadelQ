@@ -1,13 +1,23 @@
 --- USER DIAGNOSTIC ---
 User: marce@padelq.com, Email: marce@padelq.com, Name: Marcelo, DNI: 12333444
+User: 4500007, Email: , Name: MATIAS MAGAN, DNI: 4500007
 User: 44355666, Email: , Name: Marcelo P., DNI: 44355666
 User: profe@padelq.com, Email: profe@padelq.com, Name: Profesores, DNI: 11222333
+User: 57957167, Email: , Name: MATIAS MAGAN, DNI: 57957167
+User: 4350000, Email: , Name: PAOLO, DNI: 4350000
+User: 9755490, Email: , Name: jose , DNI: 9755490
 User: comercio@padelq.com, Email: comercio@padelq.com, Name: comercio, DNI: 44556777
+User: 43567183, Email: , Name: PABLO, DNI: 43567183
 User: Admin, Email: admin@padelq.com, Name: Administrador Sistema, DNI: 
 User: 33666777, Email: , Name: Juan , DNI: 33666777
 User: pedro1@padelq.com, Email: pedro1@padelq.com, Name: pedro Juan, DNI: 28675910
 User: pedro@padelq.com, Email: pedro@padelq.com, Name: pedro, DNI: 45232567
+User: 4300000, Email: , Name: MATIAS ROGOZZ, DNI: 4300000
+User: particular@padelq.com, Email: particular@padelq.com, Name: Consumidor Final (Particular), DNI: 
+User: 5000000, Email: , Name: LAZARO, DNI: 5000000
 User: user@padelq.com, Email: user@padelq.com, Name: user, DNI: 12342355
+User: 76345981, Email: , Name: SEBASTIAN, DNI: 76345981
+User: 4399999, Email: , Name: PABLO , DNI: 4399999
 User: 11333555, Email: , Name: juancito, DNI: 11333555
 User: vendedor@padelq.com, Email: vendedor@padelq.com, Name: Vendedor, DNI: 13456789
 ------------------------
