@@ -156,7 +156,8 @@ namespace PadelQ.Api.Controllers
                     Amount = finalPrice,
                     Type = TransactionType.Charge,
                     Date = DateTime.UtcNow,
-                    Description = $"Reserva de Espacio (Admin): {space.Name}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : "")
+                    Description = $"Reserva de Espacio (Admin): {space.Name}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
+                    SpaceBookingId = booking.Id
                 };
                 _context.Transactions.Add(transaction);
             }
@@ -181,6 +182,28 @@ namespace PadelQ.Api.Controllers
             }
 
             booking.Status = BookingStatus.Cancelled;
+            
+            // Devolver stock de consumiciones vinculadas
+            var consumptions = await _context.BookingConsumptions
+                .Where(c => c.SpaceBookingId == id)
+                .ToListAsync();
+
+            foreach (var consumption in consumptions)
+            {
+                var product = await _context.Products.FindAsync(consumption.ProductId);
+                if (product != null)
+                {
+                    product.Stock += consumption.Quantity;
+                    _context.ProductStockMovements.Add(new ProductStockMovement
+                    {
+                        ProductId = product.Id,
+                        Type = MovementType.Adjustment,
+                        Quantity = consumption.Quantity,
+                        Note = $"Devolución por anulación de reserva espacio: {booking.Id}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
 
             // Reversar cargo en Cta Cte si hay un usuario vinculado
             if (!string.IsNullOrEmpty(booking.UserId))
@@ -191,7 +214,8 @@ namespace PadelQ.Api.Controllers
                     Amount = booking.Price,
                     Type = TransactionType.Payment,
                     Date = DateTime.UtcNow,
-                    Description = $"Anulación Reserva Espacio: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}"
+                    Description = $"Anulación Reserva Espacio: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}",
+                    SpaceBookingId = booking.Id
                 };
                 _context.Transactions.Add(reversal);
             }

@@ -3,10 +3,13 @@ import api, { getAuthConfig } from '../api/api';
 import { 
     Package, Plus, Edit2, Trash2, DollarSign, ArrowLeft, Tag, Search, X, 
     TrendingUp, TrendingDown, RefreshCcw, Camera, AlertCircle, ShoppingCart, Info,
-    ChevronRight, ChevronDown, Filter, History
+    ChevronRight, ChevronDown, Filter, History, CheckCircle
 } from 'lucide-react';
 import Header from '../components/Header';
 import { format } from 'date-fns';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { es } from 'date-fns/locale';
 
 interface Product {
   id: number;
@@ -20,6 +23,7 @@ interface Product {
   imageUrl?: string;
   category: string;
   isActive: boolean;
+  minimumStock: number;
 }
 
 const formatARS = (amount: number) => {
@@ -41,6 +45,19 @@ const ProductsPage = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [isSalesReportOpen, setIsSalesReportOpen] = useState(false);
+  const [isStockAlertsOpen, setIsStockAlertsOpen] = useState(false);
+  const [salesReport, setSalesReport] = useState<any[]>([]);
+  const [stockAlerts, setStockAlerts] = useState<any[]>([]);
+  const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [companyInfo, setCompanyInfo] = useState({
+    name: 'PadelQ',
+    address: '',
+    phone: '',
+    email: '',
+    website: ''
+  });
+  
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   
@@ -54,7 +71,8 @@ const ProductsPage = () => {
     stock: 0,
     imageUrl: '',
     category: 'Bebidas',
-    isActive: true
+    isActive: true,
+    minimumStock: 0
   });
 
   const [stockFormData, setStockFormData] = useState({
@@ -67,7 +85,26 @@ const ProductsPage = () => {
 
   useEffect(() => {
     fetchProducts();
+    fetchSystemSettings();
   }, []);
+
+  const fetchSystemSettings = async () => {
+    try {
+      const res = await api.get('/api/SystemSettings', config);
+      const settings = res.data;
+      const info = { ...companyInfo };
+      settings.forEach((s: any) => {
+        if (s.key === 'CompanyName') info.name = s.value;
+        if (s.key === 'CompanyAddress') info.address = s.value;
+        if (s.key === 'CompanyPhone') info.phone = s.value;
+        if (s.key === 'CompanyEmail') info.email = s.value;
+        if (s.key === 'CompanyWebsite') info.website = s.value;
+      });
+      setCompanyInfo(info);
+    } catch (err) {
+      console.error("Error al cargar configuración de empresa", err);
+    }
+  };
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -97,7 +134,8 @@ const ProductsPage = () => {
         stock: 0,
         imageUrl: '',
         category: 'Bebidas', 
-        isActive: true 
+        isActive: true,
+        minimumStock: 0
       });
     }
     setIsModalOpen(true);
@@ -140,6 +178,158 @@ const ProductsPage = () => {
       fetchProducts();
     } catch (err) {
       console.error("Error al registrar movimiento", err);
+    }
+  };
+
+  const fetchSalesReport = async () => {
+    try {
+      const response = await api.get(`/api/reports/product-sales-daily?date=${reportDate}`, config);
+      setSalesReport(response.data);
+      setIsSalesReportOpen(true);
+    } catch (err) {
+      console.error("Error al cargar reporte de ventas", err);
+    }
+  };
+
+  const fetchStockAlerts = async () => {
+    try {
+      const response = await api.get('/api/reports/stock-alerts', config);
+      setStockAlerts(response.data);
+      setIsStockAlertsOpen(true);
+    } catch (err) {
+      console.error("Error al cargar alertas de stock", err);
+    }
+  };
+
+  const generateSalesReportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const isRecent = salesReport.length > 0 && salesReport[0].isRecentOnly;
+      
+      // Header
+      doc.setFillColor(30, 30, 30);
+      doc.rect(0, 0, 210, 45, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      doc.text(companyInfo.name.toUpperCase(), 15, 20);
+      
+      doc.setFontSize(14);
+      doc.text('REPORTE DE VENTAS', 15, 30);
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(200, 200, 200);
+      const headerInfo = [
+        companyInfo.address,
+        companyInfo.phone ? `Tel: ${companyInfo.phone}` : '',
+        companyInfo.email
+      ].filter(Boolean).join(' | ');
+      doc.text(headerInfo, 15, 38);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(isRecent ? 'MOSTRANDO ÚLTIMOS 7 DÍAS (ACUMULADO)' : `FECHA: ${format(new Date(reportDate + 'T00:00:00'), 'dd/MM/yyyy')}`, 195, 38, { align: 'right' });
+      
+      const tableData = salesReport.map(sale => [
+        sale.productName,
+        sale.category,
+        sale.totalQuantity.toString(),
+        formatARS(sale.totalRevenue),
+        formatARS(sale.totalRevenue - sale.totalCost)
+      ]);
+      
+      autoTable(doc, {
+        startY: 50,
+        head: [['Producto', 'Categoría', 'Cant.', 'Recaudado', 'Utilidad']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        styles: { fontSize: 9, cellPadding: 5 },
+        columnStyles: {
+          2: { halign: 'center' },
+          3: { halign: 'right' },
+          4: { halign: 'right', fontStyle: 'bold' }
+        }
+      });
+      
+      const finalY = (doc as any).lastAutoTable.finalY;
+      const totalRevenue = salesReport.reduce((acc, s) => acc + s.totalRevenue, 0);
+      const totalUtility = salesReport.reduce((acc, s) => acc + (s.totalRevenue - s.totalCost), 0);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(30, 30, 30);
+      doc.text(`TOTAL RECAUDADO: ${formatARS(totalRevenue)}`, 140, finalY + 15, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.text(`UTILIDAD ESTIMADA: ${formatARS(totalUtility)}`, 140, finalY + 22, { align: 'right' });
+      
+      doc.save(`Reporte_Ventas_${reportDate}.pdf`);
+    } catch (error) {
+      console.error("Error al generar PDF de ventas:", error);
+      alert("Hubo un error al generar el PDF. Revisa la consola.");
+    }
+  };
+
+  const generateStockAlertsPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Header
+      doc.setFillColor(225, 29, 72); // Rose 600
+      doc.rect(0, 0, 210, 45, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      doc.text(companyInfo.name.toUpperCase(), 15, 20);
+      
+      doc.setFontSize(14);
+      doc.text('SUGERENCIA DE COMPRA', 15, 30);
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(255, 200, 200);
+      const headerInfo = [
+        companyInfo.address,
+        companyInfo.phone ? `Tel: ${companyInfo.phone}` : '',
+        companyInfo.email
+      ].filter(Boolean).join(' | ');
+      doc.text(headerInfo, 15, 38);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`GENERADO EL: ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`, 195, 38, { align: 'right' });
+      
+      const tableData = stockAlerts.map(alert => [
+        alert.name,
+        alert.category,
+        alert.stock.toString(),
+        alert.weeklySales.toString(),
+        alert.minimumStock.toString(),
+        `+${alert.needed}`
+      ]);
+      
+      autoTable(doc, {
+        startY: 50,
+        head: [['Producto', 'Categoría', 'Stock', 'Vtas(7d)', 'Mín.', 'Sugerido']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 6 },
+        columnStyles: {
+          2: { halign: 'center' },
+          3: { halign: 'center' },
+          4: { halign: 'center' },
+          5: { halign: 'center', fontStyle: 'bold', textColor: [22, 163, 74] } // Emerald 600
+        }
+      });
+      
+      doc.save(`Sugerencia_Compra_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    } catch (error) {
+      console.error("Error al generar PDF de stock:", error);
+      alert("Hubo un error al generar el PDF. Revisa la consola.");
     }
   };
 
@@ -191,6 +381,38 @@ const ProductsPage = () => {
                 className="w-full pl-10 pr-4 py-4 bg-white border border-black/5 rounded-2xl outline-none focus:ring-2 focus:ring-black/10 font-medium text-sm shadow-sm"
              />
           </div>
+          <a 
+            href="/purchase-reception"
+            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
+          >
+            <ShoppingCart className="w-5 h-5 text-emerald-500" />
+            Cargar Compra
+          </a>
+          <button 
+            onClick={() => fetchProducts()}
+
+            disabled={loading}
+            className="p-4 bg-white border border-black/5 rounded-2xl shadow-sm hover:bg-zinc-50 transition-all active:scale-95 disabled:opacity-50"
+            title="Refrescar listado"
+          >
+            <RefreshCcw className={`w-5 h-5 text-black ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button 
+            onClick={fetchSalesReport}
+            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
+          >
+            <TrendingUp className="w-5 h-5 text-blue-500" />
+            Ventas Diarias
+          </button>
+
+          <button 
+            onClick={fetchStockAlerts}
+            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
+          >
+            <AlertCircle className="w-5 h-5 text-rose-500" />
+            Quiebre de Stock
+          </button>
           <button 
             onClick={() => handleOpenModal()}
             className="flex items-center gap-3 px-8 py-4 bg-black text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all active:scale-95"
@@ -273,11 +495,11 @@ const ProductsPage = () => {
                       <td className="px-6 py-5 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <div className={`px-4 py-1.5 rounded-xl text-xs font-black italic flex items-center gap-2 ${
-                            product.stock <= 5 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                            product.stock <= product.minimumStock ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                           }`}>
                             {product.stock} <span className="text-[9px] opacity-60">uds</span>
                           </div>
-                          {product.stock <= 5 && (
+                          {product.stock <= product.minimumStock && (
                             <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1">
                               <AlertCircle className="w-2.5 h-2.5" /> Stock Bajo
                             </span>
@@ -481,6 +703,30 @@ const ProductsPage = () => {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Stock Actual</label>
+                      <input 
+                        type="number" 
+                        value={formData.stock}
+                        onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})}
+                        className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-bold text-sm"
+                        placeholder="0"
+                        disabled={!!editingProduct}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Stock Mínimo</label>
+                      <input 
+                        type="number" 
+                        value={formData.minimumStock}
+                        onChange={(e) => setFormData({...formData, minimumStock: Number(e.target.value)})}
+                        className="w-full px-6 py-4 bg-rose-50/30 border border-rose-100 rounded-2xl outline-none font-bold text-sm text-rose-600"
+                        placeholder="5"
+                      />
+                    </div>
+                  </div>
+
                   <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-3 h-3 rounded-full ${formData.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
@@ -612,6 +858,192 @@ const ProductsPage = () => {
                 Confirmar Movimiento
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Sales Report Modal */}
+      {isSalesReportOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6 overflow-y-auto">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-3xl my-auto animate-in fade-in zoom-in duration-300 border border-black/5">
+            <div className="p-8 bg-zinc-900 text-white flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
+                  <TrendingUp className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black italic uppercase tracking-tight">Reporte de Ventas</h2>
+                  <p className="text-blue-400/60 text-[9px] font-black uppercase tracking-widest">Lo que más sale hoy</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <input 
+                  type="date" 
+                  value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  onBlur={fetchSalesReport}
+                  className="bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold outline-none"
+                />
+                <button onClick={() => setIsSalesReportOpen(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-8">
+              {salesReport.length > 0 ? (
+                <div className="space-y-4">
+                  {salesReport.length > 0 && salesReport[0].isRecentOnly && (
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
+                      <Info className="w-5 h-5 text-blue-500" />
+                      <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">
+                        Sin ventas hoy. Mostrando acumulado de los últimos 7 días.
+                      </p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-100">
+                    <div className="col-span-6">Producto</div>
+                    <div className="col-span-2 text-center">Cant.</div>
+                    <div className="col-span-2 text-right">Recaudado</div>
+                    <div className="col-span-2 text-right">Utilidad</div>
+                  </div>
+                  <div className="max-h-[400px] overflow-y-auto pr-2 space-y-2">
+                    {salesReport.map((sale, i) => {
+                      const utility = sale.totalRevenue - sale.totalCost;
+                      return (
+                        <div key={i} className="grid grid-cols-12 gap-4 items-center p-4 bg-zinc-50 rounded-2xl border border-zinc-100 hover:border-blue-200 transition-colors">
+                          <div className="col-span-6">
+                            <p className="font-black italic text-sm">{sale.productName}</p>
+                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{sale.category}</p>
+                          </div>
+                          <div className="col-span-2 text-center">
+                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg font-black text-xs">
+                              {sale.totalQuantity}
+                            </span>
+                          </div>
+                          <div className="col-span-2 text-right font-bold text-zinc-600">
+                            {formatARS(sale.totalRevenue)}
+                          </div>
+                          <div className="col-span-2 text-right font-black text-emerald-500 italic">
+                            {formatARS(utility)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-zinc-100">
+                    <button 
+                      onClick={generateSalesReportPDF}
+                      className="col-span-2 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20"
+                    >
+                      Descargar Reporte PDF
+                    </button>
+                    <div className="p-6 bg-zinc-900 rounded-3xl text-white border border-white/5">
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Total Recaudado</p>
+                      <p className="text-3xl font-black italic">{formatARS(salesReport.reduce((acc, s) => acc + s.totalRevenue, 0))}</p>
+                    </div>
+                    <div className="p-6 bg-emerald-500 rounded-3xl text-white">
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Utilidad Estimada</p>
+                      <p className="text-3xl font-black italic">{formatARS(salesReport.reduce((acc, s) => acc + (s.totalRevenue - s.totalCost), 0))}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-20 text-center">
+                  <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <TrendingUp className="w-10 h-10 text-zinc-200" />
+                  </div>
+                  <p className="text-zinc-400 font-black uppercase tracking-[0.2em] text-xs">No hubo ventas registradas este día</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Alert Report Modal */}
+      {isStockAlertsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6 overflow-y-auto">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-3xl my-auto animate-in fade-in zoom-in duration-300 border border-black/5">
+            <div className="p-8 bg-rose-600 text-white flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
+                  <AlertCircle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black italic uppercase tracking-tight">Sugerencia de Compra</h2>
+                  <p className="text-white/60 text-[9px] font-black uppercase tracking-widest">Quiebre de Stock Mínimo</p>
+                </div>
+              </div>
+              <button onClick={() => setIsStockAlertsOpen(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-8">
+              {stockAlerts.length > 0 ? (
+                <div className="space-y-6">
+                  <p className="text-sm font-medium text-zinc-500">Los siguientes productos están por debajo del stock mínimo definido. Se sugiere realizar una reposición inmediata.</p>
+                  
+                  <div className="space-y-2">
+                    {stockAlerts.map((alert, i) => (
+                      <div key={i} className="flex items-center justify-between p-5 bg-rose-50 rounded-2xl border border-rose-100 group hover:bg-rose-100/50 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-rose-200">
+                            <Package className="w-5 h-5 text-rose-400" />
+                          </div>
+                          <div>
+                            <p className="font-black italic text-zinc-900 leading-tight">{alert.name}</p>
+                            <p className="text-[9px] font-bold text-rose-400 uppercase tracking-widest mt-0.5">{alert.category}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-10">
+                          <div className="text-center">
+                            <p className="text-[8px] font-black text-rose-400 uppercase tracking-widest mb-1">Stock Actual</p>
+                            <p className="font-black italic text-rose-600">{alert.stock} uds</p>
+                          </div>
+                          <div className="text-center border-l border-rose-200 pl-10">
+                            <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Ventas (7d)</p>
+                            <p className="font-bold text-blue-600">{alert.weeklySales} uds</p>
+                          </div>
+                          <div className="text-center border-l border-rose-200 pl-10">
+                            <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Mínimo</p>
+                            <p className="font-bold text-zinc-600">{alert.minimumStock} uds</p>
+                          </div>
+                          <div className="text-right border-l border-rose-200 pl-10">
+                            <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-1">Sugerido Compra</p>
+                            <p className="text-xl font-black italic text-emerald-600">+{alert.needed}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <button 
+                      onClick={generateStockAlertsPDF}
+                      className="flex-1 py-4 bg-zinc-100 text-zinc-900 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-all"
+                    >
+                      Descargar PDF
+                    </button>
+                    <a 
+                      href="/purchase-reception"
+                      className="flex-[2] py-4 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl shadow-black/20"
+                    >
+                      <ShoppingCart className="w-4 h-4" /> Ir a Cargar Compra
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-20 text-center">
+                  <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle className="w-10 h-10 text-emerald-400" />
+                  </div>
+                  <p className="text-emerald-600 font-black uppercase tracking-[0.2em] text-xs italic">¡Excelente! Todos los productos tienen stock suficiente</p>
+                  <p className="text-zinc-400 text-[10px] mt-2 font-medium">Ningún producto está por debajo de su límite mínimo.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

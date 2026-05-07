@@ -40,7 +40,12 @@ namespace PadelQ.Api.Controllers
             var transactions = await _context.Transactions
                 .Include(t => t.PaymentMethod)
                 .Include(t => t.User)
-                .Where(t => t.Date >= lastClosureDate && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment))
+                .Where(t => t.Date >= lastClosureDate && (
+                    t.Type == TransactionType.Payment || 
+                    t.Type == TransactionType.MembershipPayment ||
+                    t.Type == TransactionType.CashIn ||
+                    t.Type == TransactionType.CashOut
+                ))
                 .ToListAsync();
 
             var activeMethods = await _context.PaymentMethods.Where(m => m.IsActive).ToListAsync();
@@ -126,10 +131,44 @@ namespace PadelQ.Api.Controllers
 
             var transactions = await _context.Transactions
                 .Include(t => t.PaymentMethod)
-                .Where(t => t.Date >= closure.OpeningDate && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment))
+                .Where(t => t.Date >= closure.OpeningDate && (
+                    t.Type == TransactionType.Payment || 
+                    t.Type == TransactionType.MembershipPayment ||
+                    t.Type == TransactionType.CashIn ||
+                    t.Type == TransactionType.CashOut
+                ))
                 .ToListAsync();
 
-            closure.ExpectedCash = closure.InitialCash + closure.TotalCashSales;
+            // Calcular totales por tipo de método
+            closure.TotalCashSales = transactions
+                .Where(t => t.PaymentMethod?.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase) == true)
+                .Sum(t => t.Amount);
+
+            closure.TotalTransferSales = transactions
+                .Where(t => t.PaymentMethod?.Name.Contains("Transferencia", StringComparison.OrdinalIgnoreCase) == true)
+                .Sum(t => t.Amount);
+
+            closure.TotalCardSales = transactions
+                .Where(t => (t.PaymentMethod?.Name.Contains("Tarjeta", StringComparison.OrdinalIgnoreCase) == true || 
+                             t.PaymentMethod?.Name.Contains("Débito", StringComparison.OrdinalIgnoreCase) == true ||
+                             t.PaymentMethod?.Name.Contains("Crédito", StringComparison.OrdinalIgnoreCase) == true))
+                .Sum(t => t.Amount);
+
+            // Otros: Cualquier cosa que no sea efectivo, transferencia o tarjeta (incluyendo los que no tienen método)
+            closure.TotalOtherSales = transactions.Sum(t => t.Amount) 
+                - (closure.TotalCashSales ?? 0) 
+                - (closure.TotalTransferSales ?? 0) 
+                - (closure.TotalCardSales ?? 0);
+
+            closure.TotalCashIn = transactions
+                .Where(t => t.Type == TransactionType.CashIn)
+                .Sum(t => t.Amount);
+
+            closure.TotalCashOut = transactions
+                .Where(t => t.Type == TransactionType.CashOut)
+                .Sum(t => t.Amount);
+
+            closure.ExpectedCash = closure.InitialCash + (closure.TotalCashSales ?? 0) + (closure.TotalCashIn ?? 0) - (closure.TotalCashOut ?? 0);
             closure.ActualCash = request.ActualCash;
             closure.ActualTotals = request.ActualTotals; // Se recibe como JSON desde el front
             closure.ClosingDate = DateTime.UtcNow;
@@ -154,7 +193,12 @@ namespace PadelQ.Api.Controllers
             var transactions = await _context.Transactions
                 .Include(t => t.PaymentMethod)
                 .Include(t => t.User)
-                .Where(t => t.Date >= start && t.Date <= end && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment))
+                .Where(t => t.Date >= start && t.Date <= end && (
+                    t.Type == TransactionType.Payment || 
+                    t.Type == TransactionType.MembershipPayment ||
+                    t.Type == TransactionType.CashIn ||
+                    t.Type == TransactionType.CashOut
+                ))
                 .OrderBy(t => t.Date)
                 .ToListAsync();
 
@@ -172,6 +216,29 @@ namespace PadelQ.Api.Controllers
             });
         }
 
+        [HttpPost("adjustment")]
+        public async Task<IActionResult> RegisterAdjustment([FromBody] ManualAdjustmentRequest request)
+        {
+            var activeClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen);
+            if (!activeClosure) return BadRequest("No hay una caja abierta para registrar movimientos.");
+
+            var transaction = new Transaction
+            {
+                UserId = "Particular",
+                Amount = request.Amount,
+                Date = DateTime.UtcNow,
+                Type = request.IsIncome ? TransactionType.CashIn : TransactionType.CashOut,
+                Description = request.Description,
+                ProcessedBy = User.Identity?.Name ?? "Admin",
+                PaymentMethodId = request.PaymentMethodId
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(transaction);
+        }
+
         [HttpGet("history")]
         public async Task<IActionResult> GetHistory()
         {
@@ -182,6 +249,13 @@ namespace PadelQ.Api.Controllers
 
             return Ok(history);
         }
+    }
+
+    public class ManualAdjustmentRequest {
+        public decimal Amount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public bool IsIncome { get; set; }
+        public int? PaymentMethodId { get; set; }
     }
 
     public class OpenCashRequest {

@@ -52,7 +52,13 @@ namespace PadelQ.Api.Controllers
 
         [HttpPost("payment")]
         [Authorize(Roles = "Admin,Staff")]
-        public async Task<ActionResult<Transaction>> RecordPayment([FromQuery] string? userId, [FromQuery] decimal amount, [FromQuery] string? description, [FromQuery] int? paymentMethodId)
+        public async Task<ActionResult<Transaction>> RecordPayment(
+            [FromQuery] string? userId, 
+            [FromQuery] decimal amount, 
+            [FromQuery] string? description, 
+            [FromQuery] int? paymentMethodId,
+            [FromQuery] Guid? bookingId,
+            [FromQuery] Guid? spaceBookingId)
         {
             ApplicationUser? user = null;
 
@@ -89,7 +95,9 @@ namespace PadelQ.Api.Controllers
                 Type = TransactionType.Payment,
                 Description = description,
                 PaymentMethodId = paymentMethodId,
-                ProcessedBy = User.Identity?.Name ?? "Sistema"
+                ProcessedBy = User.Identity?.Name ?? "Sistema",
+                BookingId = bookingId,
+                SpaceBookingId = spaceBookingId
             };
 
             _context.Transactions.Add(transaction);
@@ -228,6 +236,39 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = $"Historial de cuenta corriente para {user.FullName} ha sido reseteado correctamente." });
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteTransaction(int id)
+        {
+            var transaction = await _context.Transactions.FindAsync(id);
+            if (transaction == null) return NotFound("Transacción no encontrada");
+
+            // SEGURIDAD DE INTEGRIDAD: 
+            // Solo permitir borrar si la reserva vinculada NO existe o está en estado Cancelado.
+            if (transaction.BookingId.HasValue)
+            {
+                var booking = await _context.Bookings.FindAsync(transaction.BookingId.Value);
+                if (booking != null && booking.Status != BookingStatus.Cancelled)
+                {
+                    return BadRequest("Seguridad: No se puede borrar este movimiento porque la reserva de cancha vinculada todavía existe y está activa. Debe anular la reserva primero para poder limpiar la caja.");
+                }
+            }
+
+            if (transaction.SpaceBookingId.HasValue)
+            {
+                var sbooking = await _context.SpaceBookings.FindAsync(transaction.SpaceBookingId.Value);
+                if (sbooking != null && sbooking.Status != BookingStatus.Cancelled)
+                {
+                    return BadRequest("Seguridad: No se puede borrar este movimiento porque el alquiler de espacio vinculado todavía existe y está activo. Debe anular el alquiler primero.");
+                }
+            }
+
+            _context.Transactions.Remove(transaction);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
     }

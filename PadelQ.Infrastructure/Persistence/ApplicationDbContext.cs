@@ -26,6 +26,10 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<BookingConsumption> BookingConsumptions { get; set; } = null!;
         public DbSet<ProductStockMovement> ProductStockMovements { get; set; } = null!;
         public DbSet<CashClosure> CashClosures { get; set; } = null!;
+        public DbSet<Supplier> Suppliers { get; set; } = null!;
+        public DbSet<SupplierPurchase> SupplierPurchases { get; set; } = null!;
+        public DbSet<SupplierPurchaseItem> SupplierPurchaseItems { get; set; } = null!;
+
 
         protected override void OnModelCreating(ModelBuilder builder)
         {

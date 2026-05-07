@@ -122,7 +122,8 @@ namespace PadelQ.Infrastructure.Services
                     Amount = finalPrice,
                     Type = TransactionType.Charge,
                     Date = DateTime.UtcNow,
-                    Description = $"Reserva de Cancha: {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : "")
+                    Description = $"Reserva de Cancha: {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
+                    BookingId = booking.Id
                 };
                 _context.Transactions.Add(transactionEntry);
 
@@ -241,7 +242,8 @@ namespace PadelQ.Infrastructure.Services
                         Amount = finalPrice,
                         Type = TransactionType.Charge,
                         Date = DateTime.UtcNow,
-                        Description = $"Reserva de Cancha (Admin): {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : "")
+                        Description = $"Reserva de Cancha (Admin): {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
+                        BookingId = booking.Id
                     };
                     _context.Transactions.Add(transactionEntry);
                 }
@@ -407,7 +409,8 @@ namespace PadelQ.Infrastructure.Services
                             Amount = finalPrice,
                             Type = TransactionType.Charge,
                             Date = DateTime.UtcNow,
-                            Description = $"Reserva Recurrente (Admin): {court?.Name ?? "Cancha"} el {currentStartTime:dd/MM HH:mm}"
+                            Description = $"Reserva Recurrente (Admin): {court?.Name ?? "Cancha"} el {currentStartTime:dd/MM HH:mm}",
+                            BookingId = booking.Id
                         };
                         _context.Transactions.Add(transactionEntry);
                     }
@@ -452,6 +455,28 @@ namespace PadelQ.Infrastructure.Services
             
             booking.Status = BookingStatus.Cancelled;
 
+            // Devolver stock de consumiciones vinculadas
+            var consumptions = await _context.BookingConsumptions
+                .Where(c => c.BookingId == bookingId)
+                .ToListAsync();
+
+            foreach (var consumption in consumptions)
+            {
+                var product = await _context.Products.FindAsync(consumption.ProductId);
+                if (product != null)
+                {
+                    product.Stock += consumption.Quantity;
+                    _context.ProductStockMovements.Add(new ProductStockMovement
+                    {
+                        ProductId = product.Id,
+                        Type = MovementType.Adjustment,
+                        Quantity = consumption.Quantity,
+                        Note = $"Devolución por anulación de reserva: {booking.Id}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
             // Si tenía usuario, compensamos la deuda en su Cta Cte
             if (!string.IsNullOrEmpty(booking.UserId))
             {
@@ -461,7 +486,8 @@ namespace PadelQ.Infrastructure.Services
                     Amount = booking.Price,
                     Type = TransactionType.Payment, // Resta de la deuda (Cta Cte)
                     Date = DateTime.UtcNow,
-                    Description = $"Anulación Reserva: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}"
+                    Description = $"Anulación Reserva: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}",
+                    BookingId = booking.Id
                 };
                 _context.Transactions.Add(reversal);
             }
@@ -483,6 +509,28 @@ namespace PadelQ.Infrastructure.Services
             {
                 b.Status = BookingStatus.Cancelled;
                 
+                // Devolver stock de consumiciones
+                var consumptions = await _context.BookingConsumptions
+                    .Where(c => c.BookingId == b.Id)
+                    .ToListAsync();
+
+                foreach (var consumption in consumptions)
+                {
+                    var product = await _context.Products.FindAsync(consumption.ProductId);
+                    if (product != null)
+                    {
+                        product.Stock += consumption.Quantity;
+                        _context.ProductStockMovements.Add(new ProductStockMovement
+                        {
+                            ProductId = product.Id,
+                            Type = MovementType.Adjustment,
+                            Quantity = consumption.Quantity,
+                            Note = $"Devolución por anulación de serie: {recurrenceGroupId}",
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+
                 // Si cada turno tenía un cargo en Cta Cte, lo compensamos uno a uno
                 if (!string.IsNullOrEmpty(b.UserId))
                 {
@@ -492,7 +540,8 @@ namespace PadelQ.Infrastructure.Services
                         Amount = b.Price,
                         Type = TransactionType.Payment,
                         Date = DateTime.UtcNow,
-                        Description = $"Anulación Serie Recurrente: {b.Court?.Name ?? "Cancha"} del {b.StartTime:dd/MM HH:mm}"
+                        Description = $"Anulación Serie Recurrente: {b.Court?.Name ?? "Cancha"} del {b.StartTime:dd/MM HH:mm}",
+                        BookingId = b.Id
                     };
                     _context.Transactions.Add(reversal);
                 }

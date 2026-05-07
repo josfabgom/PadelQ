@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { 
-    DollarSign, 
-    Calendar, 
-    Users, 
-    ArrowLeft, 
-    Plus, 
-    Check, 
-    X, 
-    TrendingUp, 
-    Wallet, 
+import {
+    DollarSign,
+    Calendar,
+    Users,
+    ArrowLeft,
+    Plus,
+    Check,
+    X,
+    TrendingUp,
+    Wallet,
     History,
     CreditCard,
     ArrowRightLeft,
@@ -17,11 +17,12 @@ import {
     User as UserIcon,
     AlertCircle,
     FileText,
-    Printer
+    Printer,
+    Trash2
 } from 'lucide-react';
 import Header from '../components/Header';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface CashClosure {
     id: number;
@@ -35,6 +36,12 @@ interface CashClosure {
     openedBy: string;
     closedBy?: string;
     isOpen: boolean;
+    totalCashSales?: number;
+    totalTransferSales?: number;
+    totalCardSales?: number;
+    totalOtherSales?: number;
+    totalCashIn?: number;
+    totalCashOut?: number;
 }
 
 const CashManagement = () => {
@@ -43,15 +50,22 @@ const CashManagement = () => {
     const [loading, setLoading] = useState(true);
     const [isOpening, setIsOpening] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
-    
+    const [isAdjusting, setIsAdjusting] = useState(false);
+    const [adjustmentType, setAdjustmentType] = useState<'income' | 'outcome'>('income');
+
     // Form states
     const [initialCash, setInitialCash] = useState<number>(0);
     const [actualCash, setActualCash] = useState<number>(0);
-    const [actualTotals, setActualTotals] = useState<{[key: string]: number}>({});
+    const [actualTotals, setActualTotals] = useState<{ [key: string]: number }>({});
     const [notes, setNotes] = useState('');
+    const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+    const [adjustmentDescription, setAdjustmentDescription] = useState('');
+    const [selectedMethodId, setSelectedMethodId] = useState<number | null>(null);
     const [selectedMethodDetail, setSelectedMethodDetail] = useState<any>(null);
 
     const config = getAuthConfig();
+    const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
+    const isAdmin = roles.includes('admin');
 
     useEffect(() => {
         fetchData();
@@ -85,6 +99,37 @@ const CashManagement = () => {
         }
     };
 
+    const handleRegisterAdjustment = async () => {
+        if (adjustmentAmount <= 0) return alert("El monto debe ser mayor a 0");
+        if (!adjustmentDescription) return alert("Ingresa un concepto o descripción");
+
+        try {
+            await api.post('/api/cash-closures/adjustment', {
+                amount: adjustmentAmount,
+                description: adjustmentDescription,
+                isIncome: adjustmentType === 'income',
+                paymentMethodId: selectedMethodId
+            }, config);
+            setIsAdjusting(false);
+            setAdjustmentAmount(0);
+            setAdjustmentDescription('');
+            setSelectedMethodId(null);
+            fetchData();
+        } catch (err: any) {
+            alert(err.response?.data || "Error al registrar movimiento");
+        }
+    };
+
+    const handleDeleteTransaction = async (id: string) => {
+        if (!window.confirm("¿Estás seguro de que deseas anular este movimiento? Esta acción limpiará el registro de la caja.")) return;
+        try {
+            await api.delete(`/api/transaction/${id}`, config);
+            fetchData();
+        } catch (err: any) {
+            alert("Error al anular movimiento: " + (err.response?.data || err.message));
+        }
+    };
+
     const handleDownloadPDF = async (closureId: number) => {
         try {
             const res = await api.get(`/api/cash-closures/${closureId}/details`, config);
@@ -96,106 +141,171 @@ const CashManagement = () => {
     };
 
     const generatePDF = (closure: CashClosure, transactions: any[]) => {
-        const doc = new jsPDF() as any;
-        
-        // Header
-        doc.setFontSize(22);
-        doc.setFont("helvetica", "bold");
-        doc.text("PadelQ - Resumen de Cierre de Caja", 105, 20, { align: "center" });
-        
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        doc.text(`ID Cierre: #${closure.id}`, 20, 35);
-        doc.text(`Apertura: ${new Date(closure.openingDate).toLocaleString()}`, 20, 40);
-        doc.text(`Cierre: ${closure.closingDate ? new Date(closure.closingDate).toLocaleString() : 'En curso'}`, 20, 45);
-        doc.text(`Cajero/Vendedor: ${closure.closedBy || closure.openedBy}`, 20, 50);
+        try {
+            const doc = new jsPDF();
+            let actualTotalsParsed = {};
+            try {
+                actualTotalsParsed = closure.actualTotals ? (typeof closure.actualTotals === 'string' ? JSON.parse(closure.actualTotals) : closure.actualTotals) : {};
+            } catch (e) {
+                console.error("Error parsing actualTotals", e);
+            }
 
-        // Summary Totals
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text("Totales por Medio", 20, 65);
-        
-        const summaryData = transactions.reduce((acc: any, t: any) => {
-            if (!acc[t.method]) acc[t.method] = { total: 0, count: 0 };
-            acc[t.method].total += t.amount;
-            acc[t.method].count++;
-            return acc;
-        }, {});
+            // Header
+            doc.setFillColor(0, 0, 0);
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(24);
+            doc.setFont("helvetica", "bold");
+            doc.text("PadelQ", 20, 25);
+            doc.setFontSize(12);
+            doc.text("PLANILLA DE CIERRE DE CAJA", 190, 25, { align: "right" });
 
-        const summaryRows = Object.keys(summaryData).map(method => [
-            method,
-            summaryData[method].count,
-            formatARS(summaryData[method].total)
-        ]);
-
-        doc.autoTable({
-            startY: 70,
-            head: [['Medio de Pago', 'Movimientos', 'Subtotal']],
-            body: summaryRows,
-            theme: 'grid',
-            headStyles: { fillColor: [0, 0, 0] }
-        });
-
-        // Transactions Detail
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text("Detalle de Operaciones y Consumos", 20, doc.lastAutoTable.finalY + 15);
-
-        const transRows = transactions.map(t => [
-            new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            t.userName,
-            t.description,
-            t.method,
-            formatARS(t.amount)
-        ]);
-
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 20,
-            head: [['Hora', 'Cliente', 'Descripción / Consumos', 'Medio', 'Monto']],
-            body: transRows,
-            theme: 'striped',
-            headStyles: { fillColor: [60, 60, 60] },
-            styles: { fontSize: 8 }
-        });
-
-        // Final Totals
-        const finalY = doc.lastAutoTable.finalY + 20;
-        doc.setFontSize(12);
-        doc.text(`Fondo Inicial: ${formatARS(closure.initialCash)}`, 140, finalY);
-        doc.text(`Ingresos Totales: ${formatARS(transactions.reduce((s, t) => s + t.amount, 0))}`, 140, finalY + 7);
-        doc.setFontSize(16);
-        doc.text(`Efectivo Real en Caja: ${formatARS(closure.actualCash || 0)}`, 140, finalY + 17);
-
-        if (closure.notes) {
+            doc.setTextColor(0, 0, 0);
             doc.setFontSize(10);
-            doc.text("Observaciones:", 20, finalY + 30);
-            doc.setFont("helvetica", "italic");
-            doc.text(closure.notes, 20, finalY + 35, { maxWidth: 170 });
-        }
+            doc.setFont("helvetica", "normal");
 
-        doc.save(`Cierre_Caja_${closure.id}_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+            let currentY = 50;
+            doc.text(`ID Cierre: #${closure.id}`, 20, currentY);
+            doc.text(`Fecha/Hora Reporte: ${new Date().toLocaleString()}`, 190, currentY, { align: "right" });
+            currentY += 7;
+            doc.text(`Apertura: ${new Date(closure.openingDate).toLocaleString()}`, 20, currentY);
+            doc.text(`Cierre: ${closure.closingDate ? new Date(closure.closingDate).toLocaleString() : 'EN CURSO'}`, 190, currentY, { align: "right" });
+            currentY += 7;
+            doc.text(`Operador Responsable: ${closure.closedBy || closure.openedBy || 'Admin'}`, 20, currentY);
+
+            // Control de Efectivo Section
+            currentY += 15;
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(14);
+            doc.text("1. CONTROL FÍSICO DE EFECTIVO", 20, currentY);
+            currentY += 5;
+
+            const expectedCash = closure.initialCash + (closure.totalCashSales || 0) + (closure.totalCashIn || 0) - (closure.totalCashOut || 0);
+            const diffCash = (closure.actualCash || 0) - expectedCash;
+
+            const cashRows = [
+                ["Fondo Inicial de Apertura", formatARS(closure.initialCash)],
+                ["(+) Ventas en Efectivo", formatARS(closure.totalCashSales || 0)],
+                ["(+) Ingresos Manuales", formatARS(closure.totalCashIn || 0)],
+                ["(-) Egresos Manuales", formatARS(closure.totalCashOut || 0)],
+                ["(=) TOTAL EFECTIVO ESPERADO (Sistema)", formatARS(expectedCash)],
+                ["(X) TOTAL EFECTIVO REAL CONTADO", formatARS(closure.actualCash || 0)],
+                ["DIFERENCIA / SOBRANTE O FALTANTE", formatARS(diffCash)]
+            ];
+
+            autoTable(doc, {
+                startY: currentY + 5,
+                body: cashRows,
+                theme: 'grid',
+                styles: { fontSize: 10, cellPadding: 5 },
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 120 }, 1: { halign: 'right' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === 6 && data.section === 'body') {
+                        if (diffCash < -1) data.cell.styles.textColor = [200, 0, 0];
+                        if (diffCash > 1) data.cell.styles.textColor = [0, 150, 0];
+                    }
+                }
+            });
+
+            currentY = (doc as any).lastAutoTable?.finalY || (currentY + 80);
+            currentY += 15;
+
+            // Control de Otros Medios Section
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(14);
+            doc.text("2. CONTROL DE OTROS MEDIOS DE PAGO", 20, currentY);
+            currentY += 5;
+
+            const otherMethodsRows: any[] = [];
+            const otherMethods = [...new Set(transactions.map(t => t.method).filter(m => !m.toLowerCase().includes('efectivo')))];
+
+            otherMethods.forEach(method => {
+                const expected = transactions.filter(t => t.method === method).reduce((s, t) => s + t.amount, 0);
+                const actual = (actualTotalsParsed as any)[method] !== undefined ? (actualTotalsParsed as any)[method] : expected;
+                otherMethodsRows.push([
+                    method,
+                    formatARS(expected),
+                    formatARS(actual),
+                    formatARS(actual - expected)
+                ]);
+            });
+
+            autoTable(doc, {
+                startY: currentY + 5,
+                head: [['Medio de Pago', 'Esperado (Sistema)', 'Real Declarado', 'Diferencia']],
+                body: otherMethodsRows.length > 0 ? otherMethodsRows : [['Sin movimientos en otros medios', '-', '-', '-']],
+                theme: 'grid',
+                headStyles: { fillColor: [40, 40, 40] },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+            });
+
+            currentY = (doc as any).lastAutoTable?.finalY || (currentY + 40);
+            currentY += 20;
+
+            // Signature Section
+            if (currentY > 240) { doc.addPage(); currentY = 30; }
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+
+            doc.line(20, currentY + 30, 80, currentY + 30);
+            doc.text("Firma Operador de Caja", 50, currentY + 35, { align: "center" });
+            doc.setFont("helvetica", "bold");
+            doc.text(closure.closedBy || closure.openedBy || 'Admin', 50, currentY + 40, { align: "center" });
+
+            doc.setFont("helvetica", "normal");
+            doc.line(130, currentY + 30, 190, currentY + 30);
+            doc.text("Firma Responsable Admin.", 160, currentY + 35, { align: "center" });
+
+            if (closure.notes) {
+                currentY += 60;
+                if (currentY > 270) { doc.addPage(); currentY = 30; }
+                doc.setFont("helvetica", "bold");
+                doc.text("Observaciones del Cierre:", 20, currentY);
+                doc.setFont("helvetica", "italic");
+                doc.setFontSize(9);
+                doc.text(closure.notes, 20, currentY + 7, { maxWidth: 170 });
+            }
+
+            doc.save(`Cierre_Caja_${closure.id}_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+        } catch (error) {
+            console.error("Critical error generating PDF", error);
+            throw error; // Re-throw to be caught by handleCloseCash
+        }
     };
 
     const handleCloseCash = async () => {
+        if (!confirm("¿Estás seguro de que deseas realizar el cierre de caja? Esta acción no se puede deshacer.")) return;
+
         try {
-            const res = await api.post('/api/cash-closures/close', { 
-                actualCash, 
+            const res = await api.post('/api/cash-closures/close', {
+                actualCash,
                 notes,
                 actualTotals: JSON.stringify(actualTotals)
             }, config);
+            
+            // Cerrar el modal inmediatamente después de la respuesta exitosa
             setIsClosing(false);
+
+            // Auto generate PDF on close
+            try {
+                const closureId = res.data.id;
+                const detailsRes = await api.get(`/api/cash-closures/${closureId}/details`, config);
+                generatePDF(detailsRes.data.closure, detailsRes.data.transactions);
+            } catch (pdfErr) {
+                console.error("Error generating PDF", pdfErr);
+                alert("La caja se cerró correctamente, pero hubo un error al generar el PDF automático. Puedes descargarlo desde el historial.");
+            }
+
+            // Limpiar estados
             setActualCash(0);
             setActualTotals({});
             setNotes('');
             
-            // Auto generate PDF on close
-            const closureId = res.data.id;
-            const detailsRes = await api.get(`/api/cash-closures/${closureId}/details`, config);
-            generatePDF(detailsRes.data.closure, detailsRes.data.transactions);
-            
             fetchData();
         } catch (err: any) {
-            alert(err.response?.data || "Error al cerrar caja");
+            console.error("Error closing cash", err);
+            alert(err.response?.data || "Error al cerrar caja. Verifica que la conexión sea estable.");
         }
     };
 
@@ -203,7 +313,8 @@ const CashManagement = () => {
         return new Intl.NumberFormat('es-AR', {
             style: 'currency',
             currency: 'ARS',
-            minimumFractionDigits: 0
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         }).format(amount);
     };
 
@@ -229,22 +340,58 @@ const CashManagement = () => {
                 </div>
 
                 {!currentStatus?.activeClosure ? (
-                    <button 
+                    <button
                         onClick={() => setIsOpening(true)}
                         className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3"
                     >
                         <Plus className="w-5 h-5" /> Abrir Caja del Día
                     </button>
                 ) : (
-                    <button 
-                        onClick={() => {
-                            setActualCash(currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s:any) => s.method.includes('Efectivo'))?.total || 0));
-                            setIsClosing(true);
-                        }}
-                        className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center gap-3"
-                    >
-                        <Check className="w-5 h-5" /> Realizar Cierre de Caja
-                    </button>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => {
+                                setAdjustmentType('income');
+                                // Default to cash if available
+                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                setSelectedMethodId(cashMethod?.methodId || null);
+                                setIsAdjusting(true);
+                            }}
+                            className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3"
+                        >
+                            <TrendingUp className="w-5 h-5" /> Ingreso Manual
+                        </button>
+                        <button
+                            onClick={() => {
+                                setAdjustmentType('outcome');
+                                // Default to cash if available
+                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                setSelectedMethodId(cashMethod?.methodId || null);
+                                setIsAdjusting(true);
+                            }}
+                            className="px-8 py-4 bg-rose-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-600 transition-all flex items-center gap-3"
+                        >
+                            <ArrowRightLeft className="w-5 h-5" /> Egreso Manual
+                        </button>
+                        <button
+                            onClick={() => {
+                                // Solo incluimos explícitamente el método que contenga "Efectivo"
+                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                setActualCash(currentStatus.activeClosure.initialCash + (cashMethod?.total || 0));
+
+                                // Initialize actualTotals with expected totals for all methods (except explicitly cash)
+                                const initialTotals: { [key: string]: number } = {};
+                                currentStatus.summary.forEach((s: any) => {
+                                    initialTotals[s.method] = s.total;
+                                });
+                                setActualTotals(initialTotals);
+
+                                setIsClosing(true);
+                            }}
+                            className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center gap-3"
+                        >
+                            <Check className="w-5 h-5" /> Cerrar Caja
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -283,32 +430,6 @@ const CashManagement = () => {
                                         <h4 className="text-3xl font-black text-white italic tracking-tighter">{formatARS(currentStatus.totalAmount)}</h4>
                                     </div>
                                 </div>
-
-                                <div className="space-y-4">
-                                    <h4 className="text-[11px] font-black text-black uppercase tracking-[0.3em] mb-6 italic border-b border-zinc-100 pb-4">Desglose por Medios de Pago</h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {currentStatus.summary.map((s: any, idx: number) => (
-                                            <div 
-                                                key={idx} 
-                                                onClick={() => setSelectedMethodDetail(s)}
-                                                className="p-6 bg-white border border-zinc-100 rounded-[28px] flex items-center justify-between hover:border-black cursor-pointer transition-all group"
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{ backgroundColor: `${s.color}15`, color: s.color }}>
-                                                        {s.method.includes('Efectivo') ? <Wallet className="w-5 h-5" /> : 
-                                                         s.method.includes('Transferencia') ? <ArrowRightLeft className="w-5 h-5" /> : 
-                                                         <CreditCard className="w-5 h-5" />}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{s.method}</p>
-                                                        <p className="text-[10px] font-bold text-zinc-500">{s.count} Movimientos</p>
-                                                    </div>
-                                                </div>
-                                                <span className="text-xl font-black italic text-black">{formatARS(s.total)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
                             </>
                         ) : (
                             <div className="py-20 flex flex-col items-center justify-center text-center space-y-6">
@@ -319,7 +440,7 @@ const CashManagement = () => {
                                     <h3 className="text-2xl font-black text-black uppercase italic">Caja Cerrada</h3>
                                     <p className="text-zinc-400 text-[10px] font-black uppercase tracking-widest mt-2">Abre una nueva sesión para empezar a registrar ventas</p>
                                 </div>
-                                <button 
+                                <button
                                     onClick={() => setIsOpening(true)}
                                     className="px-10 py-5 bg-black text-white rounded-[24px] font-black uppercase text-[11px] tracking-widest hover:scale-105 transition-all shadow-2xl shadow-black/20"
                                 >
@@ -328,6 +449,73 @@ const CashManagement = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Daily Journal Section */}
+                    {currentStatus?.activeClosure && (
+                        <div className="bg-white rounded-[40px] p-10 border border-black/5 shadow-[0_20px_60px_rgb(0,0,0,0.02)]">
+                            <div className="flex items-center justify-between mb-8 pb-6 border-b border-zinc-100">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white">
+                                        <History className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-black uppercase italic">Libro Diario</h3>
+                                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Todos los movimientos del día</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                {(() => {
+                                    const allTransactions = currentStatus.summary
+                                        .flatMap((s: any) => s.transactions.map((t: any) => ({ ...t, method: s.method, color: s.color })))
+                                        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                                    if (allTransactions.length === 0) {
+                                        return <p className="text-center py-10 text-zinc-300 text-[10px] font-black uppercase tracking-widest italic">No hay movimientos registrados</p>;
+                                    }
+
+                                    return allTransactions.map((t: any) => (
+                                        <div key={t.id} className="p-5 bg-zinc-50 border border-zinc-100 rounded-[28px] flex items-center justify-between hover:bg-white hover:border-black/10 transition-all group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${t.color}15`, color: t.color }}>
+                                                    {t.method.includes('Efectivo') ? <Wallet className="w-5 h-5" /> :
+                                                     t.method.includes('Transferencia') ? <ArrowRightLeft className="w-5 h-5" /> :
+                                                     <CreditCard className="w-5 h-5" />}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-[10px] font-black text-black uppercase">{t.description || 'Sin concepto'}</p>
+                                                        <span className="px-2 py-0.5 bg-zinc-100 rounded-md text-[7px] font-black text-zinc-400 uppercase tracking-tighter">{t.method}</span>
+                                                    </div>
+                                                    <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                                                        {new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs • Por: {t.processedBy || 'Sistema'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-right">
+                                                    <span className={`text-lg font-black italic ${t.amount > 0 ? 'text-black' : 'text-rose-600'}`}>
+                                                        {t.amount > 0 ? '+' : ''}{formatARS(t.amount)}
+                                                    </span>
+                                                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mt-1">{t.userName}</p>
+                                                </div>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleDeleteTransaction(t.id)}
+                                                        className="opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all ml-2"
+                                                        title="Anular Movimiento"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* History Sidebar */}
@@ -358,7 +546,7 @@ const CashManagement = () => {
                                                 <span className="text-[10px] font-bold text-zinc-400 uppercase">Efectivo Final:</span>
                                                 <span className="text-xs font-black text-black">{formatARS(c.actualCash || 0)}</span>
                                             </div>
-                                            <button 
+                                            <button
                                                 onClick={() => handleDownloadPDF(c.id)}
                                                 className="p-3 bg-zinc-100 hover:bg-black hover:text-white rounded-xl transition-all flex items-center gap-2 group"
                                             >
@@ -392,8 +580,8 @@ const CashManagement = () => {
                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fondo Inicial ($)</label>
                                 <div className="relative">
                                     <DollarSign className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                                    <input 
-                                        type="number" 
+                                    <input
+                                        type="number"
                                         value={initialCash}
                                         onChange={(e) => setInitialCash(Number(e.target.value))}
                                         className="w-full pl-16 pr-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none text-xl font-black italic"
@@ -403,14 +591,14 @@ const CashManagement = () => {
                             </div>
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Notas / Observaciones</label>
-                                <textarea 
+                                <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     className="w-full px-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm h-32 resize-none"
                                     placeholder="Ej: Cambio en billetes de 1000..."
                                 />
                             </div>
-                            <button 
+                            <button
                                 onClick={handleOpenCash}
                                 className="w-full py-6 bg-emerald-500 text-white rounded-[28px] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all"
                             >
@@ -432,20 +620,71 @@ const CashManagement = () => {
                             <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Verifica el efectivo físico disponible</p>
                         </div>
                         <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                            {/* Grand Total Summary */}
+                            <div className="p-8 bg-black rounded-[32px] border border-black shadow-xl space-y-4">
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Esperado</p>
+                                        <h4 className="text-3xl font-black text-white italic tracking-tighter">
+                                            {formatARS(currentStatus.activeClosure.initialCash + currentStatus.totalAmount)}
+                                        </h4>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Real</p>
+                                        <h4 className="text-3xl font-black text-emerald-400 italic tracking-tighter">
+                                            {formatARS(actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0))}
+                                        </h4>
+                                    </div>
+                                </div>
+
+                                {Math.abs((actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) - (currentStatus.activeClosure.initialCash + currentStatus.totalAmount)) > 1 && (
+                                    <div className={`pt-4 border-t border-white/10 flex justify-between items-center ${(actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) > (currentStatus.activeClosure.initialCash + currentStatus.totalAmount)
+                                            ? "text-emerald-400" : "text-rose-400"
+                                        }`}>
+                                        <span className="text-[10px] font-black uppercase tracking-widest italic">Diferencia Total en Caja</span>
+                                        <span className="text-xl font-black">
+                                            {formatARS((actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) - (currentStatus.activeClosure.initialCash + currentStatus.totalAmount))}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-5 bg-zinc-50 border border-zinc-100 rounded-[28px] space-y-1">
+                                    <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Fondo Inicial</p>
+                                    <h4 className="text-xl font-black text-black italic tracking-tighter">
+                                        {formatARS(currentStatus.activeClosure.initialCash)}
+                                    </h4>
+                                </div>
+                                <div className="p-5 bg-zinc-50 border border-zinc-100 rounded-[28px] space-y-1">
+                                    <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Ventas Totales (Hoy)</p>
+                                    <h4 className="text-xl font-black text-emerald-600 italic tracking-tighter">
+                                        {formatARS(currentStatus.totalAmount)}
+                                    </h4>
+                                </div>
+                            </div>
+
                             <div className="p-6 bg-rose-50 border border-rose-100 rounded-[32px] space-y-2">
-                                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Efectivo Esperado (Teórico)</p>
+                                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Efectivo Total Esperado</p>
                                 <h4 className="text-3xl font-black text-rose-600 italic tracking-tighter">
-                                    {formatARS(currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s:any) => s.method.includes('Efectivo'))?.total || 0))}
+                                    {formatARS(currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0))}
                                 </h4>
                                 <p className="text-[9px] font-bold text-rose-400 italic">Fondo inicial + Ventas en efectivo</p>
                             </div>
 
                             <div className="space-y-4">
-                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Efectivo Real Contado ($)</label>
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex justify-between">
+                                    <span>Efectivo Real Contado ($)</span>
+                                    {actualCash !== (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)) && (
+                                        <span className={actualCash > (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)) ? "text-emerald-500" : "text-rose-500"}>
+                                            Diferencia: {formatARS(actualCash - (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)))}
+                                        </span>
+                                    )}
+                                </label>
                                 <div className="relative">
                                     <DollarSign className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-black" />
-                                    <input 
-                                        type="number" 
+                                    <input
+                                        type="number"
                                         value={actualCash}
                                         onChange={(e) => setActualCash(Number(e.target.value))}
                                         className="w-full pl-16 pr-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none text-xl font-black italic"
@@ -454,40 +693,114 @@ const CashManagement = () => {
                                 </div>
                             </div>
 
-                            {currentStatus?.summary.filter((s:any) => !s.method.includes('Efectivo')).map((s: any) => (
+                            <div className="h-px bg-zinc-100 my-4"></div>
+                            <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] italic">Otros Medios de Pago</h4>
+
+                            {currentStatus?.summary.filter((s: any) => !s.method.includes('Efectivo')).map((s: any) => (
                                 <div key={s.methodId} className="space-y-4">
-                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                                        Total Real {s.method} ($) - Esperado: {formatARS(s.total)}
+                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex justify-between">
+                                        <span>Total Real {s.method} ($)</span>
+                                        <span className="opacity-50 italic">Esperado: {formatARS(s.total)}</span>
                                     </label>
                                     <div className="relative">
                                         <div className="absolute left-6 top-1/2 -translate-y-1/2">
                                             {s.method.includes('Transferencia') ? <ArrowRightLeft className="w-5 h-5 text-zinc-400" /> : <CreditCard className="w-5 h-5 text-zinc-400" />}
                                         </div>
-                                        <input 
-                                            type="number" 
-                                            value={actualTotals[s.method] || ''}
+                                        <input
+                                            type="number"
+                                            value={actualTotals[s.method] === undefined ? s.total : actualTotals[s.method]}
                                             onChange={(e) => setActualTotals({ ...actualTotals, [s.method]: Number(e.target.value) })}
                                             className="w-full pl-16 pr-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[24px] focus:ring-4 focus:ring-black/5 outline-none text-lg font-black italic"
                                             placeholder="0.00"
                                         />
                                     </div>
+                                    {actualTotals[s.method] !== undefined && actualTotals[s.method] !== s.total && (
+                                        <p className={`text-[9px] font-bold text-right ${actualTotals[s.method] > s.total ? "text-emerald-500" : "text-rose-500"}`}>
+                                            Diferencia: {formatARS(actualTotals[s.method] - s.total)}
+                                        </p>
+                                    )}
                                 </div>
                             ))}
 
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Notas de Cierre</label>
-                                <textarea 
+                                <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     className="w-full px-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm h-32 resize-none"
                                     placeholder="¿Hubo algún faltante o sobrante? Justifica aquí..."
                                 />
                             </div>
-                            <button 
+                            <button
                                 onClick={handleCloseCash}
                                 className="w-full py-6 bg-black text-white rounded-[28px] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all"
                             >
                                 Confirmar y Cerrar Caja
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Manual Adjustment Modal */}
+            {isAdjusting && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[70] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className={`p-8 ${adjustmentType === 'income' ? 'bg-emerald-500' : 'bg-rose-500'} text-white relative`}>
+                            <button onClick={() => setIsAdjusting(false)} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                            <h2 className="text-2xl font-black italic uppercase tracking-tight">
+                                {adjustmentType === 'income' ? 'Registrar Ingreso Manual' : 'Registrar Egreso Manual'}
+                            </h2>
+                            <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Movimiento directo de efectivo</p>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="space-y-4">
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Medio de Pago</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {currentStatus?.summary.map((s: any) => (
+                                        <button
+                                            key={s.methodId}
+                                            onClick={() => setSelectedMethodId(s.methodId)}
+                                            className={`p-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                                selectedMethodId === s.methodId 
+                                                ? 'bg-black text-white border-black shadow-lg' 
+                                                : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-zinc-300'
+                                            }`}
+                                        >
+                                            {s.method}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Monto ($)</label>
+                                <div className="relative">
+                                    <DollarSign className={`absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 ${adjustmentType === 'income' ? 'text-emerald-500' : 'text-rose-500'}`} />
+                                    <input
+                                        type="number"
+                                        value={adjustmentAmount}
+                                        onChange={(e) => setAdjustmentAmount(Number(e.target.value))}
+                                        className="w-full pl-16 pr-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none text-xl font-black italic"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Concepto / Motivo</label>
+                                <textarea
+                                    value={adjustmentDescription}
+                                    onChange={(e) => setAdjustmentDescription(e.target.value)}
+                                    className="w-full px-8 py-6 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm h-32 resize-none"
+                                    placeholder={adjustmentType === 'income' ? "Ej: Dinero para cambio inicial..." : "Ej: Pago de factura de luz, retiro para cambio..."}
+                                />
+                            </div>
+                            <button
+                                onClick={handleRegisterAdjustment}
+                                className={`w-full py-6 ${adjustmentType === 'income' ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-rose-500 shadow-rose-500/20'} text-white rounded-[28px] font-black uppercase text-xs tracking-[0.2em] shadow-xl transition-all`}
+                            >
+                                Confirmar Movimiento
                             </button>
                         </div>
                     </div>
@@ -504,9 +817,9 @@ const CashManagement = () => {
                             </button>
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${selectedMethodDetail.color}20`, color: selectedMethodDetail.color }}>
-                                    {selectedMethodDetail.method.includes('Efectivo') ? <Wallet className="w-6 h-6" /> : 
-                                     selectedMethodDetail.method.includes('Transferencia') ? <ArrowRightLeft className="w-6 h-6" /> : 
-                                     <CreditCard className="w-6 h-6" />}
+                                    {selectedMethodDetail.method.includes('Efectivo') ? <Wallet className="w-6 h-6" /> :
+                                        selectedMethodDetail.method.includes('Transferencia') ? <ArrowRightLeft className="w-6 h-6" /> :
+                                            <CreditCard className="w-6 h-6" />}
                                 </div>
                                 <div>
                                     <h2 className="text-2xl font-black italic uppercase tracking-tight">{selectedMethodDetail.method}</h2>
@@ -514,7 +827,7 @@ const CashManagement = () => {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="p-8 max-h-[60vh] overflow-y-auto space-y-4">
                             {selectedMethodDetail.transactions.map((t: any) => (
                                 <div key={t.id} className="p-5 bg-zinc-50 border border-zinc-100 rounded-[24px] flex items-center justify-between group hover:bg-white hover:border-black/10 transition-all">

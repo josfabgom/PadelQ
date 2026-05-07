@@ -191,6 +191,7 @@ const BookingsPage = () => {
         amount: number;
         remaining: number;
         isPartial: boolean;
+        totalWas: number;
     } | null>(null);
     const [courtFractions, setCourtFractions] = useState<Record<string, number>>({});
     const [selectedCourtParts, setSelectedCourtParts] = useState<Record<string, number[]>>({});
@@ -952,7 +953,7 @@ const BookingsPage = () => {
             }
         });
 
-        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment + relatedBookingsPayments.reduce((acc, p) => acc + p.amount, 0);
+        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
 
         if (currentTransactionTotal <= 0) {
             alert("Seleccione al menos una parte de algún ítem para cobrar.");
@@ -990,44 +991,55 @@ const BookingsPage = () => {
             }
 
             // Función auxiliar para registrar pagos (puede ser uno o dos)
-            const registerPayment = async (amount: number, methodId: string, descriptionPrefix: string) => {
+            const registerPayment = async (amount: number, methodId: string, descriptionPrefix: string, linkedId?: string, isSpace?: boolean) => {
                 const m = paymentMethods.find(p => p.id.toString() === methodId);
                 let desc = descriptionPrefix;
                 if (m?.name === "BONIFICADO / SIN COSTO") desc = `Bonificación: ` + desc;
                 else desc += ` (${m?.name})`;
                 if (paymentObservation) desc += ` - Obs: ${paymentObservation}`;
 
-                await api.post(`/api/transaction/payment?amount=${amount}&description=${encodeURIComponent(desc)}&paymentMethodId=${methodId}${booking.userId ? `&userId=${booking.userId}` : ''}`, {}, config);
+                let url = `/api/transaction/payment?amount=${amount}&description=${encodeURIComponent(desc)}&paymentMethodId=${methodId}${booking.userId ? `&userId=${booking.userId}` : ''}`;
+                if (linkedId) {
+                    if (isSpace) url += `&spaceBookingId=${linkedId}`;
+                    else url += `&bookingId=${linkedId}`;
+                }
+                await api.post(url, {}, config);
             };
 
             // 1. Pagar Rentas (Individuales o Consolidadas)
             for (const rp of relatedBookingsPayments) {
+                const rb = [booking, ...relatedBookings].find(x => x.id === rp.id);
+                const rbIsSpace = rb && (rb.spaceId || rb.SpaceId || (rb as any).space);
+
                 if (!isMixedPayment) {
-                    await registerPayment(rp.amount, selectedPaymentMethod, rp.desc);
+                    await registerPayment(rp.amount, selectedPaymentMethod, rp.desc, rp.id, rbIsSpace);
                 } else {
                     const txRatio = rp.amount / currentTransactionTotal;
                     const p1 = firstMethodAmount * txRatio;
                     const p2 = rp.amount - p1;
-                    await registerPayment(p1, selectedPaymentMethod, rp.desc + " (Parte Mixta 1)");
-                    await registerPayment(p2, secondPaymentMethod, rp.desc + " (Parte Mixta 2)");
+                    await registerPayment(p1, selectedPaymentMethod, rp.desc + " (Parte Mixta 1)", rp.id, rbIsSpace);
+                    await registerPayment(p2, secondPaymentMethod, rp.desc + " (Parte Mixta 2)", rp.id, rbIsSpace);
                 }
 
-                const rb = [booking, ...relatedBookings].find(x => x.id === rp.id);
-                const rbIsSpace = rb && (rb.spaceId || rb.SpaceId || (rb as any).space);
                 if (rbIsSpace) await api.post(`/api/spacebookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
                 else await api.post(`/api/bookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
             }
 
             // 3. Pagar Consumiciones Agrupadas
             for (const gp of groupPayments) {
+                // Vincular consumiciones a la reserva principal del grupo (si existe)
+                const firstRecord = grouped[gp.productId].records[0];
+                const linkedId = firstRecord?.bookingId || firstRecord?.spaceBookingId || booking.id;
+                const isSpaceConsumption = firstRecord?.spaceBookingId ? true : (firstRecord?.bookingId ? false : isSpace);
+
                 if (!isMixedPayment) {
-                    await registerPayment(gp.amount, selectedPaymentMethod, gp.desc);
+                    await registerPayment(gp.amount, selectedPaymentMethod, gp.desc, linkedId, isSpaceConsumption);
                 } else {
                     const txRatio = gp.amount / currentTransactionTotal;
                     const p1 = firstMethodAmount * txRatio;
                     const p2 = gp.amount - p1;
-                    await registerPayment(p1, selectedPaymentMethod, gp.desc + " (Parte Mixta 1)");
-                    await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)");
+                    await registerPayment(p1, selectedPaymentMethod, gp.desc + " (Parte Mixta 1)", linkedId, isSpaceConsumption);
+                    await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)", linkedId, isSpaceConsumption);
                 }
 
                 // Distribuir el pago entre los registros individuales
@@ -1071,11 +1083,19 @@ const BookingsPage = () => {
                     return updated || rb;
                 }));
 
-                const rentRemainingFinal = updatedBookingsData.reduce((sum, b) => sum + ((b.price || 0) - (b.depositPaid || 0)), 0);
-            
-            // Recargar consumos para todos los seleccionados
+            // Deuda total final (incluyendo lo que NO se seleccionó para este pago)
+            const allRelatedBookings = [booking, ...relatedBookings];
+            const rentRemainingFinal = allRelatedBookings.reduce((sum, b) => {
+                // Si el booking fue recargado, usar el dato nuevo, sino el anterior
+                const updated = updatedBookingsData.find(u => u.id === b.id);
+                const ref = updated || b;
+                return sum + Math.max(0, (ref.price || 0) - (ref.depositPaid || 0));
+            }, 0);
+
+            // Recargar consumos para TODO el grupo (seleccionados o no) para el balance final
             let finalCons: any[] = [];
-            for (const bId of bookingsToReload) {
+            const allRelatedIds = [booking.id, ...relatedBookings.map(rb => rb.id)];
+            for (const bId of allRelatedIds) {
                 const bRef = [booking, ...relatedBookings].find(x => x.id === bId);
                 const rbConsRes = await api.get(`/api/consumptions/booking/${bId}`, config);
                 const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (bRef as any).court?.name || (bRef as any).space?.name || (bRef as any).courtName }));
@@ -1083,7 +1103,6 @@ const BookingsPage = () => {
             }
             
             const consRemainingFinal = finalCons.filter((c: any) => !c.isPaid).reduce((acc: number, c: any) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
-
             const totalRemaining = rentRemainingFinal + consRemainingFinal;
 
             if (totalRemaining <= 0) {
@@ -1091,7 +1110,8 @@ const BookingsPage = () => {
                     isOpen: true,
                     amount: currentTransactionTotal,
                     remaining: 0,
-                    isPartial: false
+                    isPartial: false,
+                    totalWas: currentTransactionTotal
                 });
 
                 resetForm();
@@ -1145,7 +1165,8 @@ const BookingsPage = () => {
                     isOpen: true,
                     amount: currentTransactionTotal,
                     remaining: totalRemaining,
-                    isPartial: true
+                    isPartial: true,
+                    totalWas: currentTransactionTotal
                 });
             }
         } catch (err: any) {
@@ -3053,14 +3074,17 @@ const BookingsPage = () => {
 
                             <div className="w-full bg-zinc-50 rounded-3xl p-6 mb-8 space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-zinc-400 uppercase">Monto Cobrado</span>
+                                    <span className="text-[10px] font-black text-zinc-400 uppercase">Pagado Ahora</span>
                                     <span className="text-lg font-black text-emerald-600">{formatARS(paymentSuccessInfo.amount)}</span>
                                 </div>
                                 {paymentSuccessInfo.isPartial && (
-                                    <div className="flex justify-between items-center pt-4 border-t border-zinc-100">
-                                        <span className="text-[10px] font-black text-zinc-400 uppercase">Deuda Restante</span>
-                                        <span className="text-lg font-black text-zinc-900">{formatARS(paymentSuccessInfo.remaining)}</span>
-                                    </div>
+                                    <>
+                                        <div className="flex justify-between items-center pt-4 border-t border-zinc-100">
+                                            <span className="text-[10px] font-black text-zinc-400 uppercase">Restante Cuenta</span>
+                                            <span className="text-lg font-black text-rose-500">{formatARS(paymentSuccessInfo.remaining)}</span>
+                                        </div>
+                                        <p className="text-[8px] font-black text-zinc-300 uppercase tracking-widest text-center">El saldo restante incluye todas las deudas de hoy</p>
+                                    </>
                                 )}
                             </div>
 

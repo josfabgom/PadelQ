@@ -12,6 +12,7 @@ User: Admin, Email: admin@padelq.com, Name: Administrador Sistema, DNI:
 User: 33666777, Email: , Name: Juan , DNI: 33666777
 User: pedro1@padelq.com, Email: pedro1@padelq.com, Name: pedro Juan, DNI: 28675910
 User: pedro@padelq.com, Email: pedro@padelq.com, Name: pedro, DNI: 45232567
+User: 43153980, Email: sebagabriel@outlook.com, Name: Sebastian Mallon, DNI: 43153980
 User: 4300000, Email: , Name: MATIAS ROGOZZ, DNI: 4300000
 User: particular@padelq.com, Email: particular@padelq.com, Name: Consumidor Final (Particular), DNI: 
 User: 5000000, Email: , Name: LAZARO, DNI: 5000000

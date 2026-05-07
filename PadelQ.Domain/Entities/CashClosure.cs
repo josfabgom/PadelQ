@@ -37,6 +37,12 @@ namespace PadelQ.Domain.Entities
         public decimal? TotalCashSales { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
+        public decimal? TotalCashIn { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? TotalCashOut { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
         public decimal? TotalTransferSales { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]

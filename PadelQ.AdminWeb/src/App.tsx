@@ -17,6 +17,8 @@ import SpacesPage from './pages/Spaces';
 import ManageSpacesPage from './pages/ManageSpaces';
 import ProductsPage from './pages/Products';
 import CashManagementPage from './pages/CashManagement';
+import PurchaseReceptionPage from './pages/PurchaseReception';
+
 
 function App() {
   const isAuthenticated = !!localStorage.getItem('padelq_token');
@@ -89,6 +91,11 @@ function App() {
           path="/cash-management" 
           element={isAuthenticated ? <CashManagementPage /> : <Navigate to="/login" />} 
         />
+        <Route 
+          path="/purchase-reception" 
+          element={isAuthenticated ? <PurchaseReceptionPage /> : <Navigate to="/login" />} 
+        />
+
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>

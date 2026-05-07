@@ -110,6 +110,13 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
+        
+        // Parche manual para asegurar integridad sin depender solo de migraciones externas
+        try {
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'BookingId') ALTER TABLE Transactions ADD BookingId UNIQUEIDENTIFIER NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'SpaceBookingId') ALTER TABLE Transactions ADD SpaceBookingId UNIQUEIDENTIFIER NULL;");
+        } catch { /* Ignorar errores si las columnas ya existen o SQL no es compatible */ }
+
         await context.Database.MigrateAsync();
         await DbInitializer.SeedAsync(services);
         PadelQ.Api.UserDiagnostic.PrintUsers(services);

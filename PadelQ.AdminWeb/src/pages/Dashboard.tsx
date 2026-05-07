@@ -18,10 +18,14 @@ const Dashboard = () => {
     totalRevenue: 0, 
     totalBookings: 0, 
     todayRevenue: 0, 
+    todayRentalsRevenue: 0,
+    todayConsumptionsRevenue: 0,
+    todayActualPayments: 0,
     todayBookings: 0, 
     monthlyRevenue: 0, 
     monthlyGoal: 0, 
-    monthlyProgress: 0 
+    monthlyProgress: 0,
+    freeSlots: 0
   });
   const [detailedBookings, setDetailedBookings] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
@@ -102,8 +106,50 @@ const Dashboard = () => {
 
        {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <StatCard icon={<DollarSign/>} label="Ingreso del día" value={new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRevenue || 0)} trend="Hoy" />
-        <StatCard icon={<CalendarIcon/>} label="Reservas efectivas" value={summary?.todayBookings || 0} trend="Hoy" />
+        <StatCard 
+          icon={<DollarSign/>} 
+          label="Ingreso del día" 
+          value={new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRevenue || 0)} 
+          trend="Hoy"
+        >
+          <div className="mt-4 pt-4 border-t border-zinc-100 grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Alquileres</p>
+              <p className="text-sm font-black text-black">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRentalsRevenue || 0)}</p>
+            </div>
+            <div>
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Consumos</p>
+              <p className="text-sm font-black text-black">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayConsumptionsRevenue || 0)}</p>
+            </div>
+            <div>
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Pagado Real</p>
+              <p className="text-sm font-black text-emerald-600">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayActualPayments || 0)}</p>
+            </div>
+          </div>
+        </StatCard>
+
+        <StatCard 
+          icon={<CalendarIcon/>} 
+          label="Reservas del día" 
+          value={summary?.todayBookings || 0} 
+          trend="Hoy"
+        >
+          <div className="mt-4 pt-4 border-t border-zinc-100 flex justify-between items-center">
+            <div>
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Canchas Libres</p>
+              <p className="text-sm font-black text-black">{summary?.freeSlots || 0} Horas Disponibles</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Hasta las 24hs</p>
+              <div className="w-20 h-1 bg-zinc-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 transition-all duration-1000" 
+                  style={{ width: `${Math.min(100, (summary.freeSlots / (summary.todayBookings + summary.freeSlots || 1)) * 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </StatCard>
       </div>
 
       {/* Bottom section removed as per request */}
@@ -130,22 +176,26 @@ interface StatCardProps {
   label: string;
   value: string | number;
   trend: string;
+  children?: React.ReactNode;
 }
 
-const StatCard = ({ icon, label, value, trend }: StatCardProps) => (
-  <div className="bg-white p-8 rounded-[32px] shadow-[0_10px_40px_rgb(0,0,0,0.02)] border border-black/5 flex items-start justify-between group hover:border-black/20 transition-all duration-500">
-    <div>
-      <div className="p-4 rounded-[20px] bg-zinc-50 text-black mb-6 inline-block shadow-sm group-hover:bg-black group-hover:text-white transition-all duration-500">
-        {icon}
-      </div>
-      <p className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{label}</p>
-      <h3 className="text-3xl font-black text-black italic tracking-tighter">{value}</h3>
-    </div>
-    <div className="flex flex-col items-end">
-        <div className="text-[10px] font-black text-black bg-zinc-100 px-3 py-1 rounded-full uppercase tracking-widest">
-        {trend}
+const StatCard = ({ icon, label, value, trend, children }: StatCardProps) => (
+  <div className="bg-white p-8 rounded-[32px] shadow-[0_10px_40px_rgb(0,0,0,0.02)] border border-black/5 group hover:border-black/20 transition-all duration-500">
+    <div className="flex items-start justify-between">
+      <div>
+        <div className="p-4 rounded-[20px] bg-zinc-50 text-black mb-6 inline-block shadow-sm group-hover:bg-black group-hover:text-white transition-all duration-500">
+          {icon}
         </div>
+        <p className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{label}</p>
+        <h3 className="text-3xl font-black text-black italic tracking-tighter">{value}</h3>
+      </div>
+      <div className="flex flex-col items-end">
+          <div className="text-[10px] font-black text-black bg-zinc-100 px-3 py-1 rounded-full uppercase tracking-widest">
+          {trend}
+          </div>
+      </div>
     </div>
+    {children}
   </div>
 );
 

@@ -33,12 +33,18 @@ namespace PadelQ.Domain.Entities
         public virtual PaymentMethod? PaymentMethod { get; set; }
 
         public string? ProcessedBy { get; set; }
+
+        // Integridad
+        public Guid? BookingId { get; set; }
+        public Guid? SpaceBookingId { get; set; }
     }
 
     public enum TransactionType
     {
         Charge, // + to balance/debt
         Payment, // - to balance/debt
-        MembershipPayment // Descriptive only, does not affect balance
+        MembershipPayment, // Descriptive only, does not affect balance
+        CashIn, // Manual income to cash box
+        CashOut // Manual outcome from cash box
     }
 }
