@@ -74,11 +74,11 @@ namespace PadelQ.Api.Controllers
                     var newUser = new ApplicationUser
                     {
                         Id = Guid.NewGuid().ToString(),
-                        UserName = request.Dni, // Usamos DNI como username por defecto
+                        UserName = !string.IsNullOrEmpty(request.GuestEmail) ? request.GuestEmail : request.Dni,
                         Dni = request.Dni,
-                        FullName = request.GuestName,
+                        FullName = request.GuestName ?? $"Particular {request.Dni}",
                         PhoneNumber = request.GuestPhone,
-                        Email = request.GuestEmail,
+                        Email = !string.IsNullOrEmpty(request.GuestEmail) ? request.GuestEmail : $"{request.Dni}@padelq.com",
                         Address = request.GuestAddress,
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
@@ -176,9 +176,26 @@ namespace PadelQ.Api.Controllers
             
             if (booking == null) return NotFound();
             
+            // Si estaba PAGA, generamos un contra-asiento en la caja (Payment negativo)
             if (booking.Status == BookingStatus.Paid)
             {
-                return BadRequest("No se puede anular un alquiler de espacio que ya ha sido pagado completamente.");
+                var lastPayment = await _context.Transactions
+                    .Where(t => t.SpaceBookingId == id && t.Type == TransactionType.Payment)
+                    .OrderByDescending(t => t.Date)
+                    .FirstOrDefaultAsync();
+
+                var reversalPayment = new Transaction
+                {
+                    UserId = booking.UserId ?? "Particular",
+                    Amount = -booking.DepositPaid,
+                    Type = TransactionType.Payment,
+                    Date = DateTime.UtcNow,
+                    Description = $"Devolución por Anulación Reserva Espacio PAGA: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}",
+                    SpaceBookingId = booking.Id,
+                    PaymentMethodId = lastPayment?.PaymentMethodId,
+                    ProcessedBy = "Sistema (Anulación)"
+                };
+                _context.Transactions.Add(reversalPayment);
             }
 
             booking.Status = BookingStatus.Cancelled;
@@ -208,16 +225,16 @@ namespace PadelQ.Api.Controllers
             // Reversar cargo en Cta Cte si hay un usuario vinculado
             if (!string.IsNullOrEmpty(booking.UserId))
             {
-                var reversal = new Transaction
+                var reversalCharge = new Transaction
                 {
                     UserId = booking.UserId,
-                    Amount = booking.Price,
-                    Type = TransactionType.Payment,
+                    Amount = -booking.Price, // Cargo negativo
+                    Type = TransactionType.Charge,
                     Date = DateTime.UtcNow,
                     Description = $"Anulación Reserva Espacio: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}",
                     SpaceBookingId = booking.Id
                 };
-                _context.Transactions.Add(reversal);
+                _context.Transactions.Add(reversalCharge);
             }
 
             await _context.SaveChangesAsync();

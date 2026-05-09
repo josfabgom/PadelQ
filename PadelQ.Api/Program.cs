@@ -115,6 +115,14 @@ using (var scope = app.Services.CreateScope())
         try {
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'BookingId') ALTER TABLE Transactions ADD BookingId UNIQUEIDENTIFIER NULL;");
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'SpaceBookingId') ALTER TABLE Transactions ADD SpaceBookingId UNIQUEIDENTIFIER NULL;");
+            
+            // Parches para CashClosures
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('CashClosures') AND name = 'TotalCashIn') ALTER TABLE CashClosures ADD TotalCashIn DECIMAL(18,2) NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('CashClosures') AND name = 'TotalCashOut') ALTER TABLE CashClosures ADD TotalCashOut DECIMAL(18,2) NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('CashClosures') AND name = 'ActualTotals') ALTER TABLE CashClosures ADD ActualTotals NVARCHAR(MAX) NULL;");
+            
+            // Parche para ActivitySchedules
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('ActivitySchedules') AND name = 'SpecificDate') ALTER TABLE ActivitySchedules ADD SpecificDate DATETIME2 NULL;");
         } catch { /* Ignorar errores si las columnas ya existen o SQL no es compatible */ }
 
         await context.Database.MigrateAsync();

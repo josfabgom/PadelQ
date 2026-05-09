@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Plus, Calendar, DollarSign, User as UserIcon, X, Trash2, Edit2, CheckCircle2, AlertCircle, ArrowLeft, Users, Clock } from 'lucide-react';
+import { Plus, Calendar, DollarSign, User as UserIcon, X, Trash2, Edit2, ArrowLeft, Users, Clock } from 'lucide-react';
 import Header from '../components/Header';
 
 interface ActivitySchedule {
   id?: number;
   dayOfWeek: number;
+  specificDate?: string | null;
   startTime: string;
   endTime: string;
   courtId?: number | null;
@@ -45,6 +46,7 @@ const ActivitiesPage = () => {
     schedules: []
   });
 
+
   useEffect(() => {
     fetchActivities();
   }, []);
@@ -53,7 +55,6 @@ const ActivitiesPage = () => {
     const config = getAuthConfig();
 
     try {
-      // Pedir datos por separado para evitar que un fallo bloquee todo
       const [actData, courtData, spaceData] = await Promise.all([
         api.get('/api/activities', config).then(r => r.data).catch(err => { console.error("Act:", err); return []; }),
         api.get('/api/courts', config).then(r => r.data).catch(err => { console.error("Courts:", err); return []; }),
@@ -73,6 +74,7 @@ const ActivitiesPage = () => {
       setLoading(false);
     }
   };
+
 
   const handleOpenModal = (activity?: ClubActivity) => {
     if (activity) {
@@ -142,7 +144,10 @@ const ActivitiesPage = () => {
     setFormData({ ...formData, schedules: newSchedules });
   };
 
-  const getDayName = (day: number) => {
+  const getDayName = (day: number, specificDate?: string | null) => {
+    if (specificDate) {
+        return new Date(specificDate).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     return days[day];
   };
@@ -213,7 +218,7 @@ const ActivitiesPage = () => {
                       <div key={i} className="flex flex-col gap-1 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg">
                         <div className="flex items-center gap-1 font-bold">
                           <Calendar className="w-3 h-3" />
-                          <span>{getDayName(s.dayOfWeek)} {s.startTime.substring(0,5)}</span>
+                          <span>{getDayName(s.dayOfWeek, s.specificDate)} {s.startTime.substring(0,5)}</span>
                         </div>
                         {resource ? (
                           <div className="flex items-center gap-1 text-[9px] text-indigo-600 border-t border-slate-200 pt-1 mt-0.5">
@@ -239,7 +244,7 @@ const ActivitiesPage = () => {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal de Creación/Edición */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-40 p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
@@ -328,19 +333,46 @@ const ActivitiesPage = () => {
                           <X className="w-3 h-3" />
                         </button>
                         <div className="space-y-3">
-                          <select 
-                            value={schedule.dayOfWeek}
-                            onChange={(e) => updateSchedule(index, 'dayOfWeek', Number(e.target.value))}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
-                          >
-                            <option value={1}>Lunes</option>
-                            <option value={2}>Martes</option>
-                            <option value={3}>Miércoles</option>
-                            <option value={4}>Jueves</option>
-                            <option value={5}>Viernes</option>
-                            <option value={6}>Sábado</option>
-                            <option value={0}>Domingo</option>
-                          </select>
+                          <div className="flex gap-2">
+                            <select 
+                                value={schedule.specificDate ? 'specific' : 'weekly'}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'specific') {
+                                        updateSchedule(index, 'specificDate', new Date().toISOString().split('T')[0]);
+                                    } else {
+                                        updateSchedule(index, 'specificDate', null);
+                                    }
+                                }}
+                                className="w-1/3 px-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase outline-none"
+                            >
+                                <option value="weekly">Semanal</option>
+                                <option value="specific">Fecha Única</option>
+                            </select>
+
+                            {schedule.specificDate ? (
+                                <input 
+                                    type="date"
+                                    value={schedule.specificDate}
+                                    onChange={(e) => updateSchedule(index, 'specificDate', e.target.value)}
+                                    className="w-2/3 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                                />
+                            ) : (
+                                <select 
+                                    value={schedule.dayOfWeek}
+                                    onChange={(e) => updateSchedule(index, 'dayOfWeek', Number(e.target.value))}
+                                    className="w-2/3 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                                >
+                                    <option value={1}>Lunes</option>
+                                    <option value={2}>Martes</option>
+                                    <option value={3}>Miércoles</option>
+                                    <option value={4}>Jueves</option>
+                                    <option value={5}>Viernes</option>
+                                    <option value={6}>Sábado</option>
+                                    <option value={0}>Domingo</option>
+                                </select>
+                            )}
+                          </div>
 
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase">Recurso / Cancha</label>

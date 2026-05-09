@@ -59,6 +59,8 @@ namespace PadelQ.Infrastructure.Persistence
                 entity.Property(p => p.ExpectedCash).HasPrecision(18, 2);
                 entity.Property(p => p.ActualCash).HasPrecision(18, 2);
                 entity.Property(p => p.TotalCashSales).HasPrecision(18, 2);
+                entity.Property(p => p.TotalCashIn).HasPrecision(18, 2);
+                entity.Property(p => p.TotalCashOut).HasPrecision(18, 2);
                 entity.Property(p => p.TotalTransferSales).HasPrecision(18, 2);
                 entity.Property(p => p.TotalCardSales).HasPrecision(18, 2);
                 entity.Property(p => p.TotalOtherSales).HasPrecision(18, 2);

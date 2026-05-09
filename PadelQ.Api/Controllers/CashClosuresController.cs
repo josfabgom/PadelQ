@@ -25,77 +25,84 @@ namespace PadelQ.Api.Controllers
         [HttpGet("current-status")]
         public async Task<IActionResult> GetCurrentStatus()
         {
-            var activeClosure = await _context.CashClosures
-                .Where(c => c.IsOpen)
-                .OrderByDescending(c => c.OpeningDate)
-                .FirstOrDefaultAsync();
-
-            var lastClosureDate = activeClosure?.OpeningDate ?? DateTime.UtcNow.Date;
-            
-            // Si no hay caja abierta, tomamos desde el inicio del día
-            if (activeClosure == null) {
-                lastClosureDate = DateTime.UtcNow.Date; 
-            }
-
-            var transactions = await _context.Transactions
-                .Include(t => t.PaymentMethod)
-                .Include(t => t.User)
-                .Where(t => t.Date >= lastClosureDate && (
-                    t.Type == TransactionType.Payment || 
-                    t.Type == TransactionType.MembershipPayment ||
-                    t.Type == TransactionType.CashIn ||
-                    t.Type == TransactionType.CashOut
-                ))
-                .ToListAsync();
-
-            var activeMethods = await _context.PaymentMethods.Where(m => m.IsActive).ToListAsync();
-
-            var summary = activeMethods.Select(m => {
-                var methodTransactions = transactions.Where(t => t.PaymentMethodId == m.Id).ToList();
-                return new {
-                    Method = m.Name,
-                    MethodId = m.Id,
-                    Color = m.HexColor ?? "#888888",
-                    Total = methodTransactions.Sum(t => t.Amount),
-                    Count = methodTransactions.Count(),
-                    Transactions = methodTransactions.OrderByDescending(t => t.Date).Select(t => new {
-                        t.Id,
-                        t.Amount,
-                        t.Date,
-                        t.Description,
-                        t.ProcessedBy,
-                        UserName = t.User != null ? t.User.FullName : "Particular"
-                    }).ToList()
-                };
-            }).ToList();
-
-            // Agregar "No Especificado" si hay transacciones sin método
-            var unassignedTrans = transactions.Where(t => t.PaymentMethodId == null).ToList();
-            if (unassignedTrans.Any())
+            try 
             {
-                summary.Add(new {
-                    Method = "No Especificado",
-                    MethodId = 0,
-                    Color = "#888888",
-                    Total = unassignedTrans.Sum(t => t.Amount),
-                    Count = unassignedTrans.Count(),
-                    Transactions = unassignedTrans.OrderByDescending(t => t.Date).Select(t => new {
-                        t.Id,
-                        t.Amount,
-                        t.Date,
-                        t.Description,
-                        t.ProcessedBy,
-                        UserName = t.User != null ? t.User.FullName : "Particular"
-                    }).ToList()
+                var activeClosure = await _context.CashClosures
+                    .Where(c => c.IsOpen)
+                    .OrderByDescending(c => c.OpeningDate)
+                    .FirstOrDefaultAsync();
+
+                var lastClosureDate = activeClosure?.OpeningDate ?? DateTime.UtcNow.Date;
+                
+                // Si no hay caja abierta, tomamos desde el inicio del día
+                if (activeClosure == null) {
+                    lastClosureDate = DateTime.UtcNow.Date; 
+                }
+
+                var transactions = await _context.Transactions
+                    .Include(t => t.PaymentMethod)
+                    .Include(t => t.User)
+                    .Where(t => t.Date >= lastClosureDate && (
+                        t.Type == TransactionType.Payment || 
+                        t.Type == TransactionType.MembershipPayment ||
+                        t.Type == TransactionType.CashIn ||
+                        t.Type == TransactionType.CashOut
+                    ))
+                    .ToListAsync();
+
+                var activeMethods = await _context.PaymentMethods.Where(m => m.IsActive).ToListAsync();
+
+                var summary = activeMethods.Select(m => {
+                    var methodTransactions = transactions.Where(t => t.PaymentMethodId == m.Id).ToList();
+                    return new {
+                        Method = m.Name,
+                        MethodId = m.Id,
+                        Color = m.HexColor ?? "#888888",
+                        Total = methodTransactions.Sum(t => t.Amount),
+                        Count = methodTransactions.Count(),
+                        Transactions = methodTransactions.OrderByDescending(t => t.Date).Select(t => new {
+                            t.Id,
+                            t.Amount,
+                            t.Date,
+                            t.Description,
+                            t.ProcessedBy,
+                            UserName = t.User != null ? t.User.FullName : "Particular"
+                        }).ToList()
+                    };
+                }).ToList();
+
+                // Agregar "No Especificado" si hay transacciones sin método
+                var unassignedTrans = transactions.Where(t => t.PaymentMethodId == null).ToList();
+                if (unassignedTrans.Any())
+                {
+                    summary.Add(new {
+                        Method = "No Especificado",
+                        MethodId = 0,
+                        Color = "#888888",
+                        Total = unassignedTrans.Sum(t => t.Amount),
+                        Count = unassignedTrans.Count(),
+                        Transactions = unassignedTrans.OrderByDescending(t => t.Date).Select(t => new {
+                            t.Id,
+                            t.Amount,
+                            t.Date,
+                            t.Description,
+                            t.ProcessedBy,
+                            UserName = t.User != null ? t.User.FullName : "Particular"
+                        }).ToList()
+                    });
+                }
+
+                return Ok(new {
+                    activeClosure,
+                    summary,
+                    totalAmount = transactions.Sum(t => t.Amount),
+                    lastClosureDate
                 });
             }
-
-            return Ok(new {
-                activeClosure,
-                summary,
-                totalAmount = transactions.Sum(t => t.Amount),
-                lastClosureDate
-            });
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error en CurrentStatus: {ex.Message} {ex.InnerException?.Message}");
+            }
         }
 
         [HttpPost("open")]
@@ -248,6 +255,21 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
 
             return Ok(history);
+        }
+
+        [HttpPost("force-close-all")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> ForceCloseAll()
+        {
+            var openClosures = await _context.CashClosures.Where(c => c.IsOpen).ToListAsync();
+            foreach (var c in openClosures)
+            {
+                c.IsOpen = false;
+                c.ClosingDate = DateTime.UtcNow;
+                c.ClosedBy = "Forced by Admin";
+            }
+            await _context.SaveChangesAsync();
+            return Ok("Todas las cajas abiertas han sido cerradas forzosamente.");
         }
     }
 

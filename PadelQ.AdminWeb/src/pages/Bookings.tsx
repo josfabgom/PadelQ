@@ -45,7 +45,9 @@ import {
     RefreshCw,
     Printer,
     Minus,
-    Layers
+    Layers,
+    CreditCard,
+    History
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -114,9 +116,11 @@ interface Activity {
     id: number;
     name: string;
     instructorName: string;
+    price: number;
     schedules: {
         id: number;
         dayOfWeek: number;
+        specificDate?: string | null;
         startTime: string;
         endTime: string;
         courtId?: number | null;
@@ -143,6 +147,51 @@ const getConsumptionDebt = (booking: any) => {
 const getTotalDebt = (booking: any) => getRentDebt(booking) + getConsumptionDebt(booking);
 
 const isFullyPaid = (booking: any) => getTotalDebt(booking) <= 0;
+
+const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], totalAmount: number, onPartsChange: (parts: number[]) => void) => {
+    const partPrice = totalAmount / Math.max(1, partsCount);
+    return (
+        <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-black/5">
+            {Array.from({ length: Math.max(1, partsCount) }).map((_, i) => (
+                <button
+                    key={i}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectedParts.includes(i)) onPartsChange(selectedParts.filter(p => p !== i));
+                        else onPartsChange([...selectedParts, i]);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${selectedParts.includes(i) ? 'bg-black text-white shadow-md' : 'bg-white text-zinc-400 border border-zinc-100 hover:border-black/20'}`}
+                >
+                    <span className={selectedParts.includes(i) ? 'text-white/50' : 'text-zinc-300'}>P.{i + 1}</span>
+                    <span>{formatARS(partPrice)}</span>
+                </button>
+            ))}
+        </div>
+    );
+};
+
+const renderFractionControl = (id: string, current: number, onChange: (n: number) => void, isDark: boolean = false) => {
+    return (
+        <div className={`flex items-center gap-1 p-1 rounded-xl border ${isDark ? 'bg-black/20 border-white/10' : 'bg-zinc-100 border-zinc-200'}`}>
+            <button
+                onClick={(e) => { e.stopPropagation(); onChange(Math.max(1, current - 1)); }}
+                className={`w-6 h-6 flex items-center justify-center rounded-lg transition-all ${isDark ? 'hover:bg-white/20 text-white' : 'hover:bg-white text-zinc-600'}`}
+            >
+                <Minus className="w-3 h-3" />
+            </button>
+            <div className={`flex flex-col items-center px-2 min-w-[32px] ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                <span className="text-[10px] font-black leading-none">{current}</span>
+                <span className="text-[6px] font-bold uppercase opacity-40">Partes</span>
+            </div>
+            <button
+                onClick={(e) => { e.stopPropagation(); onChange(current + 1); }}
+                className={`w-6 h-6 flex items-center justify-center rounded-lg transition-all ${isDark ? 'hover:bg-white/20 text-white' : 'hover:bg-white text-zinc-600'}`}
+            >
+                <Plus className="w-3 h-3" />
+            </button>
+        </div>
+    );
+};
 
 const BookingsPage = () => {
     const [view, setView] = useState<'daily' | 'monthly'>('daily');
@@ -200,6 +249,16 @@ const BookingsPage = () => {
     const [globalFractionsCount, setGlobalFractionsCount] = useState(1);
     const [selectedGlobalFractions, setSelectedGlobalFractions] = useState<number[]>([0]);
     const [paymentObservation, setPaymentObservation] = useState('');
+    const [userBalance, setUserBalance] = useState<number>(0);
+    const [includePreviousDebt, setIncludePreviousDebt] = useState(false);
+    const [ctaCteUserSearch, setCtaCteUserSearch] = useState('');
+    const [ctaCteFilteredClients, setCtaCteFilteredClients] = useState<any[]>([]);
+    
+    // Fraccionamiento para Venta Directa
+    const [dsFractions, setDsFractions] = useState<Record<string, number>>({});
+    const [dsSelectedParts, setDsSelectedParts] = useState<Record<string, number[]>>({});
+    const [selectedCtaCteUser, setSelectedCtaCteUser] = useState<any>(null);
+    const [isCtaCteModalOpen, setIsCtaCteModalOpen] = useState(false);
     // Form states
     const [bookingType, setBookingType] = useState<'existing' | 'guest'>('guest');
     const [selectedClientId, setSelectedClientId] = useState('');
@@ -227,6 +286,318 @@ const BookingsPage = () => {
         endDate: string | null;
         originalCourtId: number;
     } | null>(null);
+
+    // Activity Charge States
+    const [isActivityChargeModalOpen, setIsActivityChargeModalOpen] = useState(false);
+    const [selectedActivityForCharge, setSelectedActivityForCharge] = useState<Activity | null>(null);
+    const [activityChargeData, setActivityChargeData] = useState({
+        instructorName: '',
+        classPrice: 0,
+        consumptions: [] as { productId: number, productName: string, quantity: number, price: number }[],
+        clientId: '',
+        clientName: '',
+        paymentMethodId: null as number | null
+    });
+    const [actClientSearch, setActClientSearch] = useState('');
+    const [actFilteredClients, setActFilteredClients] = useState<any[]>([]);
+    const [actProductSearch, setActProductSearch] = useState('');
+    const [actFilteredProducts, setActFilteredProducts] = useState<any[]>([]);
+
+    // Direct Sale States
+    const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
+    const [directSaleData, setDirectSaleData] = useState({
+        consumptions: [] as { productId: number, productName: string, quantity: number, price: number }[],
+        clientId: '',
+        clientName: '',
+        paymentMethodId: null as number | null,
+        isInternalConsumption: false,
+        isSplitPayment: false,
+        splitPayments: [] as { paymentMethodId: number | null, amount: number }[]
+    });
+    const [dsClientSearch, setDsClientSearch] = useState('');
+    const [dsFilteredClients, setDsFilteredClients] = useState<any[]>([]);
+    const [dsProductSearch, setDsProductSearch] = useState('');
+    const [dsFilteredProducts, setDsFilteredProducts] = useState<any[]>([]);
+    const [isDsProductGridOpen, setIsDsProductGridOpen] = useState(false);
+    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+    const [pendingConsumptions, setPendingConsumptions] = useState<any[]>([]);
+    const [selectedPendingUser, setSelectedPendingUser] = useState<any>(null);
+    const [debtors, setDebtors] = useState<any[]>([]);
+
+    const handleOpenActivityCharge = (activity: Activity) => {
+        setSelectedActivityForCharge(activity);
+        setActivityChargeData({
+            instructorName: activity.instructorName,
+            classPrice: activity.price,
+            consumptions: [],
+            clientId: '',
+            clientName: '',
+            paymentMethodId: paymentMethods[0]?.id || null
+        });
+        setActClientSearch('');
+        setActProductSearch('');
+        setIsActivityChargeModalOpen(true);
+    };
+
+    const addProductToActivityCharge = (product: any) => {
+        const existing = activityChargeData.consumptions.find(c => c.productId === product.id);
+        if (existing) {
+            setActivityChargeData({
+                ...activityChargeData,
+                consumptions: activityChargeData.consumptions.map(c => 
+                    c.productId === product.id ? { ...c, quantity: c.quantity + 1 } : c
+                )
+            });
+        } else {
+            setActivityChargeData({
+                ...activityChargeData,
+                consumptions: [
+                    ...activityChargeData.consumptions,
+                    { productId: product.id, productName: product.name, quantity: 1, price: product.finalPrice }
+                ]
+            });
+        }
+        setActProductSearch('');
+        setActFilteredProducts([]);
+    };
+
+    useEffect(() => {
+        if (dsClientSearch.length > 2) {
+            setDsFilteredClients(clients.filter(c => 
+                c.fullName.toLowerCase().includes(dsClientSearch.toLowerCase()) || 
+                (c.dni && c.dni.includes(dsClientSearch))
+            ).slice(0, 5));
+        } else {
+            setDsFilteredClients([]);
+        }
+    }, [dsClientSearch, clients]);
+
+    const removeProductFromActivityCharge = (index: number) => {
+        setActivityChargeData({
+            ...activityChargeData,
+            consumptions: activityChargeData.consumptions.filter((_, i) => i !== index)
+        });
+    };
+
+    const handleConfirmActivityCharge = async () => {
+        const totalAmount = activityChargeData.classPrice + activityChargeData.consumptions.reduce((s, c) => s + (c.price * c.quantity), 0);
+        
+        try {
+            // 1. Registrar el pago
+            const m = paymentMethods.find(p => p.id === activityChargeData.paymentMethodId);
+            const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
+            const targetUserId = isCtaCte ? (selectedCtaCteUser?.id || activityChargeData.clientId) : activityChargeData.clientId;
+            const desc = `Actividad: ${selectedActivityForCharge?.name} - Prof: ${activityChargeData.instructorName} ${activityChargeData.consumptions.length > 0 ? '+ Consumo' : ''}`;
+            
+            if (isCtaCte) {
+                if (!targetUserId) {
+                    alert("Para Cta. Cte. selecciona un cliente responsable.");
+                    return;
+                }
+                const payload = {
+                    userId: targetUserId,
+                    amount: totalAmount,
+                    description: desc + ' (Cta Cte)'
+                };
+                await api.post(`/api/transaction/charge`, payload, config);
+            } else {
+                const payload = {
+                    userId: targetUserId || null,
+                    amount: totalAmount,
+                    description: desc,
+                    paymentMethodId: activityChargeData.paymentMethodId
+                };
+                await api.post(`/api/transaction/payment`, payload, config);
+            }
+
+            // 2. Descontar stock
+            for (const item of activityChargeData.consumptions) {
+                await api.post('/api/products/movement', {
+                    productId: item.productId,
+                    quantity: -item.quantity,
+                    reason: `Venta Actividad: ${selectedActivityForCharge?.name} (Prof: ${activityChargeData.instructorName})`
+                }, config);
+            }
+
+            setIsActivityChargeModalOpen(false);
+            alert("¡Cobro de actividad registrado con éxito!");
+            fetchData();
+        } catch (err) {
+            console.error("Error activity charge:", err);
+            alert("Hubo un error al registrar el cobro.");
+        }
+    };
+
+    const handleOpenDirectSale = () => {
+        if (allProducts.length === 0) fetchData();
+        const consumidorFinal = clients.find(c => c.fullName?.toLowerCase().includes("consumidor final"));
+        const efectivoMethod = paymentMethods.find(m => m.name?.toLowerCase().includes("efectivo"));
+
+        setDirectSaleData({
+            consumptions: [],
+            clientId: consumidorFinal?.id || '',
+            clientName: consumidorFinal?.fullName || '',
+            paymentMethodId: efectivoMethod?.id || paymentMethods[0]?.id || null,
+            isInternalConsumption: false,
+            isSplitPayment: false,
+            splitPayments: []
+        });
+        setSelectedCtaCteUser(null);
+        setDsClientSearch('');
+        setDsProductSearch('');
+        setDsFractions({});
+        setDsSelectedParts({});
+        setIsDirectSaleModalOpen(true);
+        setIsDsProductGridOpen(false);
+    };
+
+    const addProductToDirectSale = (product: any) => {
+        const existing = directSaleData.consumptions.find(c => c.productId === product.id);
+        if (existing) {
+            setDirectSaleData({
+                ...directSaleData,
+                consumptions: directSaleData.consumptions.map(c => 
+                    c.productId === product.id ? { ...c, quantity: c.quantity + 1 } : c
+                )
+            });
+        } else {
+            setDirectSaleData({
+                ...directSaleData,
+                consumptions: [
+                    ...directSaleData.consumptions,
+                    { productId: product.id, productName: product.name, quantity: 1, price: product.finalPrice }
+                ]
+            });
+        }
+        setDsProductSearch('');
+        setDsFilteredProducts([]);
+    };
+
+    const removeProductFromDirectSale = (index: number) => {
+        setDirectSaleData({
+            ...directSaleData,
+            consumptions: directSaleData.consumptions.filter((_, i) => i !== index)
+        });
+    };
+
+    const getDirectSaleTotals = () => {
+        let totalToPay = 0;
+        const items = directSaleData.consumptions.map(c => {
+            const fKey = `ds-${c.productId}`;
+            const fractions = dsFractions[fKey] || 1;
+            const selectedParts = dsSelectedParts[fKey] || [];
+            const subtotal = c.price * c.quantity;
+            
+            let paidAmount = subtotal;
+            if (fractions > 1) {
+                paidAmount = (subtotal / fractions) * selectedParts.length;
+            }
+            
+            totalToPay += paidAmount;
+            return { productId: c.productId, quantity: c.quantity, paidAmount };
+        });
+        
+        return { totalToPay, items };
+    };
+
+    const handleConfirmDirectSale = async (isPaid: boolean = true) => {
+        try {
+            const isInternal = directSaleData.isInternalConsumption;
+            const { totalToPay, items } = getDirectSaleTotals();
+
+            const method = paymentMethods.find(m => m.id === directSaleData.paymentMethodId);
+            const isCtaCte = method?.name?.toUpperCase().includes("CTA CTE") || method?.name?.toUpperCase().includes("CUENTA CORRIENTE");
+
+            const payload = {
+                userId: (isCtaCte ? (selectedCtaCteUser?.id || directSaleData.clientId) : directSaleData.clientId) || clients.find(c => c.fullName?.toLowerCase().includes("consumidor final"))?.id,
+                items: items,
+                isPaid: isCtaCte ? false : isPaid,
+                isInternal: isInternal,
+                paymentMethodId: directSaleData.isSplitPayment ? null : directSaleData.paymentMethodId,
+                splitPayments: directSaleData.isSplitPayment ? directSaleData.splitPayments.filter(p => p.paymentMethodId && p.amount > 0) : null,
+                notes: isCtaCte ? `Venta Cta Cte (Responsable: ${selectedCtaCteUser?.fullName || 'Cliente'})` : (directSaleData.clientId ? `Venta Directa desde Calendario` : `Venta Consumidor Final`)
+            };
+
+            await api.post('/api/consumptions/bulk-direct-sale', payload, config);
+
+            setIsDirectSaleModalOpen(false);
+            
+            if (isInternal) {
+                alert("Consumo interno registrado con éxito.");
+            } else if (!isPaid) {
+                alert("Venta registrada como PENDIENTE. Queda cargada a la cuenta del cliente.");
+                fetchDebtors(); // Refrescar lista de deudores
+            } else {
+                alert("¡Venta directa registrada y cobrada con éxito!");
+            }
+            
+            fetchData();
+        } catch (error: any) {
+            console.error("Error en venta directa:", error);
+            alert("Error al procesar la venta: " + (error.response?.data || error.message));
+        }
+    };
+
+    const fetchPendingConsumptions = async (userId: string) => {
+        try {
+            const response = await api.get(`/api/consumptions/user/${userId}/pending`, config);
+            setPendingConsumptions(response.data);
+        } catch (error) {
+            console.error("Error al cargar consumos pendientes:", error);
+        }
+    };
+
+    const fetchDebtors = async () => {
+        try {
+            const response = await api.get('/api/consumptions/debtors', config);
+            setDebtors(response.data);
+        } catch (error) {
+            console.error("Error al cargar deudores:", error);
+        }
+    };
+
+    const handlePayPending = async (userId: string) => {
+        try {
+            const m = paymentMethods.find(p => p.id === directSaleData.paymentMethodId);
+            const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
+
+            if (isCtaCte) {
+                const targetUserId = selectedCtaCteUser?.id || userId;
+                // Calculamos el total de los consumos seleccionados (o todos si no hay selección parcial)
+                const totalAmount = pendingConsumptions.reduce((s, c) => s + (c.totalPrice - (c.depositPaid || 0)), 0);
+                
+                // 1. Registrar Cargo en Transacciones
+                const chargePayload = {
+                    userId: targetUserId,
+                    amount: totalAmount,
+                    description: 'Consolidación de Consumos a Cta Cte'
+                };
+                await api.post(`/api/transaction/charge`, chargePayload, config);
+                
+                // 2. Marcar consumos como pagos (ficticiamente, ya que pasaron a Cta Cte)
+                // Usamos un medio de pago técnico o el mismo de Cta Cte
+                const payPayload = {
+                    paymentMethodId: directSaleData.paymentMethodId,
+                };
+                await api.post(`/api/consumptions/pay-pending/${userId}`, payPayload, config);
+            } else {
+                const payload = {
+                    paymentMethodId: directSaleData.isSplitPayment ? null : directSaleData.paymentMethodId,
+                    splitPayments: directSaleData.isSplitPayment ? directSaleData.splitPayments.filter(p => p.paymentMethodId && p.amount > 0) : null
+                };
+                await api.post(`/api/consumptions/pay-pending/${userId}`, payload, config);
+            }
+
+            alert("¡Operación realizada con éxito!");
+            setIsPendingModalOpen(false);
+            setSelectedPendingUser(null);
+            fetchDebtors();
+            fetchData();
+        } catch (error: any) {
+            console.error("Error al procesar Cta Cte:", error);
+            alert("Error: " + (error.response?.data || error.message));
+        }
+    };
 
     const canCancel = (booking: any) => {
         if (!booking) return false;
@@ -258,6 +629,29 @@ const BookingsPage = () => {
         const timer = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(timer);
     }, [selectedDate, view]);
+
+    useEffect(() => {
+        if (dsClientSearch.length > 2) {
+            setDsFilteredClients(clients.filter(c => 
+                c.isActive !== false &&
+                (c.fullName.toLowerCase().includes(dsClientSearch.toLowerCase()) || 
+                (c.dni && c.dni.includes(dsClientSearch)))
+            ).slice(0, 5));
+        } else {
+            setDsFilteredClients([]);
+        }
+    }, [dsClientSearch, clients]);
+
+    useEffect(() => {
+        if (dsProductSearch.length > 2) {
+            setDsFilteredProducts(allProducts.filter(p => 
+                p.name.toLowerCase().includes(dsProductSearch.toLowerCase()) || 
+                (p.internalCode && p.internalCode.toLowerCase().includes(dsProductSearch.toLowerCase()))
+            ).slice(0, 5));
+        } else {
+            setDsFilteredProducts([]);
+        }
+    }, [dsProductSearch, allProducts]);
 
     useEffect(() => {
         // Auto-scroll to current hour on load
@@ -327,9 +721,10 @@ const BookingsPage = () => {
             const pPayments = api.get('/api/PaymentMethods', config).then(r => r.data).catch(() => []);
             const pSettings = api.get('/api/SystemSettings', config).then(r => r.data).catch(() => []);
             const pActivities = api.get('/api/activities', config).then(r => r.data).catch(() => []);
+            const pProducts = api.get('/api/products', config).then(r => r.data).catch(() => []);
 
-            const [resC, resS, resB, resSB, resU, resP, resSett, resA] = await Promise.all([
-                pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities
+            const [resC, resS, resB, resSB, resU, resP, resSett, resA, resProducts] = await Promise.all([
+                pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities, pProducts
             ]);
 
             setCourts(resC || []);
@@ -338,7 +733,19 @@ const BookingsPage = () => {
             setSpaceBookings(resSB || []);
             setClients(resU || []);
             setActivities(resA || []);
-            setPaymentMethods((resP || []).filter((m: any) => m.isActive));
+            
+            const fetchedMethods = resP || [];
+            // Si no existe el medio de pago Cta Cte en la base, lo agregamos virtualmente
+            if (!fetchedMethods.some((m: any) => m.name.toUpperCase().includes("CTA CTE") || m.name.toUpperCase().includes("CUENTA CORRIENTE"))) {
+                fetchedMethods.push({
+                    id: 999,
+                    name: "CTA CTE",
+                    hexColor: "#f59e0b",
+                    isActive: true
+                });
+            }
+            setPaymentMethods(fetchedMethods.filter((m: any) => m.isActive));
+            setAllProducts(resProducts || []);
 
             if (resSett && Array.isArray(resSett)) {
                 const info = { ...companyInfo };
@@ -371,6 +778,17 @@ const BookingsPage = () => {
     };
 
     const [hours, setHours] = useState<number[]>([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2]);
+
+    useEffect(() => {
+        if (ctaCteUserSearch.length > 1) {
+            setCtaCteFilteredClients(clients.filter(c => 
+                c.fullName.toLowerCase().includes(ctaCteUserSearch.toLowerCase()) || 
+                (c.dni && c.dni.includes(ctaCteUserSearch))
+            ).slice(0, 5));
+        } else {
+            setCtaCteFilteredClients([]);
+        }
+    }, [ctaCteUserSearch, clients]);
 
     const filteredClients = useMemo(() => {
         if (!searchClient) return [];
@@ -441,15 +859,27 @@ const BookingsPage = () => {
     const getActivityFor = (resourceId: number, type: 'court' | 'space', hour: number) => {
         if (!activities) return null;
         const dayOfWeek = selectedDate.getDay();
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
         for (const activity of activities) {
             const schedules = activity.schedules || (activity as any).Schedules;
             if (!schedules || !Array.isArray(schedules)) continue;
 
             for (const s of schedules) {
+                const sSpecificDate = s.specificDate || (s as any).SpecificDate;
                 const sDay = s.dayOfWeek ?? (s as any).DayOfWeek;
 
-                if (Number(sDay) === dayOfWeek) {
+                let dateMatches = false;
+                if (sSpecificDate) {
+                    // Check if specific date matches
+                    const sDateOnly = sSpecificDate.split('T')[0];
+                    dateMatches = sDateOnly === dateStr;
+                } else {
+                    // Fallback to day of week
+                    dateMatches = Number(sDay) === dayOfWeek;
+                }
+
+                if (dateMatches) {
                     const sCourtId = s.courtId ?? (s as any).CourtId;
                     const sSpaceId = s.spaceId ?? (s as any).SpaceId;
 
@@ -477,6 +907,12 @@ const BookingsPage = () => {
     };
 
     const handleOpenBooking = async (resource: Court | Space, type: 'court' | 'space', hour: number) => {
+        const activityData = getActivityFor(resource.id, type, hour);
+        if (activityData) {
+            handleOpenActivityCharge(activityData.activity);
+            return;
+        }
+
         if (type === 'court') {
             const existing = getBookingFor(resource.id, hour);
             if (existing) {
@@ -492,21 +928,30 @@ const BookingsPage = () => {
 
                 if (existing.userId) {
                     try {
-                        const res = await api.get(`/api/membership/user/${existing.userId}`, config);
-                        if (res.data) {
+                        const res = await api.get(`/api/memberships/user/${existing.userId}`, config);
+                        if (res.data && res.data.membership) {
                             setUserMembership({
-                                name: res.data.membership?.name || 'Membresía',
-                                discount: res.data.membership?.discountPercentage || 0
+                                name: res.data.membership.name,
+                                discount: res.data.membership.discountPercentage || 0
                             });
                         } else {
                             setUserMembership(null);
                         }
+
+                        // Buscar deuda anterior total (Canchas + Productos) anterior a hoy
+                        const debtRes = await api.get(`/api/transaction/previous-debt/${existing.userId}`, config);
+                        if (debtRes.data !== undefined) {
+                            setUserBalance(debtRes.data * -1); // Tratamos como balance negativo para la UI
+                        }
                     } catch (e) {
                         setUserMembership(null);
+                        setUserBalance(0);
                     }
                 } else {
                     setUserMembership(null);
+                    setUserBalance(0);
                 }
+                setIncludePreviousDebt(false);
 
                 // BUSCAR OTRAS RESERVAS DEL MISMO CLIENTE HOY (COBRO CONJUNTO)
                 const otherB = (bookings || []).filter(b => 
@@ -562,7 +1007,27 @@ const BookingsPage = () => {
                 setSelectedConsumptionParts({});
                 setConsumptionFractions({});
                 setSelectedRelatedBookingIds([]);
-                setUserMembership(null);
+                if (existing.userId) {
+                    try {
+                        const res = await api.get(`/api/memberships/user/${existing.userId}`, config);
+                        if (res.data && res.data.membership) {
+                            setUserMembership({
+                                name: res.data.membership.name,
+                                discount: res.data.membership.discountPercentage || 0
+                            });
+                        }
+
+                        const debtRes = await api.get(`/api/transaction/previous-debt/${existing.userId}`, config);
+                        if (debtRes.data !== undefined) {
+                            setUserBalance(debtRes.data * -1);
+                        }
+                    } catch (e) {
+                        setUserBalance(0);
+                    }
+                } else {
+                    setUserBalance(0);
+                }
+                setIncludePreviousDebt(false);
 
                 // BUSCAR OTRAS RESERVAS DEL MISMO CLIENTE HOY (COBRO CONJUNTO)
                 const otherB = (bookings || []).filter(b => 
@@ -628,25 +1093,24 @@ const BookingsPage = () => {
                             return;
                         }
 
-                        // "Premium" Experience: Auto-switch to Existing Client
+                        // "Premium" Experience: Auto-fill data
                         setExistingUser(user);
 
-                        // Give a tiny delay for the user to see the match before switching
+                        // Give a tiny delay for the user to see the match
                         setTimeout(() => {
-                            setBookingType('existing');
                             setSelectedClientId(user.id);
-                            // Clear guest fields to keep state clean
-                            setGuestName('');
-                            setGuestPhone('');
-                            setGuestEmail('');
-                            setGuestDni('');
-                            setExistingUser(null);
+                            setGuestName(user.fullName || '');
+                            setGuestPhone(user.phoneNumber || '');
+                            setGuestEmail(user.email || '');
+                            
+                            // Visual feedback
+                            // alert(`Cliente encontrado: ${user.fullName}. Datos cargados.`);
 
                             // Auto-scroll to duration section to speed up workflow
                             setTimeout(() => {
                                 document.getElementById('duration-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }, 100);
-                        }, 800);
+                        }, 500);
                     }
                 } catch (err) {
                     setExistingUser(null);
@@ -828,6 +1292,8 @@ const BookingsPage = () => {
         setGuestEmail('');
         setGuestDni('');
         setExistingUser(null);
+        setUserBalance(0);
+        setIncludePreviousDebt(false);
         setDuration(60);
         setIsFree(false);
         setIsRecurring(false);
@@ -842,6 +1308,7 @@ const BookingsPage = () => {
         setIsClosingCourt(false);
         setGlobalFractionsCount(1);
         setSelectedGlobalFractions([0]);
+        setSelectedCtaCteUser(null);
         setBarcodeInput('');
         setProductSearch('');
         setPaymentObservation('');
@@ -953,7 +1420,13 @@ const BookingsPage = () => {
             }
         });
 
-        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment;
+        // 4. Pago de Deuda Anterior
+        let previousDebtPayment = 0;
+        if (includePreviousDebt && userBalance < 0) {
+            previousDebtPayment = Math.abs(userBalance);
+        }
+
+        const currentTransactionTotal = totalRentPayment + totalConsumptionsPayment + previousDebtPayment;
 
         if (currentTransactionTotal <= 0) {
             alert("Seleccione al menos una parte de algún ítem para cobrar.");
@@ -998,12 +1471,36 @@ const BookingsPage = () => {
                 else desc += ` (${m?.name})`;
                 if (paymentObservation) desc += ` - Obs: ${paymentObservation}`;
 
-                let url = `/api/transaction/payment?amount=${amount}&description=${encodeURIComponent(desc)}&paymentMethodId=${methodId}${booking.userId ? `&userId=${booking.userId}` : ''}`;
-                if (linkedId) {
-                    if (isSpace) url += `&spaceBookingId=${linkedId}`;
-                    else url += `&bookingId=${linkedId}`;
+                // REGLA CTA CTE: Si es cuenta corriente, registramos un CARGO en lugar de un PAGO
+                const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
+
+                let url = "";
+                if (isCtaCte) {
+                    const targetUserId = selectedCtaCteUser?.id || (booking as any).userId;
+                    if (!targetUserId) {
+                        alert("Para usar Cta. Cte. debe seleccionar un cliente registrado.");
+                        throw new Error("No user for Cta Cte");
+                    }
+                    const payload = {
+                        userId: targetUserId,
+                        amount: amount,
+                        description: desc,
+                        bookingId: !isSpace ? linkedId : null,
+                        spaceBookingId: isSpace ? linkedId : null
+                    };
+                    url = `/api/transaction/charge`;
+                    await api.post(url, payload, config);
+                } else {
+                    const payload = {
+                        userId: (booking as any).userId || null,
+                        amount: amount,
+                        description: desc,
+                        paymentMethodId: parseInt(methodId),
+                        bookingId: !isSpace ? linkedId : null,
+                        spaceBookingId: isSpace ? linkedId : null
+                    };
+                    await api.post(`/api/transaction/payment`, payload, config);
                 }
-                await api.post(url, {}, config);
             };
 
             // 1. Pagar Rentas (Individuales o Consolidadas)
@@ -1023,6 +1520,19 @@ const BookingsPage = () => {
 
                 if (rbIsSpace) await api.post(`/api/spacebookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
                 else await api.post(`/api/bookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
+            }
+
+            // 4. Pagar Deuda Anterior (Cuenta Corriente)
+            if (previousDebtPayment > 0) {
+                if (!isMixedPayment) {
+                    await registerPayment(previousDebtPayment, selectedPaymentMethod, "Pago Deuda Cta. Cte. Anterior", booking.id, isSpace);
+                } else {
+                    const txRatio = previousDebtPayment / currentTransactionTotal;
+                    const p1 = firstMethodAmount * txRatio;
+                    const p2 = previousDebtPayment - p1;
+                    await registerPayment(p1, selectedPaymentMethod, "Pago Deuda Cta. Cte. Anterior (Parte Mixta 1)", booking.id, isSpace);
+                    await registerPayment(p2, secondPaymentMethod, "Pago Deuda Cta. Cte. Anterior (Parte Mixta 2)", booking.id, isSpace);
+                }
             }
 
             // 3. Pagar Consumiciones Agrupadas
@@ -1394,6 +1904,25 @@ const BookingsPage = () => {
                             >
                                 <LayoutGrid className="w-3.5 h-3.5 text-amber-600" /> Gestionar Unidades
                             </a>
+                            <button
+                                onClick={() => {
+                                    setDsClientSearch('');
+                                    setDsFilteredClients([]);
+                                    setSelectedPendingUser(null);
+                                    setPendingConsumptions([]);
+                                    fetchDebtors();
+                                    setIsPendingModalOpen(true);
+                                }}
+                                className="px-5 py-3.5 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <CreditCard className="w-3.5 h-3.5" /> Cuentas Pendientes
+                            </button>
+                            <button
+                                onClick={handleOpenDirectSale}
+                                className="px-5 py-3.5 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <DollarSign className="w-3.5 h-3.5" /> Venta Directa
+                            </button>
                         </div>
                     )}
                 </div>
@@ -1518,10 +2047,13 @@ const BookingsPage = () => {
                                                 <div
                                                     key={`court-${court.id}-${hour}`}
                                                     className={`border-b border-r-2 border-zinc-200/50 p-2 min-h-[100px] relative hover:bg-zinc-200/30 transition-all cursor-pointer group/cell ${idx % 2 !== 0 ? 'bg-zinc-100/40' : 'bg-white'} ${isStartHour ? 'z-40' : 'z-0'}`}
-                                                    onClick={() => !activity && handleOpenBooking(court, 'court', hour)}
+                                                    onClick={() => handleOpenBooking(court, 'court', hour)}
                                                 >
                                                     {activity && (
-                                                        <div className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20">
+                                                        <div 
+                                                            onClick={(e) => { e.stopPropagation(); handleOpenActivityCharge(activity.activity); }}
+                                                            className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20 hover:scale-[1.02] transition-transform"
+                                                        >
                                                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
                                                             <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
                                                             <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
@@ -1654,10 +2186,13 @@ const BookingsPage = () => {
                                                 <div
                                                     key={`space-${space.id}-${hour}`}
                                                     className={`border-b border-r-2 border-zinc-200/50 p-2 min-h-[75px] relative hover:bg-violet-100/50 transition-all cursor-pointer group/cell bg-violet-50/30 ${isStartHour ? 'z-40' : 'z-0'}`}
-                                                    onClick={() => !activity && handleOpenBooking(space, 'space', hour)}
+                                                    onClick={() => handleOpenBooking(space, 'space', hour)}
                                                 >
                                                     {activity && (
-                                                        <div className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20">
+                                                        <div 
+                                                            onClick={(e) => { e.stopPropagation(); handleOpenActivityCharge(activity.activity); }}
+                                                            className="absolute inset-2 bg-black/90 rounded-2xl p-3 shadow-xl flex flex-col justify-center items-center text-center border-2 border-amber-500/30 animate-in fade-in zoom-in duration-300 z-20 hover:scale-[1.02] transition-transform"
+                                                        >
                                                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
                                                             <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
                                                             <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
@@ -1872,7 +2407,7 @@ const BookingsPage = () => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 mt-3 py-1 px-2.5 bg-white/5 rounded-full w-fit">
+                        <div className="flex items-center gap-2 mt-3 py-1 px-2.5 bg-white/5 rounded-full w-fit">
                                 <MapPin className="w-2.5 h-2.5 text-white/30" />
                                 <span className="text-[7px] font-black uppercase tracking-widest text-white/30">
                                     {selectedTimeSlot.resource.type === 'court' ? 'Cancha' : 'Espacio'}: {selectedTimeSlot.resource.data.name}
@@ -1880,135 +2415,154 @@ const BookingsPage = () => {
                             </div>
                         </div>
 
-                        <form onSubmit={handleCreateBooking} className="p-7 space-y-6">
-                            <div className="grid grid-cols-2 gap-4 p-2 bg-zinc-100 rounded-[24px]">
-                                <button
-                                    type="button"
-                                    onClick={() => setBookingType('guest')}
-                                    className={`py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'guest' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
-                                >
-                                    <User className="w-4 h-4 inline-block mr-2" /> PARTICULAR
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setBookingType('existing')}
-                                    className={`py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'existing' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
-                                >
-                                    <Users className="w-4 h-4 inline-block mr-2" /> CLIENTE APP
-                                </button>
+                        {/* Buscador de Clientes */}
+                        <div className="px-7 pt-6 pb-2 border-b border-zinc-50 relative">
+                            <div className="relative group">
+                                <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                                    <Search className="w-4 h-4 text-zinc-400 group-focus-within:text-black transition-colors" />
+                                    <div className="w-[1px] h-4 bg-zinc-200"></div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchClient}
+                                    onChange={(e) => setSearchClient(e.target.value)}
+                                    placeholder="BUSCAR CLIENTE POR NOMBRE..."
+                                    className="w-full pl-16 pr-6 py-4 bg-zinc-100 border-none rounded-3xl text-xs font-black uppercase tracking-tight focus:ring-4 focus:ring-black/5 outline-none transition-all placeholder:text-zinc-400"
+                                />
+                                {filteredClients.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-zinc-100 rounded-[28px] shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        <div className="p-4 bg-zinc-50 border-b border-zinc-100">
+                                            <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Resultados de búsqueda</p>
+                                        </div>
+                                        {filteredClients.map((c: any) => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setGuestName(c.fullName || '');
+                                                    setGuestDni(c.dni || '');
+                                                    setGuestPhone(c.phoneNumber || '');
+                                                    setGuestEmail(c.email || '');
+                                                    setSelectedClientId(c.id);
+                                                    setExistingUser(c);
+                                                    setSearchClient('');
+                                                }}
+                                                className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 border-b border-zinc-100 last:border-0 transition-all text-left"
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-2xl bg-zinc-100 flex items-center justify-center font-black text-xs text-zinc-400">
+                                                        {c.fullName?.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[11px] font-black uppercase italic tracking-tight text-black">{c.fullName}</p>
+                                                        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} • {c.membershipName || 'PARTICULAR'}</p>
+                                                    </div>
+                                                </div>
+                                                <ChevronRight className="w-4 h-4 text-zinc-300" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+                        </div>
 
-                            {bookingType === 'existing' ? (
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Buscar Cliente</label>
-                                    <div className="relative">
-                                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300 w-5 h-5" />
+                        <form onSubmit={handleCreateBooking} className="p-7 space-y-6">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest italic">Nombre Completo (Obligatorio)</label>
                                         <input
                                             type="text"
-                                            value={searchClient}
-                                            onChange={(e) => setSearchClient(e.target.value)}
-                                            className="w-full pl-16 pr-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
-                                            placeholder="Nombre o Email..."
+                                            value={guestName}
+                                            onChange={(e) => {
+                                                setGuestName(e.target.value);
+                                                if (guestDni || selectedClientId || guestPhone || guestEmail) {
+                                                    setGuestDni('');
+                                                    setGuestPhone('');
+                                                    setGuestEmail('');
+                                                    setSelectedClientId('');
+                                                    setExistingUser(null);
+                                                }
+                                            }}
+                                            className="w-full px-8 py-5 bg-amber-50/50 border border-amber-200 rounded-[28px] focus:ring-4 focus:ring-amber-500/10 outline-none font-bold placeholder:text-amber-300 transition-all text-amber-900 shadow-sm shadow-amber-500/5"
+                                            placeholder="Ej: Juan Perez"
+                                            required
                                         />
                                     </div>
 
-                                    {filteredClients.length > 0 && (
-                                        <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-200">
-                                            {filteredClients.map(client => (
-                                                <button
-                                                    key={client.id}
-                                                    type="button"
-                                                    onClick={async () => {
-                                                        setSelectedClientId(client.id);
-                                                        setSearchClient(client.fullName);
-                                                        // Consultar membresía del cliente seleccionado en tiempo real
-                                                        try {
-                                                            const res = await api.get(`/api/memberships/user/${client.id}`, config);
-                                                            if (res.data && res.data.membership) {
-                                                                setSelectedClientMembership({
-                                                                    name: res.data.membership.name,
-                                                                    discount: res.data.membership.discountPercentage
-                                                                });
-                                                            } else {
-                                                                setSelectedClientMembership(null);
-                                                            }
-                                                        } catch (e) {
-                                                            setSelectedClientMembership(null);
-                                                        }
-                                                    }}
-                                                    className={`w-full p-4 flex items-center justify-between rounded-2xl border transition-all ${selectedClientId === client.id
-                                                        ? 'bg-black text-white border-black'
-                                                        : 'bg-white text-zinc-600 border-zinc-100 hover:border-black/20'
-                                                        }`}
-                                                >
-                                                    <span className="font-bold">{client.fullName}</span>
-                                                    {selectedClientId === client.id && <Check className="w-4 h-4" />}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nombre Completo (Obligatorio)</label>
-                                            <input
-                                                type="text"
-                                                value={guestName}
-                                                onChange={(e) => setGuestName(e.target.value)}
-                                                className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
-                                                placeholder="Ej: Juan Perez"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">DNI (Opcional)</label>
-                                            <input
-                                                type="text"
-                                                value={guestDni}
-                                                onChange={(e) => setGuestDni(e.target.value)}
-                                                className={`w-full px-8 py-5 bg-zinc-50 border rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300 transition-all ${existingUser ? 'border-indigo-300 ring-4 ring-indigo-500/5' : 'border-zinc-100'
-                                                    }`}
-                                                placeholder="Solo números"
-                                            />
-                                            {existingUser && (
-                                                <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl animate-in fade-in slide-in-from-top-1">
-                                                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight">
-                                                        ⚠️ CLIENTE DETECTADO: <span className="font-black italic">{existingUser.fullName}</span>
-                                                    </p>
-                                                    <p className="text-[8px] text-indigo-400 font-bold uppercase tracking-tight leading-none mt-1">
-                                                        Ya registrado como {existingUser.membershipName || 'Particular'}. Se usará su cuenta existente.
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </div>
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">DNI / DOCUMENTO</label>
+                                        <input
+                                            type="text"
+                                            value={guestDni}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setGuestDni(val);
+                                                if (val.length >= 7) {
+                                                    const user = clients.find(c => c.dni === val);
+                                                    if (user) {
+                                                        setExistingUser(user);
+                                                        setGuestName(user.fullName);
+                                                        setSelectedClientId(user.id);
+                                                    } else {
+                                                        setExistingUser(null);
+                                                        setSelectedClientId('');
+                                                    }
+                                                } else {
+                                                    setExistingUser(null);
+                                                    setSelectedClientId('');
+                                                }
+                                            }}
+                                            className={`w-full px-8 py-5 bg-zinc-50 border rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300 transition-all ${existingUser ? 'border-emerald-300 ring-4 ring-emerald-500/5' : 'border-zinc-100'
+                                                }`}
+                                            placeholder="Ingrese DNI para buscar..."
+                                        />
+                                        {existingUser && (
+                                            <div className="px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl animate-in fade-in slide-in-from-top-1">
+                                                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">
+                                                    ✅ CLIENTE IDENTIFICADO: <span className="font-black italic">{existingUser.fullName}</span>
+                                                </p>
+                                                <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-tight leading-none mt-1">
+                                                    {existingUser.membershipName || 'Particular'}. Datos cargados automáticamente.
+                                                </p>
+                                            </div>
+                                        )}
+                                        {!existingUser && guestDni.length > 5 && !isNaN(Number(guestDni)) && (
+                                            <div className="px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in slide-in-from-top-1">
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
+                                                    ✨ NUEVO CLIENTE
+                                                </p>
+                                                <p className="text-[8px] text-blue-400 font-bold uppercase tracking-tight leading-none mt-1">
+                                                    Complete los datos para registrarlo en el sistema.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
+                                </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Teléfono (Opcional)</label>
-                                            <input
-                                                type="tel"
-                                                value={guestPhone}
-                                                onChange={(e) => setGuestPhone(e.target.value)}
-                                                className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
-                                                placeholder="Ej: 381..."
-                                            />
-                                        </div>
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Email (Opcional)</label>
-                                            <input
-                                                type="email"
-                                                value={guestEmail}
-                                                onChange={(e) => setGuestEmail(e.target.value)}
-                                                className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
-                                                placeholder="nombre@ejemplo.com"
-                                            />
-                                        </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Teléfono (Opcional)</label>
+                                        <input
+                                            type="tel"
+                                            value={guestPhone}
+                                            onChange={(e) => setGuestPhone(e.target.value)}
+                                            className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
+                                            placeholder="Ej: 381..."
+                                        />
+                                    </div>
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Email (Opcional)</label>
+                                        <input
+                                            type="email"
+                                            value={guestEmail}
+                                            onChange={(e) => setGuestEmail(e.target.value)}
+                                            className="w-full px-8 py-5 bg-zinc-50 border border-zinc-100 rounded-[28px] focus:ring-4 focus:ring-black/5 outline-none font-bold placeholder:text-zinc-300"
+                                            placeholder="nombre@ejemplo.com"
+                                        />
                                     </div>
                                 </div>
-                            )}
+                            </div>
 
                             {selectedTimeSlot.resource.type === 'space' && (
                                 <div className="pt-2">
@@ -2342,48 +2896,6 @@ const BookingsPage = () => {
                                                 return acc;
                                             }, {} as Record<number, any>);
 
-                                            const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], totalAmount: number, onPartsChange: (parts: number[]) => void) => {
-                                                const partPrice = totalAmount / Math.max(1, partsCount);
-                                                return (
-                                                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-black/5">
-                                                        {Array.from({ length: Math.max(1, partsCount) }).map((_, i) => (
-                                                            <button
-                                                                key={i}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (selectedParts.includes(i)) onPartsChange(selectedParts.filter(p => p !== i));
-                                                                    else onPartsChange([...selectedParts, i]);
-                                                                }}
-                                                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${selectedParts.includes(i) ? 'bg-black text-white shadow-md' : 'bg-white text-zinc-400 border border-zinc-100 hover:border-black/20'}`}
-                                                            >
-                                                                <span className={selectedParts.includes(i) ? 'text-white/50' : 'text-zinc-300'}>P.{i + 1}</span>
-                                                                <span>{formatARS(partPrice)}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            };
-
-                                            const renderFractionControl = (id: string, current: number, onChange: (n: number) => void, isDark: boolean = false) => {
-                                                return (
-                                                    <div className={`flex items-center gap-2 ${isDark ? 'bg-white/10 border-white/10' : 'bg-white/50 border-zinc-100'} p-1 rounded-xl border`}>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); onChange(Math.max(1, current - 1)); }}
-                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDark ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-white hover:bg-zinc-50 text-zinc-400 shadow-sm'}`}
-                                                        >
-                                                            <Minus className="w-3 h-3" />
-                                                        </button>
-                                                        <span className={`text-[10px] font-black min-w-[20px] text-center ${isDark ? 'text-white' : 'text-zinc-600'}`}>{current}</span>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); onChange(current + 1); }}
-                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDark ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-white hover:bg-zinc-50 text-zinc-400 shadow-sm'}`}
-                                                        >
-                                                            <Plus className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
-                                                );
-                                            };
-
                                             return (
                                                 <>
                                                     {/* 1 & 2. Rentas (Main + Selected Related) */}
@@ -2600,6 +3112,11 @@ const BookingsPage = () => {
                                             if (remaining > 0) currentTransactionTotal += (remaining / partsCount) * selectedPartsCount;
                                         });
 
+                                        // 4. Deuda Anterior
+                                        if (includePreviousDebt && userBalance < 0) {
+                                            currentTransactionTotal += Math.abs(userBalance);
+                                        }
+
                                         const totalRentRemaining = (booking.price || 0) - (booking.depositPaid || 0);
                                         const totalConsumptionRemaining = unpaidConsumptions.reduce((acc, c) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
                                         const relatedBookingsTotalDebt = relatedBookings
@@ -2632,7 +3149,7 @@ const BookingsPage = () => {
                                                             </div>
                                                         )}
 
-                                                        <div className="pt-5 flex justify-between items-end border-t border-zinc-200">
+                                                    <div className="pt-5 flex justify-between items-end border-t border-zinc-200">
                                                             <div>
                                                                 <p className="text-zinc-900 text-[9px] font-black uppercase tracking-[0.3em] mb-1">DEUDA RESTANTE</p>
                                                             </div>
@@ -2641,6 +3158,33 @@ const BookingsPage = () => {
                                                             </span>
                                                         </div>
                                                     </div>
+
+                                                    {/* DEUDA ANTERIOR TOGGLE */}
+                                                    {userBalance < 0 && (
+                                                        <div className={`p-5 rounded-[32px] border transition-all ${includePreviousDebt ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-white border-zinc-100 hover:border-zinc-200'}`}>
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${includePreviousDebt ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-zinc-100 text-zinc-400'}`}>
+                                                                        <History className="w-5 h-5" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-black uppercase text-zinc-800 tracking-tight">Deuda Anterior Total</p>
+                                                                        <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">Canchas y Productos Pendientes</p>
+                                                                    </div>
+                                                                </div>
+                                                                <span className={`text-sm font-black italic ${includePreviousDebt ? 'text-amber-600' : 'text-zinc-400'}`}>{formatARS(Math.abs(userBalance))}</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setIncludePreviousDebt(!includePreviousDebt)}
+                                                                className={`w-full py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${includePreviousDebt 
+                                                                    ? 'bg-amber-500 text-white shadow-xl shadow-amber-500/20 hover:bg-amber-600' 
+                                                                    : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
+                                                            >
+                                                                {includePreviousDebt ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                                                                {includePreviousDebt ? 'Quitar de este Pago' : 'Cobrar Saldo Pendiente'}
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="flex justify-between items-end pt-2 pb-2">
@@ -2675,20 +3219,44 @@ const BookingsPage = () => {
                                                 {/* Payment Methods Grid */}
                                                 <div className="grid grid-cols-2 gap-2">
                                                     {paymentMethods
-                                                        .filter(m => (selectedBooking ? m.name !== "BONIFICADO / SIN COSTO" : true))
-                                                        .map(method => (
-                                                            <button
-                                                                key={method.id}
-                                                                onClick={() => setSelectedPaymentMethod(method.id.toString())}
-                                                                className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex items-center justify-center gap-2 ${selectedPaymentMethod === method.id.toString()
-                                                                    ? 'bg-black text-white border-black shadow-lg'
-                                                                    : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
-                                                                    }`}
-                                                            >
-                                                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: method.hexColor }}></div>
-                                                                {method.name}
-                                                            </button>
-                                                        ))}
+                                                        .filter(m => {
+                                                            const clientName = selectedBooking?.user?.fullName || selectedSpaceBooking?.user?.fullName || selectedBooking?.guestName || selectedSpaceBooking?.guestName || "";
+                                                            const isConsumidorFinal = clientName.toLowerCase().includes("consumidor final");
+                                                            if (isConsumidorFinal) {
+                                                                return m.name?.toLowerCase().includes("efectivo");
+                                                            }
+                                                            return (selectedBooking ? m.name !== "BONIFICADO / SIN COSTO" : true);
+                                                        })
+                                                        .map(method => {
+                                                            const isCtaCte = method.name?.toUpperCase().includes("CTA CTE") || method.name?.toUpperCase().includes("CUENTA CORRIENTE");
+                                                            return (
+                                                                <button
+                                                                    key={method.id}
+                                                                    onClick={() => {
+                                                                        if (isCtaCte) {
+                                                                            setCtaCteUserSearch('');
+                                                                            setCtaCteFilteredClients([]);
+                                                                            setIsCtaCteModalOpen(true);
+                                                                        }
+                                                                        setSelectedPaymentMethod(method.id.toString());
+                                                                    }}
+                                                                    className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex flex-col items-center justify-center gap-1 ${selectedPaymentMethod === method.id.toString()
+                                                                        ? 'bg-black text-white border-black shadow-lg'
+                                                                        : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: method.hexColor }}></div>
+                                                                        {method.name}
+                                                                    </div>
+                                                                    {isCtaCte && selectedCtaCteUser && selectedPaymentMethod === method.id.toString() && (
+                                                                        <span className="text-[7px] text-emerald-400 font-bold lowercase truncate max-w-full px-2">
+                                                                            → {selectedCtaCteUser.fullName}
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
                                                 </div>
 
                                                 {isMixedPayment && !isMixedPaymentModalOpen && (
@@ -3200,6 +3768,1052 @@ const BookingsPage = () => {
                             >
                                 No, terminar aquí
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* MODAL DE COBRO DE ACTIVIDAD DESDE CALENDARIO */}
+            {isActivityChargeModalOpen && selectedActivityForCharge && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4 font-outfit">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col h-[85vh]">
+                        <div className="p-10 bg-emerald-500 text-white shrink-0 relative">
+                            <button onClick={() => setIsActivityChargeModalOpen(false)} className="absolute right-10 top-10 p-2 hover:bg-white/20 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                            <h2 className="text-3xl font-black italic uppercase tracking-tight">Cobro de Actividad</h2>
+                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mt-1">Registrar cobro de clase y consumiciones adicionales</p>
+                        </div>
+
+                        <div className="p-10 flex-1 overflow-y-auto space-y-8">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profesor / Instructor</label>
+                                    <div className="relative">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input 
+                                            type="text"
+                                            value={activityChargeData.instructorName}
+                                            onChange={(e) => setActivityChargeData({...activityChargeData, instructorName: e.target.value})}
+                                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm"
+                                            placeholder="Nombre del profesor..."
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actividad</label>
+                                    <div className="py-4 px-6 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-600 text-sm italic">
+                                        {selectedActivityForCharge.name}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente / Alumno</label>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input 
+                                        type="text"
+                                        value={actClientSearch}
+                                        onChange={(e) => {
+                                            setActClientSearch(e.target.value);
+                                            if (e.target.value.length > 2) {
+                                                setActFilteredClients(clients.filter(c => 
+                                                    c.fullName.toLowerCase().includes(e.target.value.toLowerCase()) || 
+                                                    (c.dni && c.dni.includes(e.target.value))
+                                                ).slice(0, 5));
+                                            } else {
+                                                setActFilteredClients([]);
+                                            }
+                                        }}
+                                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm"
+                                        placeholder="Buscar por nombre o DNI..."
+                                    />
+                                    {actFilteredClients.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl z-[110] overflow-hidden">
+                                            {actFilteredClients.map(c => (
+                                                <button 
+                                                    key={c.id}
+                                                    onClick={() => {
+                                                        setActivityChargeData({...activityChargeData, clientId: c.id, clientName: c.fullName});
+                                                        setActClientSearch(c.fullName);
+                                                        setActFilteredClients([]);
+                                                    }}
+                                                    className="w-full px-6 py-4 text-left hover:bg-slate-50 font-bold text-sm border-b border-slate-50 last:border-0"
+                                                >
+                                                    {c.fullName} <span className="text-[10px] text-slate-400 ml-2">DNI: {c.dni || 'S/D'}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px]">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Precio Base de Clase</p>
+                                        <h4 className="text-2xl font-black text-slate-900 italic tracking-tighter">${selectedActivityForCharge.price}</h4>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <label className="text-xs font-bold text-slate-500">Monto a cobrar:</label>
+                                        <div className="relative w-32">
+                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                            <input 
+                                                type="number"
+                                                value={activityChargeData.classPrice}
+                                                onChange={(e) => setActivityChargeData({...activityChargeData, classPrice: Number(e.target.value)})}
+                                                className="w-full pl-8 pr-4 py-3 bg-white border border-slate-100 rounded-xl outline-none font-black text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consumición / Productos</label>
+                                    <span className="text-[10px] font-black text-emerald-600 uppercase italic">Subtotal Consumo: ${activityChargeData.consumptions.reduce((s, c) => s + (c.price * c.quantity), 0)}</span>
+                                </div>
+                                
+                                <div className="relative">
+                                    <Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input 
+                                        type="text"
+                                        value={actProductSearch}
+                                        onChange={(e) => {
+                                            setActProductSearch(e.target.value);
+                                            if (e.target.value.length > 2) {
+                                                setActFilteredProducts(allProducts.filter(p => 
+                                                    p.name.toLowerCase().includes(e.target.value.toLowerCase()) || 
+                                                    (p.internalCode && p.internalCode.toLowerCase().includes(e.target.value.toLowerCase()))
+                                                ).slice(0, 5));
+                                            } else {
+                                                setActFilteredProducts([]);
+                                            }
+                                        }}
+                                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm"
+                                        placeholder="Agregar producto..."
+                                    />
+                                    {actFilteredProducts.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl z-[110] overflow-hidden">
+                                            {actFilteredProducts.map(p => (
+                                                <button 
+                                                    key={p.id}
+                                                    onClick={() => addProductToActivityCharge(p)}
+                                                    className="w-full px-6 py-4 text-left hover:bg-slate-50 font-bold text-sm border-b border-slate-50 flex justify-between items-center"
+                                                >
+                                                    <span>{p.name}</span>
+                                                    <span className="text-emerald-600">${p.finalPrice}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    {activityChargeData.consumptions.map((c, i) => (
+                                        <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black border border-slate-100">
+                                                    {c.quantity}x
+                                                </div>
+                                                <span className="text-sm font-bold text-slate-700">{c.productName}</span>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-sm font-black text-slate-900">${c.price * c.quantity}</span>
+                                                <button onClick={() => removeProductFromActivityCharge(i)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Medio de Pago</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {paymentMethods.map(m => (
+                                        <button 
+                                            key={m.id}
+                                            onClick={() => {
+                                                const isCtaCte = m.name?.toUpperCase().includes("CTA CTE") || m.name?.toUpperCase().includes("CUENTA CORRIENTE");
+                                                if (isCtaCte) {
+                                                    setCtaCteUserSearch('');
+                                                    setCtaCteFilteredClients([]);
+                                                    setIsCtaCteModalOpen(true);
+                                                }
+                                                setActivityChargeData({...activityChargeData, paymentMethodId: m.id});
+                                            }}
+                                            className={`py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${activityChargeData.paymentMethodId === m.id ? 'bg-black text-white border-black shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                                        >
+                                            {m.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-10 bg-slate-50 border-t border-slate-100 shrink-0 flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total a Cobrar</p>
+                                <h3 className="text-4xl font-black text-slate-900 italic tracking-tighter">
+                                    ${activityChargeData.classPrice + activityChargeData.consumptions.reduce((s, c) => s + (c.price * c.quantity), 0)}
+                                </h3>
+                            </div>
+                            <button 
+                                onClick={handleConfirmActivityCharge}
+                                disabled={!activityChargeData.clientId || !activityChargeData.paymentMethodId}
+                                className="px-10 py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                            >
+                                Confirmar Cobro
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Cuentas Pendientes */}
+            {isPendingModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                    <div className={`bg-white rounded-[40px] shadow-2xl w-full ${selectedPendingUser ? 'max-w-6xl' : 'max-w-2xl'} overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col h-[85vh]`}>
+                        <div className="p-10 bg-amber-500 text-white shrink-0 relative">
+                            <button onClick={() => setIsPendingModalOpen(false)} className="absolute right-10 top-10 p-2 hover:bg-white/20 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                            <button onClick={() => fetchDebtors()} className="absolute right-24 top-10 p-2 hover:bg-white/20 rounded-xl transition-colors">
+                                <RefreshCw className="w-5 h-5" />
+                            </button>
+                            <h2 className="text-3xl font-black italic uppercase tracking-tight">Cuentas Pendientes</h2>
+                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mt-1">Saldos por consumiciones de clientes</p>
+                        </div>
+
+                        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+                            {/* Columna Izquierda: Lista o Detalles */}
+                            <div className={`flex-1 overflow-y-auto p-10 ${selectedPendingUser ? 'lg:border-r border-slate-100' : ''}`}>
+                                {selectedPendingUser && (
+                                    <button 
+                                        onClick={() => {
+                                            setSelectedPendingUser(null);
+                                            setPendingConsumptions([]);
+                                            setDsClientSearch('');
+                                            fetchDebtors();
+                                        }}
+                                        className="flex items-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-widest hover:text-amber-700 transition-colors mb-8"
+                                    >
+                                        <ArrowLeft className="w-3 h-3" /> Volver al listado de deudores
+                                    </button>
+                                )}
+
+                                {!selectedPendingUser && (
+                                    <div className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buscar Cliente</label>
+                                            <div className="relative">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <input 
+                                                    type="text"
+                                                    value={dsClientSearch}
+                                                    onChange={(e) => setDsClientSearch(e.target.value)}
+                                                    className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm"
+                                                    placeholder="Buscar por nombre o DNI..."
+                                                />
+                                                {dsFilteredClients.length > 0 && (
+                                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl z-[110] overflow-hidden">
+                                                        {dsFilteredClients.map(c => (
+                                                            <button 
+                                                                key={c.id}
+                                                                onClick={() => {
+                                                                    setSelectedPendingUser(c);
+                                                                    setDsClientSearch(c.fullName);
+                                                                    setDsFilteredClients([]);
+                                                                    fetchPendingConsumptions(c.id);
+                                                                }}
+                                                                className="w-full px-6 py-4 text-left hover:bg-slate-50 font-bold text-sm border-b border-slate-50 last:border-0"
+                                                            >
+                                                                {c.fullName} <span className="text-[10px] text-slate-400 ml-2">DNI: {c.dni || 'S/D'}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Clientes con Saldo Pendiente</h4>
+                                            {debtors.length === 0 ? (
+                                                <div className="p-10 text-center bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                    <Check className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                                                    <p className="text-xs font-bold text-slate-400 uppercase">No hay cuentas pendientes</p>
+                                                </div>
+                                            ) : (
+                                                <div className="grid gap-3">
+                                                    {debtors.map((d: any) => (
+                                                        <button
+                                                            key={d.userId}
+                                                            onClick={() => {
+                                                                setSelectedPendingUser({ id: d.userId, fullName: d.fullName });
+                                                                setDsClientSearch(d.fullName);
+                                                                fetchPendingConsumptions(d.userId);
+                                                            }}
+                                                            className="flex justify-between items-center p-5 bg-white rounded-2xl border border-slate-100 hover:border-amber-500 hover:shadow-xl hover:-translate-y-0.5 transition-all group"
+                                                        >
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm">
+                                                                    {d.fullName.charAt(0)}
+                                                                </div>
+                                                                <div className="text-left">
+                                                                    <p className="text-sm font-black text-slate-900 group-hover:text-amber-600 transition-colors uppercase italic">{d.fullName}</p>
+                                                                    <p className="text-xl font-black italic text-rose-500 tracking-tighter">${d.totalDebt}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="px-5 py-3 bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl hover:scale-105 transition-all shadow-lg shadow-black/10">
+                                                                    Ver Detalles
+                                                                </span>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedPendingUser && (
+                                    <div className="space-y-6">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Items en esta cuenta</h4>
+                                        <div className="space-y-4">
+                                            {pendingConsumptions.map((item: any) => (
+                                                <div key={item.id} className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] flex items-center gap-6 animate-in slide-in-from-left duration-500">
+                                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-900 border border-slate-100 shrink-0">
+                                                        <Package className="w-8 h-8" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-lg font-black text-slate-900 uppercase italic truncate tracking-tight">{item.product?.name}</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Clock className="w-3 h-3 text-slate-400" />
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(parseISO(item.createdAt), 'd MMMM, HH:mm', { locale: es })} hs</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo</p>
+                                                        <p className="text-2xl font-black italic text-slate-900 tracking-tighter">${item.totalPrice}</p>
+                                                        <div className="mt-2 flex items-center justify-end gap-2">
+                                                            <div className="inline-flex items-center bg-white border border-slate-100 rounded-xl p-1 gap-3">
+                                                                <span className="px-3 py-1 text-[10px] font-black text-slate-900">{item.quantity} unidad(es)</span>
+                                                            </div>
+                                                            <button 
+                                                                onClick={async () => {
+                                                                    if (!window.confirm("¿Estás seguro de eliminar este consumo pendiente?")) return;
+                                                                    try {
+                                                                        await api.delete(`/api/consumptions/${item.id}`, config);
+                                                                        fetchPendingConsumptions(selectedPendingUser.id);
+                                                                        fetchDebtors();
+                                                                    } catch (err) {
+                                                                        console.error(err);
+                                                                        alert("Error al eliminar el consumo.");
+                                                                    }
+                                                                }}
+                                                                className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Columna Derecha: Resumen y Pago (Solo si hay usuario seleccionado) */}
+                            {selectedPendingUser && (
+                                <div className="w-full lg:w-[450px] bg-slate-50/50 p-10 flex flex-col justify-between overflow-y-auto">
+                                    <div className="space-y-10">
+                                        <div className="p-8 bg-white border border-slate-100 rounded-[40px] shadow-sm space-y-6">
+                                            <div className="flex justify-between items-center pb-6 border-b border-slate-50">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Deuda Total Seleccionada</p>
+                                                <p className="text-sm font-bold text-slate-900">${pendingConsumptions.reduce((s, c) => s + c.totalPrice, 0)}</p>
+                                            </div>
+                                            <div className="pt-2 text-right">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Deuda Restante</p>
+                                                <h3 className="text-5xl font-black text-slate-900 italic tracking-tighter">
+                                                    ${pendingConsumptions.reduce((s, c) => s + c.totalPrice, 0)}
+                                                </h3>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                                                    {directSaleData.isSplitPayment ? 'Desglose de Pagos' : 'Medio de Pago Principal'}
+                                                </label>
+                                                <button 
+                                                    onClick={() => {
+                                                        const total = pendingConsumptions.reduce((s, c) => s + (c.totalPrice - c.depositPaid), 0);
+                                                        setDirectSaleData({
+                                                            ...directSaleData, 
+                                                            isSplitPayment: !directSaleData.isSplitPayment,
+                                                            splitPayments: !directSaleData.isSplitPayment ? [{ paymentMethodId: directSaleData.paymentMethodId, amount: total }] : []
+                                                        });
+                                                    }}
+                                                    className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all border ${directSaleData.isSplitPayment ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                                                >
+                                                    {directSaleData.isSplitPayment ? '✓ Pago Dividido' : '+ Dividir Pago'}
+                                                </button>
+                                            </div>
+
+                                            {directSaleData.isSplitPayment ? (
+                                                <div className="space-y-3 animate-in fade-in duration-300">
+                                                    {directSaleData.splitPayments.map((p, i) => (
+                                                        <div key={i} className="flex gap-2 items-center bg-white border border-slate-100 p-3 rounded-2xl shadow-sm">
+                                                            <select 
+                                                                value={p.paymentMethodId || ''} 
+                                                                onChange={(e) => {
+                                                                    const newSplits = [...directSaleData.splitPayments];
+                                                                    newSplits[i].paymentMethodId = parseInt(e.target.value);
+                                                                    setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                }}
+                                                                className="flex-1 bg-slate-50 border-none outline-none text-[10px] font-black uppercase tracking-widest rounded-xl px-3 py-2"
+                                                            >
+                                                                <option value="">Seleccionar...</option>
+                                                                {paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                            </select>
+                                                            <div className="relative w-32">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">$</span>
+                                                                <input 
+                                                                    type="number"
+                                                                    value={p.amount}
+                                                                    onChange={(e) => {
+                                                                        const newSplits = [...directSaleData.splitPayments];
+                                                                        newSplits[i].amount = parseFloat(e.target.value) || 0;
+                                                                        setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                    }}
+                                                                    className="w-full pl-6 pr-3 py-2 bg-slate-50 rounded-xl text-[10px] font-black outline-none"
+                                                                />
+                                                            </div>
+                                                            {directSaleData.splitPayments.length > 1 && (
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        const newSplits = directSaleData.splitPayments.filter((_, idx) => idx !== i);
+                                                                        setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                    }}
+                                                                    className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg transition-colors"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    <div className="flex justify-between items-center px-2">
+                                                        <button 
+                                                            onClick={() => setDirectSaleData({
+                                                                ...directSaleData, 
+                                                                splitPayments: [...directSaleData.splitPayments, { paymentMethodId: null, amount: 0 }]
+                                                            })}
+                                                            className="text-[9px] font-black text-emerald-500 uppercase tracking-widest hover:underline"
+                                                        >
+                                                            + Añadir otro medio
+                                                        </button>
+                                                        
+                                                        {(() => {
+                                                            const total = pendingConsumptions.reduce((s, c) => s + (c.totalPrice - c.depositPaid), 0);
+                                                            const paid = directSaleData.splitPayments.reduce((s, p) => s + p.amount, 0);
+                                                            const diff = total - paid;
+                                                            return diff !== 0 ? (
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest ${diff > 0 ? 'text-rose-500' : 'text-amber-500'}`}>
+                                                                    {diff > 0 ? `Restante: $${diff.toLocaleString()}` : `Exceso: $${Math.abs(diff).toLocaleString()}`}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto ✓</span>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                                    {paymentMethods
+                                                        .filter(m => {
+                                                            const isConsumidorFinal = selectedPendingUser?.fullName?.toLowerCase().includes("consumidor final");
+                                                            if (isConsumidorFinal) {
+                                                                return m.name?.toLowerCase().includes("efectivo");
+                                                            }
+                                                            return true;
+                                                        })
+                                                        .map(m => (
+                                                        <button 
+                                                            key={m.id}
+                                                            onClick={() => {
+                                                                const isCtaCte = m.name?.toUpperCase().includes("CTA CTE") || m.name?.toUpperCase().includes("CUENTA CORRIENTE");
+                                                                if (isCtaCte) {
+                                                                    setCtaCteUserSearch('');
+                                                                    setCtaCteFilteredClients([]);
+                                                                    setIsCtaCteModalOpen(true);
+                                                                }
+                                                                setDirectSaleData({...directSaleData, paymentMethodId: m.id});
+                                                            }}
+                                                            className={`py-4 px-6 rounded-2xl border text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-3 ${directSaleData.paymentMethodId === m.id ? 'bg-black text-white border-black shadow-xl scale-[1.02]' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                                                        >
+                                                            <div className={`w-2 h-2 rounded-full ${directSaleData.paymentMethodId === m.id ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                                                            {m.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-10 grid grid-cols-2 gap-4">
+                                        <button 
+                                            onClick={() => setSelectedPendingUser(null)}
+                                            className="py-5 bg-rose-50 text-rose-500 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] hover:bg-rose-100 transition-all"
+                                        >
+                                            Anular
+                                        </button>
+                                        <button 
+                                            onClick={() => handlePayPending(selectedPendingUser.id)}
+                                            disabled={!selectedPendingUser || pendingConsumptions.length === 0 || (!directSaleData.isSplitPayment && !directSaleData.paymentMethodId)}
+                                            className="py-5 bg-emerald-400 text-white rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                                        >
+                                            Efectuar Pago
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE VENTA DIRECTA */}
+            {isDirectSaleModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col h-[85vh]">
+                        <div className="p-10 bg-emerald-500 text-white shrink-0 relative">
+                            <button onClick={() => setIsDirectSaleModalOpen(false)} className="absolute right-10 top-10 p-2 hover:bg-white/20 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                            <h2 className="text-3xl font-black italic uppercase tracking-tight">Venta Directa</h2>
+                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mt-1">Venta de productos sin reserva asociada</p>
+                        </div>
+
+                        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+                            {/* Columna Izquierda: Selección de Cliente y Productos */}
+                            <div className="flex-1 overflow-y-auto p-10 lg:border-r border-slate-100 space-y-8">
+                                {/* Sección: Cliente */}
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">1. Cliente / Comprador</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input 
+                                            type="text"
+                                            value={dsClientSearch}
+                                            onChange={(e) => setDsClientSearch(e.target.value)}
+                                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm transition-all focus:bg-white focus:ring-4 focus:ring-emerald-500/5"
+                                            placeholder="Buscar por nombre o DNI..."
+                                        />
+                                        {dsFilteredClients.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl z-[110] overflow-hidden">
+                                                {dsFilteredClients.map(c => (
+                                                    <button 
+                                                        key={c.id}
+                                                        onClick={() => {
+                                                            const userRole = (c.role || '').toLowerCase();
+                                                            const isInternal = ['admin', 'administrador', 'staff', 'administracion'].includes(userRole);
+                                                            const isConsumidorFinal = c.fullName?.toLowerCase().includes("consumidor final");
+                                                            const efectivoMethod = paymentMethods.find(m => m.name?.toLowerCase().includes("efectivo"));
+                                                            
+                                                            setDirectSaleData({
+                                                                ...directSaleData, 
+                                                                clientId: c.id, 
+                                                                clientName: c.fullName,
+                                                                isInternalConsumption: isInternal,
+                                                                paymentMethodId: isConsumidorFinal ? (efectivoMethod?.id || directSaleData.paymentMethodId) : directSaleData.paymentMethodId
+                                                            });
+                                                            setDsClientSearch(c.fullName);
+                                                            setDsFilteredClients([]);
+                                                        }}
+                                                        className="w-full px-6 py-4 text-left hover:bg-slate-50 font-bold text-sm border-b border-slate-50 last:border-0"
+                                                    >
+                                                        <div className="flex justify-between items-center">
+                                                            <span>{c.fullName}</span>
+                                                            <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${['admin', 'administrador', 'staff', 'administracion'].includes((c.role || '').toLowerCase()) ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                                {c.role || 'Cliente'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-400 mt-0.5">DNI: {c.dni || 'S/D'}</p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {directSaleData.clientName && (
+                                        <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center font-black text-sm uppercase italic">
+                                                    {directSaleData.clientName.charAt(0)}
+                                                </div>
+                                                <p className="text-xs font-black uppercase italic text-emerald-900 tracking-tight">{directSaleData.clientName}</p>
+                                            </div>
+                                            <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${directSaleData.isInternalConsumption ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-emerald-100 text-emerald-600 border border-emerald-200'}`}>
+                                                {directSaleData.isInternalConsumption ? 'Consumo Interno' : 'Venta al Público'}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Sección: Productos */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">2. Productos en la Venta</label>
+                                        <button 
+                                            onClick={() => setIsDsProductGridOpen(true)}
+                                            className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2"
+                                        >
+                                            <Plus className="w-3 h-3" /> Agregar Producto
+                                        </button>
+                                    </div>
+
+                                    {directSaleData.consumptions.length === 0 ? (
+                                        <div className="p-20 text-center bg-slate-50 rounded-[40px] border border-dashed border-slate-200">
+                                            <Package className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Selecciona productos para comenzar</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {directSaleData.consumptions.map((item, index) => (
+                                                <div key={index} className="flex flex-col gap-2 p-6 bg-slate-50 border border-slate-100 rounded-[32px] animate-in slide-in-from-left duration-300">
+                                                    <div className="flex items-center gap-6">
+                                                        {/* 1. Selector de Cantidad */}
+                                                        <div className="inline-flex items-center bg-white border border-slate-100 rounded-2xl p-1 gap-1 shadow-sm shrink-0">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    const newConsumptions = [...directSaleData.consumptions];
+                                                                    if (newConsumptions[index].quantity > 1) {
+                                                                        newConsumptions[index].quantity -= 1;
+                                                                    } else {
+                                                                        newConsumptions.splice(index, 1);
+                                                                    }
+                                                                    setDirectSaleData({...directSaleData, consumptions: newConsumptions});
+                                                                }}
+                                                                className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded-xl text-slate-400 hover:text-rose-500 transition-colors"
+                                                            >
+                                                                <Minus className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <span className="w-8 text-center text-xs font-black text-slate-900">{item.quantity}</span>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    const newConsumptions = [...directSaleData.consumptions];
+                                                                    newConsumptions[index].quantity += 1;
+                                                                    setDirectSaleData({...directSaleData, consumptions: newConsumptions});
+                                                                }}
+                                                                className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded-xl text-slate-400 hover:text-emerald-500 transition-colors"
+                                                            >
+                                                                <Plus className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* 2. Icono */}
+                                                        <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-900 border border-slate-100 shrink-0">
+                                                            <Box className="w-6 h-6" />
+                                                        </div>
+
+                                                        {/* 3. Nombre y Precio Unitario */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-lg font-black text-slate-900 uppercase italic truncate tracking-tight">{item.productName}</p>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">${item.price.toLocaleString()} c/u</p>
+                                                        </div>
+
+                                                        {/* 4. Subtotal y Fraccionamiento */}
+                                                        <div className="flex items-center gap-4 shrink-0">
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Subtotal</p>
+                                                                <p className="text-2xl font-black italic text-slate-900 tracking-tighter">${(item.price * item.quantity).toLocaleString()}</p>
+                                                            </div>
+                                                            {renderFractionControl(`ds-${item.productId}`, dsFractions[`ds-${item.productId}`] || 1, (n) => {
+                                                                setDsFractions({ ...dsFractions, [`ds-${item.productId}`]: n });
+                                                                setDsSelectedParts({ ...dsSelectedParts, [`ds-${item.productId}`]: [] });
+                                                            })}
+                                                        </div>
+
+                                                        {/* 5. Eliminar */}
+                                                        <button 
+                                                            onClick={() => removeProductFromDirectSale(index)}
+                                                            className="p-3 text-rose-400 hover:bg-rose-50 rounded-2xl transition-all shrink-0"
+                                                        >
+                                                            <Trash2 className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Selector de Partes (Debajo) */}
+                                                    {renderPartsSelector(`ds-${item.productId}`, dsFractions[`ds-${item.productId}`] || 1, dsSelectedParts[`ds-${item.productId}`] || [], (item.price * item.quantity), (parts) => {
+                                                        setDsSelectedParts({ ...dsSelectedParts, [`ds-${item.productId}`]: parts });
+                                                    })}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Columna Derecha: Resumen y Pago */}
+                            <div className="w-full lg:w-[450px] bg-slate-50/50 p-10 flex flex-col justify-between overflow-y-auto">
+                                <div className="space-y-10">
+                                    <div className="p-8 bg-white border border-slate-100 rounded-[40px] shadow-sm space-y-6">
+                                        <div className="flex justify-between items-center pb-6 border-b border-slate-50">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Selección</p>
+                                            <p className="text-sm font-bold text-slate-900">${getDirectSaleTotals().totalToPay.toLocaleString()}</p>
+                                        </div>
+                                        <div className="pt-2 text-right">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total a Cobrar</p>
+                                            <h3 className="text-5xl font-black text-emerald-500 italic tracking-tighter">
+                                                ${getDirectSaleTotals().totalToPay.toLocaleString()}
+                                            </h3>
+                                        </div>
+                                    </div>
+
+                                    {!directSaleData.isInternalConsumption && (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                                                    {directSaleData.isSplitPayment ? 'Desglose de Pagos' : 'Medio de Pago Principal'}
+                                                </label>
+                                                <button 
+                                                    onClick={() => {
+                                                        const { totalToPay } = getDirectSaleTotals();
+                                                        setDirectSaleData({
+                                                            ...directSaleData, 
+                                                            isSplitPayment: !directSaleData.isSplitPayment,
+                                                            splitPayments: !directSaleData.isSplitPayment ? [{ paymentMethodId: directSaleData.paymentMethodId, amount: totalToPay }] : []
+                                                        });
+                                                    }}
+                                                    className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all border ${directSaleData.isSplitPayment ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                                                >
+                                                    {directSaleData.isSplitPayment ? '✓ Pago Dividido' : '+ Dividir Pago'}
+                                                </button>
+                                            </div>
+
+                                            {directSaleData.isSplitPayment ? (
+                                                <div className="space-y-3 animate-in fade-in duration-300">
+                                                    {directSaleData.splitPayments.map((p, i) => (
+                                                        <div key={i} className="flex gap-2 items-center bg-white border border-slate-100 p-3 rounded-2xl shadow-sm">
+                                                            <select 
+                                                                value={p.paymentMethodId || ''} 
+                                                                onChange={(e) => {
+                                                                    const newSplits = [...directSaleData.splitPayments];
+                                                                    newSplits[i].paymentMethodId = parseInt(e.target.value);
+                                                                    setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                }}
+                                                                className="flex-1 bg-slate-50 border-none outline-none text-[10px] font-black uppercase tracking-widest rounded-xl px-3 py-2"
+                                                            >
+                                                                <option value="">Seleccionar...</option>
+                                                                {paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                            </select>
+                                                            <div className="relative w-32">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">$</span>
+                                                                <input 
+                                                                    type="number"
+                                                                    value={p.amount}
+                                                                    onChange={(e) => {
+                                                                        const newSplits = [...directSaleData.splitPayments];
+                                                                        newSplits[i].amount = parseFloat(e.target.value) || 0;
+                                                                        setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                    }}
+                                                                    className="w-full pl-6 pr-3 py-2 bg-slate-50 rounded-xl text-[10px] font-black outline-none"
+                                                                />
+                                                            </div>
+                                                            {directSaleData.splitPayments.length > 1 && (
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        const newSplits = directSaleData.splitPayments.filter((_, idx) => idx !== i);
+                                                                        setDirectSaleData({...directSaleData, splitPayments: newSplits});
+                                                                    }}
+                                                                    className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg transition-colors"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    <div className="flex justify-between items-center px-2">
+                                                        <button 
+                                                            onClick={() => setDirectSaleData({
+                                                                ...directSaleData, 
+                                                                splitPayments: [...directSaleData.splitPayments, { paymentMethodId: null, amount: 0 }]
+                                                            })}
+                                                            className="text-[9px] font-black text-emerald-500 uppercase tracking-widest hover:underline"
+                                                        >
+                                                            + Añadir otro medio
+                                                        </button>
+                                                        
+                                                        {(() => {
+                                                            const { totalToPay } = getDirectSaleTotals();
+                                                            const paid = directSaleData.splitPayments.reduce((s, p) => s + p.amount, 0);
+                                                            const diff = totalToPay - paid;
+                                                            return diff !== 0 ? (
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest ${diff > 0 ? 'text-rose-500' : 'text-amber-500'}`}>
+                                                                    {diff > 0 ? `Restante: $${diff.toLocaleString()}` : `Exceso: $${Math.abs(diff).toLocaleString()}`}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto ✓</span>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                                    {paymentMethods
+                                                        .filter(m => {
+                                                            const isConsumidorFinal = directSaleData.clientName?.toLowerCase().includes("consumidor final");
+                                                            if (isConsumidorFinal) {
+                                                                return m.name?.toLowerCase().includes("efectivo");
+                                                            }
+                                                            return true;
+                                                        })
+                                                        .map(m => (
+                                                        <button 
+                                                            key={m.id}
+                                                            onClick={() => {
+                                                                const isCtaCte = m.name?.toUpperCase().includes("CTA CTE") || m.name?.toUpperCase().includes("CUENTA CORRIENTE");
+                                                                if (isCtaCte) {
+                                                                    setCtaCteUserSearch('');
+                                                                    setCtaCteFilteredClients([]);
+                                                                    setIsCtaCteModalOpen(true);
+                                                                }
+                                                                setDirectSaleData({...directSaleData, paymentMethodId: m.id});
+                                                            }}
+                                                            className={`py-4 px-6 rounded-2xl border text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-3 ${directSaleData.paymentMethodId === m.id ? 'bg-black text-white border-black shadow-xl scale-[1.02]' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                                                        >
+                                                            <div className={`w-2 h-2 rounded-full ${directSaleData.paymentMethodId === m.id ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                                                            {m.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-10 grid grid-cols-2 gap-4">
+                                    <button 
+                                        onClick={() => setIsDirectSaleModalOpen(false)}
+                                        className="py-5 bg-rose-50 text-rose-500 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] hover:bg-rose-100 transition-all"
+                                    >
+                                        Anular
+                                    </button>
+                                    {!directSaleData.isInternalConsumption && (
+                                        <button 
+                                            onClick={() => handleConfirmDirectSale(false)}
+                                            disabled={!directSaleData.clientId || directSaleData.consumptions.length === 0 || directSaleData.clientName?.toLowerCase().includes("consumidor final")}
+                                            className="py-5 bg-amber-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-amber-500/20 hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                                        >
+                                            Pagar más tarde
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={() => handleConfirmDirectSale(true)}
+                                        disabled={!directSaleData.clientId || directSaleData.consumptions.length === 0 || (!directSaleData.isInternalConsumption && !directSaleData.paymentMethodId)}
+                                        className={`py-5 text-white rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 ${directSaleData.isInternalConsumption ? 'bg-amber-600 shadow-amber-600/20 col-span-2' : 'bg-emerald-500 shadow-emerald-500/20'}`}
+                                    >
+                                        {directSaleData.isInternalConsumption ? 'Registrar Consumo' : 'Cobrar Ahora'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Direct Sale Product Selection Modal */}
+            {isDsProductGridOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-center justify-center z-[120] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-white/10 flex flex-col h-[85vh]">
+                        <div className="p-10 bg-black text-white relative shrink-0">
+                            <button onClick={() => setIsDsProductGridOpen(false)} className="absolute right-10 top-10 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-6 h-6" />
+                            </button>
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-3 bg-emerald-500 rounded-2xl shadow-lg shadow-emerald-500/20">
+                                    <Package className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-black italic uppercase tracking-tight">Seleccionar Productos</h2>
+                                    <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Catálogo completo de consumiciones</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 relative">
+                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                                <input 
+                                    type="text"
+                                    autoFocus
+                                    value={dsProductSearch}
+                                    onChange={(e) => setDsProductSearch(e.target.value)}
+                                    className="w-full pl-16 pr-8 py-6 bg-white/5 border border-white/10 rounded-[28px] focus:ring-4 focus:ring-emerald-500/20 outline-none font-bold text-lg placeholder:text-zinc-600 transition-all focus:bg-white/10"
+                                    placeholder="Buscar por nombre, categoría o código..."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-10 flex-1 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                            {allProducts.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-[40px] border border-dashed border-slate-200">
+                                    <RefreshCw className="w-12 h-12 mb-4 animate-spin opacity-20" />
+                                    <p className="text-xs font-bold uppercase tracking-widest">Sincronizando inventario...</p>
+                                </div>
+                            ) : (
+                                Object.entries(
+                                    allProducts
+                                        .filter(p =>
+                                            p.name.toLowerCase().includes(dsProductSearch.toLowerCase()) ||
+                                            (p.barcode && p.barcode.toLowerCase().includes(dsProductSearch.toLowerCase())) ||
+                                            (p.internalCode && p.internalCode.toLowerCase().includes(dsProductSearch.toLowerCase())) ||
+                                            (p.category && p.category.toLowerCase().includes(dsProductSearch.toLowerCase()))
+                                        )
+                                        .reduce((acc, p) => {
+                                            const cat = p.category || 'Otros';
+                                            if (!acc[cat]) acc[cat] = [];
+                                            acc[cat].push(p);
+                                            return acc;
+                                        }, {} as Record<string, any[]>)
+                                ).map(([category, products]) => (
+                                    <div key={category} className="mb-12 last:mb-0">
+                                        <div className="flex items-center gap-4 mb-6 border-b border-slate-200 pb-3">
+                                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] italic">{category}</h3>
+                                            <div className="h-[1px] flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {(products as any[]).map((product: any) => (
+                                                <button
+                                                    key={product.id}
+                                                    onClick={() => {
+                                                        addProductToDirectSale(product);
+                                                        // No cerramos el modal para permitir carga múltiple rápida
+                                                    }}
+                                                    className="flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-[32px] hover:border-emerald-500 hover:shadow-2xl hover:-translate-y-1 transition-all group aspect-square relative overflow-hidden"
+                                                >
+                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:bg-emerald-500 group-hover:scale-150 duration-500"></div>
+
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-50 mb-4 group-hover:bg-white group-hover:shadow-sm transition-all z-10">
+                                                        <Package className="w-7 h-7 text-slate-400 group-hover:text-emerald-500" />
+                                                    </div>
+                                                    <p className="text-[10px] font-black uppercase italic text-center leading-tight mb-1 text-slate-500 group-hover:text-slate-900 z-10 transition-colors">{product.name}</p>
+                                                    <p className="text-xl font-black italic text-black z-10">${product.finalPrice || product.FinalPrice}</p>
+
+                                                    <div className="absolute bottom-4 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0 z-10">
+                                                        <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-500 text-white px-3 py-1.5 rounded-full shadow-lg shadow-emerald-500/20">
+                                                            AGREGAR +
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        
+                        <div className="p-10 bg-white border-t border-slate-100 shrink-0 flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Items cargados</p>
+                                    <p className="text-2xl font-black text-slate-900">{directSaleData.consumptions.length}</p>
+                                </div>
+                                <div className="w-[1px] h-10 bg-slate-100"></div>
+                                <div>
+                                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Subtotal actual</p>
+                                    <p className="text-2xl font-black text-emerald-500">${getDirectSaleTotals().totalToPay.toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setIsDsProductGridOpen(false)}
+                                className="px-12 py-5 bg-black text-white rounded-[24px] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-black/20 hover:scale-105 transition-all"
+                            >
+                                Volver a la Venta
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* MODAL SELECCION CLIENTE CTA CTE */}
+            {isCtaCteModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[110] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 bg-zinc-900 text-white relative">
+                            <button onClick={() => setIsCtaCteModalOpen(false)} className="absolute right-6 top-6 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                            <h3 className="text-xl font-black italic uppercase tracking-tight mb-1">Cargar a Cuenta Corriente</h3>
+                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Selecciona el cliente responsable de la deuda</p>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="relative">
+                                <div className="absolute left-5 top-1/2 -translate-y-1/2">
+                                    <Search className="w-4 h-4 text-zinc-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={ctaCteUserSearch}
+                                    onChange={(e) => setCtaCteUserSearch(e.target.value)}
+                                    autoFocus
+                                    placeholder="BUSCAR POR NOMBRE O DNI..."
+                                    className="w-full pl-12 pr-6 py-4 bg-zinc-100 border-none rounded-2xl text-xs font-black uppercase focus:ring-4 focus:ring-black/5 outline-none transition-all"
+                                />
+                            </div>
+
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                {ctaCteFilteredClients.length > 0 ? (
+                                    ctaCteFilteredClients.map(c => (
+                                        <button
+                                            key={c.id}
+                                            onClick={() => {
+                                                setSelectedCtaCteUser(c);
+                                                setIsCtaCteModalOpen(false);
+                                            }}
+                                            className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 rounded-2xl border border-transparent hover:border-zinc-100 transition-all text-left"
+                                        >
+                                            <div>
+                                                <p className="text-[11px] font-black uppercase italic tracking-tight">{c.fullName}</p>
+                                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} • {c.membershipName || 'PARTICULAR'}</p>
+                                            </div>
+                                            <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
+                                                <ChevronRight className="w-4 h-4 text-zinc-400" />
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : ctaCteUserSearch.length > 1 ? (
+                                    <div className="py-8 text-center text-zinc-300">
+                                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                        <p className="text-[10px] font-black uppercase tracking-widest">No se encontraron clientes</p>
+                                    </div>
+                                ) : (
+                                    <div className="py-8 text-center text-zinc-300">
+                                        <Search className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                        <p className="text-[10px] font-black uppercase tracking-widest">Escribe para buscar...</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Usar cliente de la reserva por defecto */}
+                            {(selectedBooking || selectedSpaceBooking)?.userId && (
+                                <button
+                                    onClick={() => {
+                                        const b = selectedBooking || selectedSpaceBooking;
+                                        setSelectedCtaCteUser({
+                                            id: b?.userId,
+                                            fullName: b?.user?.fullName || b?.guestName
+                                        });
+                                        setIsCtaCteModalOpen(false);
+                                    }}
+                                    className="w-full py-4 border-2 border-dashed border-zinc-100 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest hover:border-zinc-200 hover:text-zinc-600 transition-all"
+                                >
+                                    Usar Cliente de la Reserva
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

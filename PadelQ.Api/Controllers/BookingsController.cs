@@ -162,12 +162,6 @@ namespace PadelQ.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Cancel(Guid id)
         {
-            var booking = await _context.Bookings.FindAsync(id);
-            if (booking != null && booking.Status == BookingStatus.Paid)
-            {
-                return BadRequest("No se puede anular un turno que ya ha sido pagado completamente por seguridad.");
-            }
-
             var success = await _bookingService.CancelBooking(id);
             if (!success) return NotFound();
             return NoContent();

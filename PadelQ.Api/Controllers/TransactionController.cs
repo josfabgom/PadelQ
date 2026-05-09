@@ -50,21 +50,40 @@ namespace PadelQ.Api.Controllers
             return charges - payments;
         }
 
+        [HttpGet("previous-debt/{userId}")]
+        public async Task<ActionResult<decimal>> GetPreviousDebt(string userId)
+        {
+            var today = DateTime.UtcNow.Date;
+
+            // 1. Saldo de cuenta corriente (Cargos - Pagos) anterior a hoy
+            var oldCharges = await _context.Transactions
+                .Where(t => t.UserId == userId && t.Type == TransactionType.Charge && t.Date < today)
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            var oldPayments = await _context.Transactions
+                .Where(t => t.UserId == userId && t.Type == TransactionType.Payment && t.Date < today)
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            var accountDebt = oldCharges - oldPayments;
+
+            // 2. Consumos pendientes de días anteriores (que no están en Transactions todavía)
+            var consumptionDebt = await _context.BookingConsumptions
+                .Include(c => c.Booking)
+                .Where(c => c.UserId == userId && !c.IsPaid && (c.Booking == null || c.Booking.StartTime < today))
+                .SumAsync(c => c.UnitPrice * (decimal)c.Quantity - c.DepositPaid);
+
+            return accountDebt + consumptionDebt;
+        }
+
         [HttpPost("payment")]
         [Authorize(Roles = "Admin,Staff")]
-        public async Task<ActionResult<Transaction>> RecordPayment(
-            [FromQuery] string? userId, 
-            [FromQuery] decimal amount, 
-            [FromQuery] string? description, 
-            [FromQuery] int? paymentMethodId,
-            [FromQuery] Guid? bookingId,
-            [FromQuery] Guid? spaceBookingId)
+        public async Task<ActionResult<Transaction>> RecordPayment([FromBody] PaymentRequest request)
         {
             ApplicationUser? user = null;
 
-            if (!string.IsNullOrEmpty(userId))
+            if (!string.IsNullOrEmpty(request.UserId))
             {
-                user = await _context.Users.FindAsync(userId);
+                user = await _context.Users.FindAsync(request.UserId);
             }
             
             // Si no hay usuario o no se encontró, usamos o creamos "Consumidor Final"
@@ -84,20 +103,20 @@ namespace PadelQ.Api.Controllers
                     _context.Users.Add(user);
                     await _context.SaveChangesAsync();
                 }
-                userId = user.Id;
+                request.UserId = user.Id;
             }
 
             var transaction = new Transaction
             {
-                UserId = userId,
-                Amount = amount,
+                UserId = request.UserId,
+                Amount = request.Amount,
                 Date = DateTime.UtcNow,
                 Type = TransactionType.Payment,
-                Description = description,
-                PaymentMethodId = paymentMethodId,
+                Description = request.Description,
+                PaymentMethodId = request.PaymentMethodId,
                 ProcessedBy = User.Identity?.Name ?? "Sistema",
-                BookingId = bookingId,
-                SpaceBookingId = spaceBookingId
+                BookingId = request.BookingId,
+                SpaceBookingId = request.SpaceBookingId
             };
 
             _context.Transactions.Add(transaction);
@@ -106,18 +125,62 @@ namespace PadelQ.Api.Controllers
             return Ok(transaction);
         }
 
+        public class PaymentRequest
+        {
+            public string? UserId { get; set; }
+            public decimal Amount { get; set; }
+            public string? Description { get; set; }
+            public int? PaymentMethodId { get; set; }
+            public Guid? BookingId { get; set; }
+            public Guid? SpaceBookingId { get; set; }
+        }
+
+        [HttpPost("charge")]
+        [Authorize(Roles = "Admin,Staff")]
+        public async Task<ActionResult<Transaction>> RecordCharge([FromBody] ChargeRequest request)
+        {
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (user == null) return NotFound("Usuario no encontrado");
+
+            var transaction = new Transaction
+            {
+                UserId = request.UserId,
+                Amount = request.Amount,
+                Date = DateTime.UtcNow,
+                Type = TransactionType.Charge,
+                Description = request.Description ?? "Cargo en Cuenta Corriente",
+                ProcessedBy = User.Identity?.Name ?? "Sistema",
+                BookingId = request.BookingId,
+                SpaceBookingId = request.SpaceBookingId
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(transaction);
+        }
+
+        public class ChargeRequest
+        {
+            public string UserId { get; set; } = string.Empty;
+            public decimal Amount { get; set; }
+            public string? Description { get; set; }
+            public Guid? BookingId { get; set; }
+            public Guid? SpaceBookingId { get; set; }
+        }
+
         [HttpPost("membership-payment")]
         [Authorize(Roles = "Admin,Staff")]
-        public async Task<ActionResult<Transaction>> RecordMembershipPayment([FromQuery] string userId, [FromQuery] decimal amount, [FromQuery] string? description, [FromQuery] int? paymentMethodId)
+        public async Task<ActionResult<Transaction>> RecordMembershipPayment([FromBody] MembershipPaymentRequest request)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FindAsync(request.UserId);
             if (user == null) return NotFound("User not found");
 
             var now = DateTime.UtcNow;
 
             // VALIDACIÓN ESTRICTA: No permitir pagar si ya está paga y vigente
             var alreadyPaid = await _context.UserMemberships
-                .AnyAsync(um => um.UserId == userId && um.IsActive && um.IsPaid && (um.EndDate == null || um.EndDate > now));
+                .AnyAsync(um => um.UserId == request.UserId && um.IsActive && um.IsPaid && (um.EndDate == null || um.EndDate > now));
 
             if (alreadyPaid)
             {
@@ -126,7 +189,7 @@ namespace PadelQ.Api.Controllers
 
             // Buscar la suscripción activa (o crear una si no existe) para marcarla como paga
             var userMembership = await _context.UserMemberships
-                .Where(um => um.UserId == userId && um.IsActive)
+                .Where(um => um.UserId == request.UserId && um.IsActive)
                 .OrderByDescending(um => um.StartDate)
                 .FirstOrDefaultAsync();
 
@@ -139,17 +202,14 @@ namespace PadelQ.Api.Controllers
             }
             else
             {
-                // Si no existe el registro técnico, lo creamos ahora para activarlo
-                // Buscamos la membresía que el usuario tiene asignada en el perfil (como ayuda)
-                // O tomamos la primera disponible que coincida con el monto pagado
-                var membership = await _context.Memberships.FirstOrDefaultAsync(m => m.MonthlyPrice <= amount) 
+                var membership = await _context.Memberships.FirstOrDefaultAsync(m => m.MonthlyPrice <= request.Amount) 
                                  ?? await _context.Memberships.FirstOrDefaultAsync();
 
                 if (membership != null)
                 {
                     userMembership = new UserMembership
                     {
-                        UserId = userId,
+                        UserId = request.UserId,
                         MembershipId = membership.Id,
                         StartDate = DateTime.UtcNow,
                         EndDate = DateTime.UtcNow.AddDays(30),
@@ -162,12 +222,12 @@ namespace PadelQ.Api.Controllers
 
             var transaction = new Transaction
             {
-                UserId = userId,
-                Amount = amount,
+                UserId = request.UserId,
+                Amount = request.Amount,
                 Date = DateTime.UtcNow,
                 Type = TransactionType.MembershipPayment,
-                Description = description ?? "Cobro de Cuota Mensual - Membresía Activada",
-                PaymentMethodId = paymentMethodId,
+                Description = request.Description ?? "Cobro de Cuota Mensual - Membresía Activada",
+                PaymentMethodId = request.PaymentMethodId,
                 ProcessedBy = User.Identity?.Name ?? "Sistema"
             };
 
@@ -175,6 +235,14 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(transaction);
+        }
+
+        public class MembershipPaymentRequest
+        {
+            public string UserId { get; set; } = string.Empty;
+            public decimal Amount { get; set; }
+            public string? Description { get; set; }
+            public int? PaymentMethodId { get; set; }
         }
 
         [HttpGet("report/payments-by-method")]

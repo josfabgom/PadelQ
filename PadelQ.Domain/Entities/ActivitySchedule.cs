@@ -9,6 +9,7 @@ namespace PadelQ.Domain.Entities
         public int Id { get; set; }
         public int ActivityId { get; set; }
         public DayOfWeek DayOfWeek { get; set; }
+        public DateTime? SpecificDate { get; set; }
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
 

@@ -62,6 +62,7 @@ const CashManagement = () => {
     const [adjustmentDescription, setAdjustmentDescription] = useState('');
     const [selectedMethodId, setSelectedMethodId] = useState<number | null>(null);
     const [selectedMethodDetail, setSelectedMethodDetail] = useState<any>(null);
+    const [error, setError] = useState<string | null>(null);
 
     const config = getAuthConfig();
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
@@ -80,8 +81,10 @@ const CashManagement = () => {
             ]);
             setCurrentStatus(statusRes.data);
             setHistory(historyRes.data);
-        } catch (err) {
+            setError(null);
+        } catch (err: any) {
             console.error("Error fetching cash data", err);
+            setError(err.response?.data || "Error al cargar los datos de caja");
         } finally {
             setLoading(false);
         }
@@ -327,6 +330,16 @@ const CashManagement = () => {
     return (
         <div className="p-10 bg-[#fafafa] min-h-screen font-oak space-y-10">
             <Header />
+
+            {error && (
+                <div className="p-6 bg-rose-50 border border-rose-100 rounded-[28px] flex items-center gap-4 text-rose-600 animate-in fade-in slide-in-from-top-4">
+                    <AlertCircle className="w-6 h-6 flex-shrink-0" />
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Error del Sistema</p>
+                        <p className="text-xs font-bold">{error}</p>
+                    </div>
+                </div>
+            )}
 
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-6">

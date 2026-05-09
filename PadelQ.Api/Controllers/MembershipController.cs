@@ -81,27 +81,27 @@ namespace PadelQ.Api.Controllers
 
         [HttpPost("subscribe")]
         [Authorize(Roles = "Admin,Staff,Merchant")]
-        public async Task<IActionResult> SubscribeUser(string userId, int membershipId)
+        public async Task<IActionResult> SubscribeUser([FromBody] SubscribeRequest request)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FindAsync(request.UserId);
             if (user == null) return NotFound("User not found");
 
             // Prevent membership for Administrative Roles
             var isAdministrative = await _context.UserRoles
                 .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
-                .AnyAsync(x => x.UserId == userId && (x.Name == "Staff" || x.Name == "Merchant"));
+                .AnyAsync(x => x.UserId == request.UserId && (x.Name == "Staff" || x.Name == "Merchant"));
 
             if (isAdministrative)
             {
                 return BadRequest("No se puede asignar una membresía a un perfil administrativo.");
             }
 
-            var membership = await _context.Memberships.FindAsync(membershipId);
+            var membership = await _context.Memberships.FindAsync(request.MembershipId);
             if (membership == null) return NotFound("Membership not found");
 
             // Deactivate previous active memberships
             var activeMemberships = await _context.UserMemberships
-                .Where(um => um.UserId == userId && um.IsActive)
+                .Where(um => um.UserId == request.UserId && um.IsActive)
                 .ToListAsync();
 
             foreach (var am in activeMemberships)
@@ -112,8 +112,8 @@ namespace PadelQ.Api.Controllers
 
             var userMembership = new UserMembership
             {
-                UserId = userId,
-                MembershipId = membershipId,
+                UserId = request.UserId,
+                MembershipId = request.MembershipId,
                 StartDate = DateTime.UtcNow,
                 IsActive = true
             };
@@ -123,7 +123,7 @@ namespace PadelQ.Api.Controllers
             // Log membership payment (Descriptive only, does not affect financial balance)
             var transaction = new Transaction
             {
-                UserId = userId,
+                UserId = request.UserId,
                 Amount = membership.MonthlyPrice,
                 Date = DateTime.UtcNow,
                 Type = TransactionType.MembershipPayment,
@@ -134,6 +134,12 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(userMembership);
+        }
+
+        public class SubscribeRequest
+        {
+            public string UserId { get; set; } = string.Empty;
+            public int MembershipId { get; set; }
         }
 
         [HttpGet("user/{userId}")]

@@ -12,6 +12,8 @@ namespace PadelQ.Domain.Entities
         public Guid? BookingId { get; set; }
         
         public Guid? SpaceBookingId { get; set; }
+        
+        public string? UserId { get; set; }
 
         [Required]
         public int ProductId { get; set; }
@@ -43,5 +45,8 @@ namespace PadelQ.Domain.Entities
 
         [ForeignKey("ProductId")]
         public virtual Product? Product { get; set; }
+
+        [ForeignKey("UserId")]
+        public virtual ApplicationUser? User { get; set; }
     }
 }

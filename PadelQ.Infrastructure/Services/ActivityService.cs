@@ -81,6 +81,7 @@ namespace PadelQ.Infrastructure.Services
                     {
                         ActivityId = dbActivity.Id,
                         DayOfWeek = s.DayOfWeek,
+                        SpecificDate = s.SpecificDate,
                         StartTime = s.StartTime,
                         EndTime = s.EndTime,
                         CourtId = s.CourtId,

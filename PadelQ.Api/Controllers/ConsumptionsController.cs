@@ -32,6 +32,42 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
         }
 
+        [HttpGet("user/{userId}/pending")]
+        public async Task<ActionResult<IEnumerable<BookingConsumption>>> GetByUserPending(string userId)
+        {
+            return await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Where(c => c.UserId == userId && !c.IsPaid)
+                .OrderBy(c => c.CreatedAt)
+                .ToListAsync();
+        }
+
+        [HttpGet("debtors")]
+        public async Task<ActionResult> GetDebtors()
+        {
+            var debtors = await _context.BookingConsumptions
+                .Where(c => !c.IsPaid && !string.IsNullOrEmpty(c.UserId))
+                .GroupBy(c => new { c.UserId, FullName = c.User != null ? c.User.FullName : "Cliente Desconocido" })
+                .Select(g => new
+                {
+                    UserId = g.Key.UserId,
+                    FullName = g.Key.FullName,
+                    TotalDebt = g.Sum(c => c.UnitPrice * (decimal)c.Quantity - c.DepositPaid)
+                })
+                .Where(d => d.TotalDebt > 0)
+                .ToListAsync();
+
+            return Ok(debtors);
+        }
+
+        [HttpGet("user/{userId}/unpaid-total")]
+        public async Task<ActionResult<decimal>> GetUserUnpaidTotal(string userId)
+        {
+            return await _context.BookingConsumptions
+                .Where(c => c.UserId == userId && !c.IsPaid)
+                .SumAsync(c => c.UnitPrice * (decimal)c.Quantity - c.DepositPaid);
+        }
+
         [HttpPost]
         public async Task<ActionResult<BookingConsumption>> AddConsumption([FromBody] AddConsumptionRequest request)
         {
@@ -127,6 +163,195 @@ namespace PadelQ.Api.Controllers
             return NoContent();
         }
 
+        [HttpPost("bulk-direct-sale")]
+        public async Task<IActionResult> BulkDirectSale([FromBody] BulkDirectSaleRequest request)
+        {
+            if (request.Items == null || !request.Items.Any()) return BadRequest("No hay items para vender");
+
+            var consumptions = new List<BookingConsumption>();
+            decimal totalAmount = 0;
+
+            foreach (var item in request.Items)
+            {
+                var product = await _context.Products.FindAsync(item.ProductId);
+                if (product == null) continue;
+
+                var consumption = new BookingConsumption
+                {
+                    UserId = request.UserId,
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    UnitPrice = product.FinalPrice,
+                    IsPaid = request.IsPaid || request.IsInternal,
+                    DepositPaid = (request.IsPaid || request.IsInternal) ? (item.PaidAmount ?? (product.FinalPrice * item.Quantity)) : 0,
+                    Notes = request.Notes ?? "Venta Directa unificada"
+                };
+
+                if (consumption.IsPaid && consumption.DepositPaid < consumption.TotalPrice)
+                {
+                    consumption.IsPaid = false; // Mark as pending if not fully paid
+                }
+
+                totalAmount += consumption.DepositPaid;
+                consumptions.Add(consumption);
+
+                // Stock Control
+                product.Stock -= item.Quantity;
+                _context.ProductStockMovements.Add(new ProductStockMovement
+                {
+                    ProductId = product.Id,
+                    Type = MovementType.Sale,
+                    Quantity = -item.Quantity,
+                    Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado)" : $"Venta Directa Bulk: {product.Name} (PENDIENTE)")
+                });
+            }
+
+            // Registrar pagos si es venta pagada
+            if (request.IsPaid && !request.IsInternal)
+            {
+                if (request.SplitPayments != null && request.SplitPayments.Any())
+                {
+                    foreach (var payment in request.SplitPayments)
+                    {
+                        var transaction = new Transaction
+                        {
+                            UserId = request.UserId,
+                            Amount = payment.Amount,
+                            Date = DateTime.UtcNow,
+                            Type = TransactionType.Payment,
+                            Description = $"Venta Directa (Pago Dividido) - Bulk",
+                            PaymentMethodId = payment.PaymentMethodId
+                        };
+                        _context.Transactions.Add(transaction);
+                    }
+                }
+                else if (request.PaymentMethodId.HasValue)
+                {
+                    var transaction = new Transaction
+                    {
+                        UserId = request.UserId,
+                        Amount = totalAmount,
+                        Date = DateTime.UtcNow,
+                        Type = TransactionType.Payment,
+                        Description = $"Venta Directa - Bulk",
+                        PaymentMethodId = request.PaymentMethodId.Value
+                    };
+                    _context.Transactions.Add(transaction);
+                }
+            }
+
+            _context.BookingConsumptions.AddRange(consumptions);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Venta bulk procesada", Total = totalAmount, ItemsCount = consumptions.Count });
+        }
+
+        [HttpPost("direct-sale")]
+        public async Task<IActionResult> DirectSale([FromBody] DirectSaleRequest request)
+        {
+            var product = await _context.Products.FindAsync(request.ProductId);
+            if (product == null) return NotFound("Producto no encontrado");
+
+            var consumption = new BookingConsumption
+            {
+                UserId = request.UserId,
+                ProductId = request.ProductId,
+                Quantity = request.Quantity,
+                UnitPrice = product.FinalPrice,
+                IsPaid = request.IsPaid || request.IsInternal,
+                Notes = request.Notes
+            };
+
+            if (request.IsInternal)
+            {
+                consumption.DepositPaid = consumption.TotalPrice;
+            }
+            else if (request.IsPaid)
+            {
+                consumption.DepositPaid = consumption.TotalPrice;
+                
+                if (request.PaymentMethodId.HasValue)
+                {
+                    var transaction = new Transaction
+                    {
+                        UserId = request.UserId,
+                        Amount = consumption.TotalPrice,
+                        Date = DateTime.UtcNow,
+                        Type = TransactionType.Payment,
+                        Description = $"Venta Directa: {product.Name} x{request.Quantity}",
+                        PaymentMethodId = request.PaymentMethodId.Value
+                    };
+                    _context.Transactions.Add(transaction);
+                }
+            }
+
+            // Stock Control
+            product.Stock -= request.Quantity;
+            _context.ProductStockMovements.Add(new ProductStockMovement
+            {
+                ProductId = product.Id,
+                Type = MovementType.Sale,
+                Quantity = -request.Quantity,
+                Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa: {product.Name} (Pagado)" : $"Venta Directa: {product.Name} (PENDIENTE)")
+            });
+
+            _context.BookingConsumptions.Add(consumption);
+            await _context.SaveChangesAsync();
+
+            return Ok(consumption);
+        }
+
+        [HttpPost("pay-pending/{userId}")]
+        public async Task<IActionResult> PayPending(string userId, [FromBody] BulkPayPendingRequest request)
+        {
+            var pending = await _context.BookingConsumptions
+                .Where(c => c.UserId == userId && !c.IsPaid)
+                .ToListAsync();
+
+            if (!pending.Any()) return BadRequest("No hay consumos pendientes");
+
+            decimal totalDebt = pending.Sum(c => c.TotalPrice - c.DepositPaid);
+
+            if (request.SplitPayments != null && request.SplitPayments.Any())
+            {
+                foreach (var payment in request.SplitPayments)
+                {
+                    var transaction = new Transaction
+                    {
+                        UserId = userId,
+                        Amount = payment.Amount,
+                        Date = DateTime.UtcNow,
+                        Type = TransactionType.Payment,
+                        Description = $"Pago de Deuda (Dividido) - Consumiciones",
+                        PaymentMethodId = payment.PaymentMethodId
+                    };
+                    _context.Transactions.Add(transaction);
+                }
+            }
+            else if (request.PaymentMethodId.HasValue)
+            {
+                var transaction = new Transaction
+                {
+                    UserId = userId,
+                    Amount = totalDebt,
+                    Date = DateTime.UtcNow,
+                    Type = TransactionType.Payment,
+                    Description = $"Pago de Deuda - Consumiciones",
+                    PaymentMethodId = request.PaymentMethodId.Value
+                };
+                _context.Transactions.Add(transaction);
+            }
+
+            foreach (var c in pending)
+            {
+                c.IsPaid = true;
+                c.DepositPaid = c.TotalPrice;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Deuda pagada", TotalPaid = totalDebt });
+        }
+
         [HttpPost("checkout/{bookingId}")]
         public async Task<IActionResult> Checkout(Guid bookingId, [FromQuery] int paymentMethodId)
         {
@@ -204,5 +429,46 @@ namespace PadelQ.Api.Controllers
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public string? Notes { get; set; }
+    }
+
+    public class DirectSaleRequest
+    {
+        public string UserId { get; set; } = string.Empty;
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+        public bool IsPaid { get; set; }
+        public bool IsInternal { get; set; }
+        public int? PaymentMethodId { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class BulkDirectSaleRequest
+    {
+        public string UserId { get; set; } = string.Empty;
+        public List<DirectSaleItemRequest> Items { get; set; } = new();
+        public bool IsPaid { get; set; }
+        public bool IsInternal { get; set; }
+        public int? PaymentMethodId { get; set; }
+        public List<SplitPaymentRequest>? SplitPayments { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class BulkPayPendingRequest
+    {
+        public int? PaymentMethodId { get; set; }
+        public List<SplitPaymentRequest>? SplitPayments { get; set; }
+    }
+
+    public class DirectSaleItemRequest
+    {
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+        public decimal? PaidAmount { get; set; }
+    }
+
+    public class SplitPaymentRequest
+    {
+        public int PaymentMethodId { get; set; }
+        public decimal Amount { get; set; }
     }
 }

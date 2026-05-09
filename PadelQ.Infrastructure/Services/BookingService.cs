@@ -164,11 +164,11 @@ namespace PadelQ.Infrastructure.Services
                     var newUser = new ApplicationUser
                     {
                         Id = Guid.NewGuid().ToString(),
-                        UserName = dni,
+                        UserName = !string.IsNullOrEmpty(guestEmail) ? guestEmail : dni,
                         Dni = dni,
-                        FullName = guestName,
+                        FullName = guestName ?? $"Particular {dni}",
                         PhoneNumber = guestPhone,
-                        Email = guestEmail,
+                        Email = !string.IsNullOrEmpty(guestEmail) ? guestEmail : $"{dni}@padelq.com",
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
                     };
@@ -312,11 +312,11 @@ namespace PadelQ.Infrastructure.Services
                     var newUser = new ApplicationUser
                     {
                         Id = Guid.NewGuid().ToString(),
-                        UserName = dni,
+                        UserName = !string.IsNullOrEmpty(guestEmail) ? guestEmail : dni,
                         Dni = dni,
-                        FullName = guestName,
+                        FullName = guestName ?? $"Particular {dni}",
                         PhoneNumber = guestPhone,
-                        Email = guestEmail,
+                        Email = !string.IsNullOrEmpty(guestEmail) ? guestEmail : $"{dni}@padelq.com",
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
                     };
@@ -325,6 +325,12 @@ namespace PadelQ.Infrastructure.Services
                     await _context.SaveChangesAsync();
                 }
             }
+            // Forzar interpretación LOCAL absoluta compensando conversiones UTC
+            if (startTime.Kind == DateTimeKind.Utc) {
+                startTime = startTime.ToLocalTime();
+            }
+            startTime = DateTime.SpecifyKind(startTime, DateTimeKind.Unspecified);
+
             var currentStartTime = startTime;
             // Aseguramos que el endDate incluya todo el día final (hasta 23:59:59)
             var finalEndDate = endDate.Date.AddDays(1).AddSeconds(-1);
@@ -453,6 +459,29 @@ namespace PadelQ.Infrastructure.Services
                 .FirstOrDefaultAsync(b => b.Id == bookingId);
             if (booking == null) return false;
             
+            // Si la reserva estaba PAGA, debemos reversar el PAGO en la caja (Libro Diario)
+            if (booking.Status == BookingStatus.Paid)
+            {
+                // Buscamos el último pago de esta reserva para copiar el medio de pago si es posible
+                var lastPayment = await _context.Transactions
+                    .Where(t => t.BookingId == bookingId && t.Type == TransactionType.Payment)
+                    .OrderByDescending(t => t.Date)
+                    .FirstOrDefaultAsync();
+
+                var reversalPayment = new Transaction
+                {
+                    UserId = booking.UserId ?? "Particular",
+                    Amount = -booking.DepositPaid, // Restamos lo que se pagó
+                    Type = TransactionType.Payment, // Tipo Payment para que reste de la caja
+                    Date = DateTime.UtcNow,
+                    Description = $"Devolución por Anulación Reserva PAGA: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}",
+                    BookingId = booking.Id,
+                    PaymentMethodId = lastPayment?.PaymentMethodId,
+                    ProcessedBy = "Sistema (Anulación)"
+                };
+                _context.Transactions.Add(reversalPayment);
+            }
+
             booking.Status = BookingStatus.Cancelled;
 
             // Devolver stock de consumiciones vinculadas
@@ -477,19 +506,21 @@ namespace PadelQ.Infrastructure.Services
                 }
             }
 
-            // Si tenía usuario, compensamos la deuda en su Cta Cte
+            // Si tenía usuario (y no estaba paga, o para compensar el cargo original), compensamos la deuda en su Cta Cte
+            // Nota: Si estaba paga, el cargo original (+Price) y el pago original (-Price) ya se compensaban.
+            // Al anular, agregamos el reversal del pago (vuelve a tener deuda) y el reversal del cargo (vuelve a cero).
             if (!string.IsNullOrEmpty(booking.UserId))
             {
-                var reversal = new Transaction
+                var reversalCharge = new Transaction
                 {
                     UserId = booking.UserId,
-                    Amount = booking.Price,
-                    Type = TransactionType.Payment, // Resta de la deuda (Cta Cte)
+                    Amount = -booking.Price, // Cargo negativo para restar de la deuda sin entrar a caja
+                    Type = TransactionType.Charge, 
                     Date = DateTime.UtcNow,
                     Description = $"Anulación Reserva: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}",
                     BookingId = booking.Id
                 };
-                _context.Transactions.Add(reversal);
+                _context.Transactions.Add(reversalCharge);
             }
 
             await _context.SaveChangesAsync();
@@ -537,8 +568,8 @@ namespace PadelQ.Infrastructure.Services
                     var reversal = new Transaction
                     {
                         UserId = b.UserId,
-                        Amount = b.Price,
-                        Type = TransactionType.Payment,
+                        Amount = -b.Price, // Cargo negativo
+                        Type = TransactionType.Charge,
                         Date = DateTime.UtcNow,
                         Description = $"Anulación Serie Recurrente: {b.Court?.Name ?? "Cancha"} del {b.StartTime:dd/MM HH:mm}",
                         BookingId = b.Id

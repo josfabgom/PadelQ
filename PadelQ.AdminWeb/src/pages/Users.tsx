@@ -110,7 +110,12 @@ const UsersPage = () => {
     if (!selectedUser) return;
     try {
       const endpoint = isMembershipPaymentLog ? '/api/transaction/membership-payment' : '/api/transaction/payment';
-      await api.post(`${endpoint}?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDescription}`, {}, config);
+      const payload = {
+        userId: selectedUser.id,
+        amount: paymentAmount,
+        description: paymentDescription
+      };
+      await api.post(endpoint, payload, config);
       setIsPaymentModalOpen(false);
       setPaymentAmount(0);
       setPaymentDescription('');
@@ -125,7 +130,11 @@ const UsersPage = () => {
     e.preventDefault();
     if (!selectedUser || !selectedMembershipId) return;
     try {
-      await api.post(`/api/membership/subscribe?userId=${selectedUser.id}&membershipId=${selectedMembershipId}`, {}, config);
+      const payload = {
+        userId: selectedUser.id,
+        membershipId: parseInt(selectedMembershipId as string)
+      };
+      await api.post(`/api/membership/subscribe`, payload, config);
       setIsMembershipModalOpen(false);
       fetchUsers();
     } catch (err) {
