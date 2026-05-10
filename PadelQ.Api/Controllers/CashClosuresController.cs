@@ -269,6 +269,7 @@ namespace PadelQ.Api.Controllers
                 c.ClosedBy = "Forced by Admin";
             }
             await _context.SaveChangesAsync();
+            return Ok("Todas las cajas abiertas han sido cerradas forzosamente.");
         }
 
         private DateTime GetArgNow()
