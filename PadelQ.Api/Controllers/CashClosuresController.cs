@@ -269,26 +269,8 @@ namespace PadelQ.Api.Controllers
                 c.ClosedBy = "Forced by Admin";
             }
             await _context.SaveChangesAsync();
-            return Ok("Todas las cajas abiertas han sido cerradas forzosamente.");
         }
-    }
 
-    public class ManualAdjustmentRequest {
-        public decimal Amount { get; set; }
-        public string Description { get; set; } = string.Empty;
-        public bool IsIncome { get; set; }
-        public int? PaymentMethodId { get; set; }
-    }
-
-    public class OpenCashRequest {
-        public decimal InitialCash { get; set; }
-        public string? Notes { get; set; }
-    }
-
-    public class CloseCashRequest {
-        public decimal ActualCash { get; set; }
-        public string? ActualTotals { get; set; } // JSON format
-        public string? Notes { get; set; }
         private DateTime GetArgNow()
         {
             try
@@ -309,5 +291,23 @@ namespace PadelQ.Api.Controllers
                 }
             }
         }
+    }
+
+    public class ManualAdjustmentRequest {
+        public decimal Amount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public bool IsIncome { get; set; }
+        public int? PaymentMethodId { get; set; }
+    }
+
+    public class OpenCashRequest {
+        public decimal InitialCash { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class CloseCashRequest {
+        public decimal ActualCash { get; set; }
+        public string? ActualTotals { get; set; } // JSON format
+        public string? Notes { get; set; }
     }
 }
