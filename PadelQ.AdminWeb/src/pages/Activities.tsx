@@ -17,7 +17,9 @@ interface ClubActivity {
   id?: number;
   name: string;
   description: string;
-  instructorName: string;
+  instructorId?: string;
+  instructorName?: string;
+  instructor?: { fullName: string };
   price: number;
   maxCapacity: number;
   isActive: boolean;
@@ -36,9 +38,11 @@ const ActivitiesPage = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<ClubActivity | null>(null);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [formData, setFormData] = useState<ClubActivity>({
     name: '',
     description: '',
+    instructorId: '',
     instructorName: '',
     price: 30,
     maxCapacity: 10,
@@ -55,13 +59,15 @@ const ActivitiesPage = () => {
     const config = getAuthConfig();
 
     try {
-      const [actData, courtData, spaceData] = await Promise.all([
+      const [actData, courtData, spaceData, teacherData] = await Promise.all([
         api.get('/api/activities', config).then(r => r.data).catch(err => { console.error("Act:", err); return []; }),
         api.get('/api/courts', config).then(r => r.data).catch(err => { console.error("Courts:", err); return []; }),
-        api.get('/api/spaces', config).then(r => r.data).catch(err => { console.error("Spaces:", err); return []; })
+        api.get('/api/spaces', config).then(r => r.data).catch(err => { console.error("Spaces:", err); return []; }),
+        api.get('/api/users/role/Teacher', config).then(r => r.data).catch(err => { console.error("Teachers:", err); return []; })
       ]);
 
       setActivities(actData || []);
+      setTeachers(teacherData || []);
       
       const combinedResources: Resource[] = [
         ...(courtData || []).map((c: any) => ({ id: c.id, name: c.name, type: 'court' as const })),
@@ -85,6 +91,7 @@ const ActivitiesPage = () => {
       setFormData({
         name: '',
         description: '',
+        instructorId: '',
         instructorName: '',
         price: 30,
         maxCapacity: 10,
@@ -205,7 +212,7 @@ const ActivitiesPage = () => {
               <div className="space-y-3 mt-4">
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <UserIcon className="w-4 h-4 text-slate-400" />
-                  <span>Profesor: {activity.instructorName}</span>
+                  <span>Profesor: {activity.instructor?.fullName || activity.instructorName || 'No asignado'}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <Users className="w-4 h-4 text-slate-400" />
@@ -280,12 +287,24 @@ const ActivitiesPage = () => {
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Profesor / Instructor</label>
                     <div className="relative">
                       <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                      <input 
-                        type="text" 
-                        value={formData.instructorName}
-                        onChange={(e) => setFormData({...formData, instructorName: e.target.value})}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                      />
+                      <select 
+                        value={formData.instructorId || ''}
+                        onChange={(e) => {
+                          const teacher = teachers.find(t => t.id === e.target.value);
+                          setFormData({
+                            ...formData, 
+                            instructorId: e.target.value,
+                            instructorName: teacher ? teacher.fullName : ''
+                          });
+                        }}
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none appearance-none"
+                        required
+                      >
+                        <option value="">Seleccione un profesor...</option>
+                        {teachers.map(t => (
+                          <option key={t.id} value={t.id}>{t.fullName}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">

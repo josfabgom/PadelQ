@@ -25,6 +25,13 @@ namespace PadelQ.Api.Controllers
             return Ok(users);
         }
 
+        [HttpGet("role/{role}")]
+        public async Task<IActionResult> GetByRole(string role)
+        {
+            var users = await _identityService.GetUsersByRoleAsync(role);
+            return Ok(users);
+        }
+
         [HttpGet("check-dni")]
         public async Task<IActionResult> GetByDni([FromQuery] string dni)
         {

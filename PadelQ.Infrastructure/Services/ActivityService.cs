@@ -21,6 +21,7 @@ namespace PadelQ.Infrastructure.Services
         {
             var activities = await _context.ClubActivities
                 .Include(a => a.Schedules)
+                .Include(a => a.Instructor)
                 .Where(a => a.IsActive)
                 .ToListAsync();
 
@@ -36,6 +37,7 @@ namespace PadelQ.Infrastructure.Services
         {
             var activity = await _context.ClubActivities
                 .Include(a => a.Schedules)
+                .Include(a => a.Instructor)
                 .FirstOrDefaultAsync(a => a.Id == id);
 
             if (activity != null)
@@ -63,6 +65,7 @@ namespace PadelQ.Infrastructure.Services
             {
                 dbActivity.Name = activity.Name;
                 dbActivity.Description = activity.Description;
+                dbActivity.InstructorId = activity.InstructorId;
                 dbActivity.InstructorName = activity.InstructorName;
                 dbActivity.Price = activity.Price;
                 dbActivity.MaxCapacity = activity.MaxCapacity;

@@ -115,6 +115,7 @@ interface Booking {
 interface Activity {
     id: number;
     name: string;
+    instructorId?: string;
     instructorName: string;
     price: number;
     schedules: {
@@ -201,6 +202,7 @@ const BookingsPage = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [spaceBookings, setSpaceBookings] = useState<SpaceBooking[]>([]);
     const [activities, setActivities] = useState<Activity[]>([]);
+    const [activityTransactions, setActivityTransactions] = useState<any[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -291,6 +293,7 @@ const BookingsPage = () => {
     const [isActivityChargeModalOpen, setIsActivityChargeModalOpen] = useState(false);
     const [selectedActivityForCharge, setSelectedActivityForCharge] = useState<Activity | null>(null);
     const [activityChargeData, setActivityChargeData] = useState({
+        instructorId: '',
         instructorName: '',
         classPrice: 0,
         consumptions: [] as { productId: number, productName: string, quantity: number, price: number }[],
@@ -327,6 +330,7 @@ const BookingsPage = () => {
     const handleOpenActivityCharge = (activity: Activity) => {
         setSelectedActivityForCharge(activity);
         setActivityChargeData({
+            instructorId: activity.instructorId || '',
             instructorName: activity.instructorName,
             classPrice: activity.price,
             consumptions: [],
@@ -386,7 +390,14 @@ const BookingsPage = () => {
             // 1. Registrar el pago
             const m = paymentMethods.find(p => p.id === activityChargeData.paymentMethodId);
             const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
-            const targetUserId = isCtaCte ? (selectedCtaCteUser?.id || activityChargeData.clientId) : activityChargeData.clientId;
+            
+            // SI SE COBRA AL PROFESOR: Usamos el instructorId. 
+            // Si el cliente está seleccionado, se le cobra al cliente. 
+            // Pero si el usuario dice "se le cobra al profesor", tal vez deberíamos priorizar el instructorId si está presente.
+            const targetUserId = isCtaCte 
+                ? (selectedCtaCteUser?.id || activityChargeData.clientId || activityChargeData.instructorId) 
+                : (activityChargeData.clientId || activityChargeData.instructorId);
+
             const desc = `Actividad: ${selectedActivityForCharge?.name} - Prof: ${activityChargeData.instructorName} ${activityChargeData.consumptions.length > 0 ? '+ Consumo' : ''}`;
             
             if (isCtaCte) {
@@ -397,7 +408,9 @@ const BookingsPage = () => {
                 const payload = {
                     userId: targetUserId,
                     amount: totalAmount,
-                    description: desc + ' (Cta Cte)'
+                    description: desc + ' (Cta Cte)',
+                    activityId: selectedActivityForCharge?.id,
+                    activityDate: format(selectedDate, "yyyy-MM-dd")
                 };
                 await api.post(`/api/transaction/charge`, payload, config);
             } else {
@@ -405,7 +418,9 @@ const BookingsPage = () => {
                     userId: targetUserId || null,
                     amount: totalAmount,
                     description: desc,
-                    paymentMethodId: activityChargeData.paymentMethodId
+                    paymentMethodId: activityChargeData.paymentMethodId,
+                    activityId: selectedActivityForCharge?.id,
+                    activityDate: format(selectedDate, "yyyy-MM-dd")
                 };
                 await api.post(`/api/transaction/payment`, payload, config);
             }
@@ -722,9 +737,10 @@ const BookingsPage = () => {
             const pSettings = api.get('/api/SystemSettings', config).then(r => r.data).catch(() => []);
             const pActivities = api.get('/api/activities', config).then(r => r.data).catch(() => []);
             const pProducts = api.get('/api/products', config).then(r => r.data).catch(() => []);
+            const pActivityTransactions = api.get(`/api/transaction/activities/by-date?date=${dateStr}`, config).then(r => r.data).catch(() => []);
 
-            const [resC, resS, resB, resSB, resU, resP, resSett, resA, resProducts] = await Promise.all([
-                pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities, pProducts
+            const [resC, resS, resB, resSB, resU, resP, resSett, resA, resProducts, resActivityTransactions] = await Promise.all([
+                pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities, pProducts, pActivityTransactions
             ]);
 
             setCourts(resC || []);
@@ -733,6 +749,7 @@ const BookingsPage = () => {
             setSpaceBookings(resSB || []);
             setClients(resU || []);
             setActivities(resA || []);
+            setActivityTransactions(resActivityTransactions || []);
             
             const fetchedMethods = resP || [];
             // Si no existe el medio de pago Cta Cte en la base, lo agregamos virtualmente
@@ -2057,7 +2074,14 @@ const BookingsPage = () => {
                                                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
                                                             <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
                                                             <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
-                                                            <p className="text-[8px] font-bold text-zinc-400 mt-1 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                                {activityTransactions.some(t => t.activityId === activity.activity.id) ? (
+                                                                    <span className="text-[7px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest animate-pulse">PAGADO</span>
+                                                                ) : (
+                                                                    <span className="text-[7px] bg-rose-500/50 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest border border-rose-500/30">NO PAGO</span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                     {booking ? (
@@ -2196,7 +2220,14 @@ const BookingsPage = () => {
                                                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500"></div>
                                                             <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">OCUPADO: ACTIVIDAD</p>
                                                             <p className="text-[10px] font-black text-white uppercase italic tracking-wider leading-tight">{activity.activity.name}</p>
-                                                            <p className="text-[8px] font-bold text-zinc-400 mt-1 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter">Prof. {activity.activity.instructorName}</p>
+                                                                {activityTransactions.some(t => t.activityId === activity.activity.id) ? (
+                                                                    <span className="text-[7px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest animate-pulse">PAGADO</span>
+                                                                ) : (
+                                                                    <span className="text-[7px] bg-rose-500/50 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest border border-rose-500/30">NO PAGO</span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                     {booking ? (
@@ -3787,14 +3818,19 @@ const BookingsPage = () => {
                         <div className="p-10 flex-1 overflow-y-auto space-y-8">
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profesor / Instructor</label>
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profesor / Instructor</label>
+                                        {!activityChargeData.clientId && activityChargeData.instructorId && (
+                                            <span className="text-[8px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black uppercase animate-pulse">Responsable de Pago</span>
+                                        )}
+                                    </div>
                                     <div className="relative">
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input 
                                             type="text"
+                                            readOnly
                                             value={activityChargeData.instructorName}
-                                            onChange={(e) => setActivityChargeData({...activityChargeData, instructorName: e.target.value})}
-                                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm"
+                                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-sm text-slate-500"
                                             placeholder="Nombre del profesor..."
                                         />
                                     </div>
@@ -3963,7 +3999,7 @@ const BookingsPage = () => {
                             </div>
                             <button 
                                 onClick={handleConfirmActivityCharge}
-                                disabled={!activityChargeData.clientId || !activityChargeData.paymentMethodId}
+                                disabled={(!activityChargeData.clientId && !activityChargeData.instructorId) || !activityChargeData.paymentMethodId}
                                 className="px-10 py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-emerald-500/20 hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
                             >
                                 Confirmar Cobro

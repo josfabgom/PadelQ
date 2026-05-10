@@ -37,6 +37,8 @@ namespace PadelQ.Domain.Entities
         // Integridad
         public Guid? BookingId { get; set; }
         public Guid? SpaceBookingId { get; set; }
+        public int? ActivityId { get; set; }
+        public DateTime? ActivityDate { get; set; }
     }
 
     public enum TransactionType

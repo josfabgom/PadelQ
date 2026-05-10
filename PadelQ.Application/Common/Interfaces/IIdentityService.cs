@@ -14,5 +14,6 @@ namespace PadelQ.Application.Common.Interfaces
         Task<bool> DeleteUserAsync(string userId);
         Task<(bool Succeeded, string Message)> ChangePasswordAsync(string userId, string newPassword);
         Task<PadelQ.Application.Common.Models.UserDto?> GetUserByDniAsync(string dni);
+        Task<List<PadelQ.Application.Common.Models.UserDto>> GetUsersByRoleAsync(string roleName);
     }
 }

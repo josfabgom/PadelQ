@@ -123,6 +123,13 @@ using (var scope = app.Services.CreateScope())
             
             // Parche para ActivitySchedules
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('ActivitySchedules') AND name = 'SpecificDate') ALTER TABLE ActivitySchedules ADD SpecificDate DATETIME2 NULL;");
+
+            // Parche para ClubActivities (InstructorId)
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('ClubActivities') AND name = 'InstructorId') ALTER TABLE ClubActivities ADD InstructorId NVARCHAR(450) NULL;");
+
+            // Parche para Transactions (ActivityId, ActivityDate)
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'ActivityId') ALTER TABLE Transactions ADD ActivityId INT NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'ActivityDate') ALTER TABLE Transactions ADD ActivityDate DATETIME2 NULL;");
         } catch { /* Ignorar errores si las columnas ya existen o SQL no es compatible */ }
 
         await context.Database.MigrateAsync();

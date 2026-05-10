@@ -53,7 +53,7 @@ namespace PadelQ.Api.Controllers
         [HttpGet("previous-debt/{userId}")]
         public async Task<ActionResult<decimal>> GetPreviousDebt(string userId)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = GetArgNow().Date;
 
             // 1. Saldo de cuenta corriente (Cargos - Pagos) anterior a hoy
             var oldCharges = await _context.Transactions
@@ -110,13 +110,15 @@ namespace PadelQ.Api.Controllers
             {
                 UserId = request.UserId,
                 Amount = request.Amount,
-                Date = DateTime.UtcNow,
+                Date = GetArgNow(),
                 Type = TransactionType.Payment,
                 Description = request.Description,
                 PaymentMethodId = request.PaymentMethodId,
                 ProcessedBy = User.Identity?.Name ?? "Sistema",
                 BookingId = request.BookingId,
-                SpaceBookingId = request.SpaceBookingId
+                SpaceBookingId = request.SpaceBookingId,
+                ActivityId = request.ActivityId,
+                ActivityDate = request.ActivityDate
             };
 
             _context.Transactions.Add(transaction);
@@ -133,6 +135,8 @@ namespace PadelQ.Api.Controllers
             public int? PaymentMethodId { get; set; }
             public Guid? BookingId { get; set; }
             public Guid? SpaceBookingId { get; set; }
+            public int? ActivityId { get; set; }
+            public DateTime? ActivityDate { get; set; }
         }
 
         [HttpPost("charge")]
@@ -146,12 +150,14 @@ namespace PadelQ.Api.Controllers
             {
                 UserId = request.UserId,
                 Amount = request.Amount,
-                Date = DateTime.UtcNow,
+                Date = GetArgNow(),
                 Type = TransactionType.Charge,
                 Description = request.Description ?? "Cargo en Cuenta Corriente",
                 ProcessedBy = User.Identity?.Name ?? "Sistema",
                 BookingId = request.BookingId,
-                SpaceBookingId = request.SpaceBookingId
+                SpaceBookingId = request.SpaceBookingId,
+                ActivityId = request.ActivityId,
+                ActivityDate = request.ActivityDate
             };
 
             _context.Transactions.Add(transaction);
@@ -167,6 +173,8 @@ namespace PadelQ.Api.Controllers
             public string? Description { get; set; }
             public Guid? BookingId { get; set; }
             public Guid? SpaceBookingId { get; set; }
+            public int? ActivityId { get; set; }
+            public DateTime? ActivityDate { get; set; }
         }
 
         [HttpPost("membership-payment")]
@@ -176,7 +184,7 @@ namespace PadelQ.Api.Controllers
             var user = await _context.Users.FindAsync(request.UserId);
             if (user == null) return NotFound("User not found");
 
-            var now = DateTime.UtcNow;
+            var now = GetArgNow();
 
             // VALIDACIÓN ESTRICTA: No permitir pagar si ya está paga y vigente
             var alreadyPaid = await _context.UserMemberships
@@ -196,8 +204,8 @@ namespace PadelQ.Api.Controllers
             if (userMembership != null)
             {
                 userMembership.IsPaid = true;
-                userMembership.StartDate = DateTime.UtcNow;
-                userMembership.EndDate = DateTime.UtcNow.AddDays(30);
+                userMembership.StartDate = GetArgNow();
+                userMembership.EndDate = GetArgNow().AddDays(30);
                 _context.Entry(userMembership).State = EntityState.Modified;
             }
             else
@@ -211,8 +219,8 @@ namespace PadelQ.Api.Controllers
                     {
                         UserId = request.UserId,
                         MembershipId = membership.Id,
-                        StartDate = DateTime.UtcNow,
-                        EndDate = DateTime.UtcNow.AddDays(30),
+                        StartDate = GetArgNow(),
+                        EndDate = GetArgNow().AddDays(30),
                         IsActive = true,
                         IsPaid = true
                     };
@@ -224,7 +232,7 @@ namespace PadelQ.Api.Controllers
             {
                 UserId = request.UserId,
                 Amount = request.Amount,
-                Date = DateTime.UtcNow,
+                Date = GetArgNow(),
                 Type = TransactionType.MembershipPayment,
                 Description = request.Description ?? "Cobro de Cuota Mensual - Membresía Activada",
                 PaymentMethodId = request.PaymentMethodId,
@@ -337,6 +345,38 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        [HttpGet("activities/by-date")]
+        public async Task<ActionResult<IEnumerable<Transaction>>> GetActivityTransactionsByDate([FromQuery] DateTime date)
+        {
+            var start = date.Date;
+            var end = start.AddDays(1);
+
+            return await _context.Transactions
+                .Where(t => t.ActivityId.HasValue && t.ActivityDate >= start && t.ActivityDate < end)
+                .ToListAsync();
+        }
+
+        private DateTime GetArgNow()
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            }
+            catch
+            {
+                try
+                {
+                    var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(-3);
+                }
+            }
         }
 
     }

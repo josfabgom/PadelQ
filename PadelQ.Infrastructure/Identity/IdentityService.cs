@@ -288,6 +288,17 @@ namespace PadelQ.Infrastructure.Identity
             return await GetUserByIdAsync(user.Id);
         }
 
+        public async Task<List<UserDto>> GetUsersByRoleAsync(string roleName)
+        {
+            var usersInRole = await _userManager.GetUsersInRoleAsync(roleName);
+            var dtos = new List<UserDto>();
+            foreach (var user in usersInRole)
+            {
+                dtos.Add(await GetUserByIdAsync(user.Id) ?? new UserDto { Id = user.Id, FullName = user.FullName ?? "", Email = user.Email ?? "" });
+            }
+            return dtos;
+        }
+
         private async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
         {
             var userRoles = await _userManager.GetRolesAsync(user);

@@ -9,7 +9,12 @@ namespace PadelQ.Domain.Entities
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public string? InstructorName { get; set; }
+        
+        public string? InstructorId { get; set; }
+        [ForeignKey("InstructorId")]
+        public virtual ApplicationUser? Instructor { get; set; }
+        
+        public string? InstructorName { get; set; } // Keep for manual override or migration
         public decimal Price { get; set; }
         public int MaxCapacity { get; set; }
         public bool IsActive { get; set; } = true;

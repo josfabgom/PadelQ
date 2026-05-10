@@ -32,11 +32,11 @@ namespace PadelQ.Api.Controllers
                     .OrderByDescending(c => c.OpeningDate)
                     .FirstOrDefaultAsync();
 
-                var lastClosureDate = activeClosure?.OpeningDate ?? DateTime.UtcNow.Date;
+                var lastClosureDate = activeClosure?.OpeningDate ?? GetArgNow().Date;
                 
                 // Si no hay caja abierta, tomamos desde el inicio del día
                 if (activeClosure == null) {
-                    lastClosureDate = DateTime.UtcNow.Date; 
+                    lastClosureDate = GetArgNow().Date; 
                 }
 
                 var transactions = await _context.Transactions
@@ -113,7 +113,7 @@ namespace PadelQ.Api.Controllers
 
             var closure = new CashClosure
             {
-                OpeningDate = DateTime.UtcNow,
+                OpeningDate = GetArgNow(),
                 InitialCash = request.InitialCash,
                 OpenedBy = User.Identity?.Name ?? "Admin",
                 IsOpen = true,
@@ -178,7 +178,7 @@ namespace PadelQ.Api.Controllers
             closure.ExpectedCash = closure.InitialCash + (closure.TotalCashSales ?? 0) + (closure.TotalCashIn ?? 0) - (closure.TotalCashOut ?? 0);
             closure.ActualCash = request.ActualCash;
             closure.ActualTotals = request.ActualTotals; // Se recibe como JSON desde el front
-            closure.ClosingDate = DateTime.UtcNow;
+            closure.ClosingDate = GetArgNow();
             closure.ClosedBy = User.Identity?.Name ?? "Admin";
             closure.IsOpen = false;
             closure.Notes = (closure.Notes ?? "") + "\n" + request.Notes;
@@ -195,7 +195,7 @@ namespace PadelQ.Api.Controllers
             if (closure == null) return NotFound();
 
             var start = closure.OpeningDate;
-            var end = closure.ClosingDate ?? DateTime.UtcNow;
+            var end = closure.ClosingDate ?? GetArgNow();
 
             var transactions = await _context.Transactions
                 .Include(t => t.PaymentMethod)
@@ -233,7 +233,7 @@ namespace PadelQ.Api.Controllers
             {
                 UserId = "Particular",
                 Amount = request.Amount,
-                Date = DateTime.UtcNow,
+                Date = GetArgNow(),
                 Type = request.IsIncome ? TransactionType.CashIn : TransactionType.CashOut,
                 Description = request.Description,
                 ProcessedBy = User.Identity?.Name ?? "Admin",
@@ -265,7 +265,7 @@ namespace PadelQ.Api.Controllers
             foreach (var c in openClosures)
             {
                 c.IsOpen = false;
-                c.ClosingDate = DateTime.UtcNow;
+                c.ClosingDate = GetArgNow();
                 c.ClosedBy = "Forced by Admin";
             }
             await _context.SaveChangesAsync();
@@ -289,5 +289,25 @@ namespace PadelQ.Api.Controllers
         public decimal ActualCash { get; set; }
         public string? ActualTotals { get; set; } // JSON format
         public string? Notes { get; set; }
+        private DateTime GetArgNow()
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            }
+            catch
+            {
+                try
+                {
+                    var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(-3);
+                }
+            }
+        }
     }
 }
