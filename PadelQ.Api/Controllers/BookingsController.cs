@@ -218,6 +218,24 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Pago parcial registrado", DepositPaid = booking.DepositPaid });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/extend")]
+        public async Task<IActionResult> Extend(Guid id, [FromQuery] int minutes)
+        {
+            var (success, message) = await _bookingService.ExtendBooking(id, minutes);
+            if (!success) return BadRequest(message);
+            return Ok(new { Message = message });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/undo-extension")]
+        public async Task<IActionResult> UndoExtension(Guid id)
+        {
+            var (success, message) = await _bookingService.UndoBookingExtension(id);
+            if (!success) return BadRequest(message);
+            return Ok(new { Message = message });
+        }
     }
 
     public class CreateBookingRequest

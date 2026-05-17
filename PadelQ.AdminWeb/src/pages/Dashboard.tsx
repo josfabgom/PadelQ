@@ -1,36 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import api, { getAuthConfig } from '../api/api';
+import React, { useEffect } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, AreaChart, Area 
-} from 'recharts';
-import { 
-  DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, TrendingDown, 
-  Layout, Settings, CreditCard, X, QrCode, LogOut, Plus, ShieldCheck, LayoutGrid, Box
+  DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, 
+  Settings, CreditCard, QrCode, ShieldCheck, Box, ArrowRight
 } from 'lucide-react';
-
-import Calendar from '../components/Calendar';
 import Header from '../components/Header';
 
 const Dashboard = () => {
-  const [stats, setStats] = useState<any[]>([]);
-  const [summary, setSummary] = useState({ 
-    totalRevenue: 0, 
-    totalBookings: 0, 
-    todayRevenue: 0, 
-    todayRentalsRevenue: 0,
-    todayConsumptionsRevenue: 0,
-    todayActualPayments: 0,
-    todayBookings: 0, 
-    monthlyRevenue: 0, 
-    monthlyGoal: 0, 
-    monthlyProgress: 0,
-    freeSlots: 0
-  });
-  const [detailedBookings, setDetailedBookings] = useState<any[]>([]);
-  const [courts, setCourts] = useState<any[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-
   const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
   const isAdmin = roles.includes('Admin');
   const isMerchant = roles.includes('Merchant');
@@ -49,34 +24,102 @@ const Dashboard = () => {
         window.location.href = '/activities';
         return;
     }
-    
-    const fetchData = async () => {
-      try {
-        const config = getAuthConfig();
-        
-        const [revRes, sumRes, detailRes, courtsRes] = await Promise.all([
-          api.get('/api/reports/revenue-stats', config),
-          api.get('/api/reports/summary', config),
-          api.get('/api/reports/bookings-detailed', config),
-          api.get('/api/courts', config)
-        ]);
-        
-        setStats(Array.isArray(revRes.data) ? revRes.data : []);
-        setSummary(sumRes.data || { 
-          todayRevenue: 0, 
-          todayBookings: 0, 
-          totalRevenue: 0, 
-          monthlyRevenue: 0, 
-          monthlyProgress: 0 
-        });
-        setDetailedBookings(Array.isArray(detailRes.data) ? detailRes.data : []);
-        setCourts(Array.isArray(courtsRes.data) ? courtsRes.data : []);
-      } catch (err) {
-        console.error("Error al cargar dashboard", err);
-      }
-    };
-    fetchData();
-  }, []);
+  }, [isAdmin, isMerchant, isStaff, isTeacher]);
+
+  // Curated premium menu items, ordered strictly by user request:
+  // Alquiler -> Caja -> Productos -> Clientes -> Cta Cte -> Actividades -> Membresias -> Reportes -> Validar -> Config
+  const menuItems = [
+    {
+      href: '/bookings',
+      icon: <CalendarIcon className="w-5 h-5" />,
+      label: 'Alquiler de Canchas',
+      desc: 'Gestión y reserva de canchas en tiempo real con calendario interactivo y cobros directos.',
+      color: 'text-indigo-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-indigo-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/cash-management',
+      icon: <DollarSign className="w-5 h-5" />,
+      label: 'Control de Caja',
+      desc: 'Apertura, cierre de caja y control minucioso de ingresos y egresos de efectivo.',
+      color: 'text-emerald-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-emerald-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/products',
+      icon: <Box className="w-5 h-5" />,
+      label: 'Venta de Productos',
+      desc: 'Control de inventario, stock y venta de bebidas, pelotas e insumos del bar.',
+      color: 'text-sky-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-sky-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/users',
+      icon: <Users className="w-5 h-5" />,
+      label: 'Clientes',
+      desc: 'Administración de socios, perfiles de contacto, saldos e historial del club.',
+      color: 'text-violet-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-violet-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/ctacte',
+      icon: <CreditCard className="w-5 h-5" />,
+      label: 'Cuentas Corrientes',
+      desc: 'Seguimiento de deudas, recargos automáticos, pagos y balances de clientes.',
+      color: 'text-amber-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-amber-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/activities',
+      icon: <Activity className="w-5 h-5" />,
+      label: 'Clases y Actividades',
+      desc: 'Programación de entrenamientos, torneos y agendas de los profesores.',
+      color: 'text-rose-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-rose-500',
+      show: isAdmin || isTeacher
+    },
+    {
+      href: '/memberships',
+      icon: <ShieldCheck className="w-5 h-5" />,
+      label: 'Planes y Membresías',
+      desc: 'Configuración de abonos mensuales, beneficios exclusivos y descuentos de socios.',
+      color: 'text-blue-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-blue-500',
+      show: isAdmin
+    },
+    {
+      href: '/reports',
+      icon: <TrendingUp className="w-5 h-5" />,
+      label: 'Reportes y Finanzas',
+      desc: 'Gráficos financieros, análisis de recaudación y exportación de Libro IVA para ARCA.',
+      color: 'text-fuchsia-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-fuchsia-500',
+      show: isAdmin
+    },
+    {
+      href: '/validate',
+      icon: <QrCode className="w-5 h-5" />,
+      label: 'Validar Acceso QR',
+      desc: 'Escaneo y validación instantánea de turnos, clases y credenciales del club.',
+      color: 'text-zinc-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-zinc-800',
+      show: isAdmin || isStaff || isMerchant
+    },
+    {
+      href: '/settings',
+      icon: <Settings className="w-5 h-5" />,
+      label: 'Configuración',
+      desc: 'Definición de horarios de apertura, precios base de canchas y ajustes generales.',
+      color: 'text-amber-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-amber-600',
+      show: isAdmin
+    }
+  ];
 
   return (
     <div className="p-10 space-y-10 bg-[#fafafa] min-h-screen font-oak">
@@ -87,116 +130,45 @@ const Dashboard = () => {
           <h1 className="text-4xl font-black text-black tracking-tight mb-1 uppercase italic">Dashboard</h1>
           <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Gestión Integral del Club</p>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          {(isAdmin || isStaff) && <NavButton href="/bookings" icon={<CalendarIcon className="w-4 h-4" />} label="Alquiler" primary />}
-          {(isAdmin || isStaff) && <NavButton href="/users" icon={<Users className="w-4 h-4" />} label="Clientes" />}
-          {(isAdmin || isStaff) && <NavButton href="/ctacte" icon={<CreditCard className="w-4 h-4" />} label="Cta. Cte." />}
-          {(isAdmin || isTeacher) && <NavButton href="/activities" icon={<Activity className="w-4 h-4" />} label="Actividades" />}
-          {isAdmin && <NavButton href="/memberships" icon={<CreditCard className="w-4 h-4" />} label="Membresías" />}
-          {isAdmin && <NavButton href="/payment-methods" icon={<ShieldCheck className="w-4 h-4" />} label="Pagos" />}
-          {isAdmin && <NavButton href="/reports" icon={<TrendingUp className="w-4 h-4" />} label="Reportes" />}
-          {(isAdmin || isStaff || isMerchant) && <NavButton href="/validate" icon={<QrCode className="w-4 h-4" />} label="Validar" />}
-          {(isAdmin || isStaff) && <NavButton href="/products" icon={<Box className="w-4 h-4" />} label="Productos" />}
-          {(isAdmin || isStaff) && <NavButton href="/cash-management" icon={<DollarSign className="w-4 h-4" />} label="Caja" primary />}
-
-          {isAdmin && <NavButton href="/settings" icon={<Settings className="w-4 h-4" />} label="Config" primary />}
-        </div>
       </div>
 
-       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <StatCard 
-          icon={<DollarSign/>} 
-          label="Ingreso del día" 
-          value={new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRevenue || 0)} 
-          trend="Hoy"
-        >
-          <div className="mt-4 pt-4 border-t border-zinc-100 grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Alquileres</p>
-              <p className="text-sm font-black text-black">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayRentalsRevenue || 0)}</p>
-            </div>
-            <div>
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Consumos</p>
-              <p className="text-sm font-black text-black">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayConsumptionsRevenue || 0)}</p>
-            </div>
-            <div>
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Pagado Real</p>
-              <p className="text-sm font-black text-emerald-600">{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(summary?.todayActualPayments || 0)}</p>
-            </div>
-          </div>
-        </StatCard>
-
-        <StatCard 
-          icon={<CalendarIcon/>} 
-          label="Reservas del día" 
-          value={summary?.todayBookings || 0} 
-          trend="Hoy"
-        >
-          <div className="mt-4 pt-4 border-t border-zinc-100 flex justify-between items-center">
-            <div>
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Canchas Libres</p>
-              <p className="text-sm font-black text-black">{summary?.freeSlots || 0} Horas Disponibles</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Hasta las 24hs</p>
-              <div className="w-20 h-1 bg-zinc-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-emerald-500 transition-all duration-1000" 
-                  style={{ width: `${Math.min(100, (summary.freeSlots / (summary.todayBookings + summary.freeSlots || 1)) * 100)}%` }}
-                ></div>
+      {/* Grid of Breathtaking, Sleeker and Smaller Quick Access Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {menuItems.filter(item => item.show).map((item, idx) => (
+          <a
+            key={idx}
+            href={item.href}
+            className="group bg-white p-6 rounded-[28px] border border-black/5 hover:border-black/10 hover:shadow-[0_15px_35px_rgba(0,0,0,0.03)] transition-all duration-300 flex flex-col justify-between h-[230px] relative overflow-hidden"
+          >
+            {/* Top Row with Curated Curving Background accent */}
+            <div className="space-y-4">
+              <div className={`w-12 h-12 rounded-[16px] flex items-center justify-center bg-zinc-50 border border-zinc-100/50 ${item.color} ${item.bgHover} transition-all duration-300 shadow-sm`}>
+                {item.icon}
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black italic uppercase text-black tracking-tight group-hover:translate-x-1 transition-transform duration-300">
+                  {item.label}
+                </h3>
+                <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider leading-relaxed pr-2 line-clamp-2">
+                  {item.desc}
+                </p>
               </div>
             </div>
-          </div>
-        </StatCard>
-      </div>
 
-      {/* Bottom section removed as per request */}
+            {/* Bottom Row showing Access Action */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-50">
+              <span className="text-[9px] font-black text-black uppercase tracking-[0.2em] group-hover:text-zinc-500 transition-colors">
+                Ingresar al módulo
+              </span>
+              <div className="w-8 h-8 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center group-hover:bg-black group-hover:text-white group-hover:border-black group-hover:translate-x-1 transition-all duration-300 shadow-sm">
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
     </div>
   );
 };
-
-const NavButton = ({ href, icon, label, primary = false }: { href: string; icon: React.ReactNode; label: string; primary?: boolean }) => (
-  <a 
-    href={href} 
-    className={`px-5 py-3 rounded-[18px] text-[11px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-3 shadow-sm border ${
-      primary 
-        ? 'bg-black text-white border-black hover:bg-zinc-800' 
-        : 'bg-white text-black border-black/5 hover:border-black/20 hover:bg-zinc-50'
-    }`}
-  >
-    {icon}
-    {label}
-  </a>
-);
-
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  trend: string;
-  children?: React.ReactNode;
-}
-
-const StatCard = ({ icon, label, value, trend, children }: StatCardProps) => (
-  <div className="bg-white p-8 rounded-[32px] shadow-[0_10px_40px_rgb(0,0,0,0.02)] border border-black/5 group hover:border-black/20 transition-all duration-500">
-    <div className="flex items-start justify-between">
-      <div>
-        <div className="p-4 rounded-[20px] bg-zinc-50 text-black mb-6 inline-block shadow-sm group-hover:bg-black group-hover:text-white transition-all duration-500">
-          {icon}
-        </div>
-        <p className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{label}</p>
-        <h3 className="text-3xl font-black text-black italic tracking-tighter">{value}</h3>
-      </div>
-      <div className="flex flex-col items-end">
-          <div className="text-[10px] font-black text-black bg-zinc-100 px-3 py-1 rounded-full uppercase tracking-widest">
-          {trend}
-          </div>
-      </div>
-    </div>
-    {children}
-  </div>
-);
 
 export default Dashboard;

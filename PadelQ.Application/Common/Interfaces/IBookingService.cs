@@ -18,5 +18,7 @@ namespace PadelQ.Application.Common.Interfaces
         Task<bool> IsAvailable(int courtId, DateTime start, DateTime end);
         Task<IEnumerable<Booking>> GetAllAsync();
         Task<(bool Success, string Message)> WipeAllBookings();
+        Task<(bool Success, string Message)> ExtendBooking(Guid bookingId, int extraMinutes);
+        Task<(bool Success, string Message)> UndoBookingExtension(Guid bookingId);
     }
 }

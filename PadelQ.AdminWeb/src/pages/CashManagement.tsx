@@ -63,6 +63,8 @@ const CashManagement = () => {
     const [selectedMethodId, setSelectedMethodId] = useState<number | null>(null);
     const [selectedMethodDetail, setSelectedMethodDetail] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
+    const [activeSessions, setActiveSessions] = useState<any[]>([]);
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
     const config = getAuthConfig();
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
@@ -72,15 +74,26 @@ const CashManagement = () => {
         fetchData();
     }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (targetUser?: string) => {
         setLoading(true);
         try {
-            const [statusRes, historyRes] = await Promise.all([
-                api.get('/api/cash-closures/current-status', config),
+            const statusUrl = targetUser ? `/api/cash-closures/current-status?userName=${targetUser}` : '/api/cash-closures/current-status';
+            
+            const requests = [
+                api.get(statusUrl, config),
                 api.get('/api/cash-closures/history', config)
-            ]);
+            ];
+
+            if (isAdmin) {
+                requests.push(api.get('/api/cash-closures/active-sessions', config));
+            }
+
+            const [statusRes, historyRes, activeRes] = await Promise.all(requests);
+            
             setCurrentStatus(statusRes.data);
             setHistory(historyRes.data);
+            if (activeRes) setActiveSessions(activeRes.data);
+            
             setError(null);
         } catch (err: any) {
             console.error("Error fetching cash data", err);
@@ -352,59 +365,99 @@ const CashManagement = () => {
                     </div>
                 </div>
 
+                {isAdmin && activeSessions.length > 0 && (
+                    <div className="flex-1 max-w-xl mx-10">
+                        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                            <button
+                                onClick={() => {
+                                    setSelectedUser(null);
+                                    fetchData();
+                                }}
+                                className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase whitespace-nowrap transition-all border ${
+                                    selectedUser === null 
+                                    ? 'bg-black text-white border-black' 
+                                    : 'bg-white text-zinc-400 border-black/5 hover:border-black/20'
+                                }`}
+                            >
+                                Mi Caja
+                            </button>
+                            {activeSessions.filter(s => s.openedBy !== localStorage.getItem('padelq_user_email')).map(session => (
+                                <button
+                                    key={session.id}
+                                    onClick={() => {
+                                        setSelectedUser(session.openedBy);
+                                        fetchData(session.openedBy);
+                                    }}
+                                    className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase whitespace-nowrap transition-all border ${
+                                        selectedUser === session.openedBy 
+                                        ? 'bg-black text-white border-black' 
+                                        : 'bg-white text-zinc-400 border-black/5 hover:border-black/20'
+                                    }`}
+                                >
+                                    {session.openedBy.split('@')[0]}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {!currentStatus?.activeClosure ? (
-                    <button
-                        onClick={() => setIsOpening(true)}
-                        className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3"
-                    >
-                        <Plus className="w-5 h-5" /> Abrir Caja del Día
-                    </button>
-                ) : (
-                    <div className="flex gap-4">
+                    !selectedUser && (
                         <button
-                            onClick={() => {
-                                setAdjustmentType('income');
-                                // Default to cash if available
-                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
-                                setSelectedMethodId(cashMethod?.methodId || null);
-                                setIsAdjusting(true);
-                            }}
+                            onClick={() => setIsOpening(true)}
                             className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3"
                         >
-                            <TrendingUp className="w-5 h-5" /> Ingreso Manual
+                            <Plus className="w-5 h-5" /> Abrir Caja del Día
                         </button>
-                        <button
-                            onClick={() => {
-                                setAdjustmentType('outcome');
-                                // Default to cash if available
-                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
-                                setSelectedMethodId(cashMethod?.methodId || null);
-                                setIsAdjusting(true);
-                            }}
-                            className="px-8 py-4 bg-rose-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-600 transition-all flex items-center gap-3"
-                        >
-                            <ArrowRightLeft className="w-5 h-5" /> Egreso Manual
-                        </button>
-                        <button
-                            onClick={() => {
-                                // Solo incluimos explícitamente el método que contenga "Efectivo"
-                                const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
-                                setActualCash(currentStatus.activeClosure.initialCash + (cashMethod?.total || 0));
+                    )
+                ) : (
+                    !selectedUser && (
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => {
+                                    setAdjustmentType('income');
+                                    // Default to cash if available
+                                    const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                    setSelectedMethodId(cashMethod?.methodId || null);
+                                    setIsAdjusting(true);
+                                }}
+                                className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3"
+                            >
+                                <TrendingUp className="w-5 h-5" /> Ingreso Manual
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setAdjustmentType('outcome');
+                                    // Default to cash if available
+                                    const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                    setSelectedMethodId(cashMethod?.methodId || null);
+                                    setIsAdjusting(true);
+                                }}
+                                className="px-8 py-4 bg-rose-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-600 transition-all flex items-center gap-3"
+                            >
+                                <ArrowRightLeft className="w-5 h-5" /> Egreso Manual
+                            </button>
+                            <button
+                                onClick={() => {
+                                    // Solo incluimos explícitamente el método que contenga "Efectivo"
+                                    const cashMethod = currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'));
+                                    setActualCash(currentStatus.activeClosure.initialCash + (cashMethod?.total || 0));
 
-                                // Initialize actualTotals with expected totals for all methods (except explicitly cash)
-                                const initialTotals: { [key: string]: number } = {};
-                                currentStatus.summary.forEach((s: any) => {
-                                    initialTotals[s.method] = s.total;
-                                });
-                                setActualTotals(initialTotals);
+                                    // Initialize actualTotals with expected totals for all methods (except explicitly cash)
+                                    const initialTotals: { [key: string]: number } = {};
+                                    currentStatus.summary.forEach((s: any) => {
+                                        initialTotals[s.method] = s.total;
+                                    });
+                                    setActualTotals(initialTotals);
 
-                                setIsClosing(true);
-                            }}
-                            className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center gap-3"
-                        >
-                            <Check className="w-5 h-5" /> Cerrar Caja
-                        </button>
-                    </div>
+                                    setIsClosing(true);
+                                }}
+                                className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center gap-3"
+                            >
+                                <Check className="w-5 h-5" /> Cerrar Caja
+                            </button>
+                        </div>
+                    )
                 )}
             </div>
 
@@ -430,6 +483,7 @@ const CashManagement = () => {
                                         <h3 className="text-xl font-black text-black uppercase italic">
                                             {new Date(currentStatus.activeClosure.openingDate).toLocaleString()}
                                         </h3>
+                                        <p className="text-[9px] font-bold text-zinc-500 uppercase mt-1">Caja de: {currentStatus.activeClosure.openedBy}</p>
                                     </div>
                                 </div>
 
@@ -547,7 +601,7 @@ const CashManagement = () => {
                                     <div className="flex justify-between items-start mb-3">
                                         <div>
                                             <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{new Date(c.openingDate).toLocaleDateString()}</p>
-                                            <p className="text-[10px] font-bold text-black uppercase">{c.openedBy} {'->'} {c.closedBy || '???'}</p>
+                                            <p className="text-[10px] font-bold text-black uppercase">{c.openedBy} {c.closedBy ? `-> ${c.closedBy}` : '(Abierta)'}</p>
                                         </div>
                                         <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${c.isOpen ? 'bg-emerald-100 text-emerald-600' : 'bg-zinc-100 text-zinc-500'}`}>
                                             {c.isOpen ? 'ABIERTA' : 'CERRADA'}

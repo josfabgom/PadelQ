@@ -23,12 +23,20 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet("current-status")]
-        public async Task<IActionResult> GetCurrentStatus()
+        public async Task<IActionResult> GetCurrentStatus([FromQuery] string? userName = null)
         {
             try 
             {
+                var isAdmin = User.IsInRole("Admin") || User.IsInRole("Staff");
+                var targetUser = User.Identity.Name;
+
+                if (isAdmin && !string.IsNullOrEmpty(userName))
+                {
+                    targetUser = userName;
+                }
+
                 var activeClosure = await _context.CashClosures
-                    .Where(c => c.IsOpen)
+                    .Where(c => c.IsOpen && c.OpenedBy == targetUser)
                     .OrderByDescending(c => c.OpeningDate)
                     .FirstOrDefaultAsync();
 
@@ -42,7 +50,7 @@ namespace PadelQ.Api.Controllers
                 var transactions = await _context.Transactions
                     .Include(t => t.PaymentMethod)
                     .Include(t => t.User)
-                    .Where(t => t.Date >= lastClosureDate && (
+                    .Where(t => t.Date >= lastClosureDate && t.ProcessedBy == targetUser && (
                         t.Type == TransactionType.Payment || 
                         t.Type == TransactionType.MembershipPayment ||
                         t.Type == TransactionType.CashIn ||
@@ -108,8 +116,8 @@ namespace PadelQ.Api.Controllers
         [HttpPost("open")]
         public async Task<IActionResult> OpenCash([FromBody] OpenCashRequest request)
         {
-            var openClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen);
-            if (openClosure) return BadRequest("Ya existe una caja abierta.");
+            var openClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen && c.OpenedBy == User.Identity.Name);
+            if (openClosure) return BadRequest("Ya tienes una caja abierta.");
 
             var closure = new CashClosure
             {
@@ -130,7 +138,7 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> CloseCash([FromBody] CloseCashRequest request)
         {
             var closure = await _context.CashClosures
-                .Where(c => c.IsOpen)
+                .Where(c => c.IsOpen && c.OpenedBy == User.Identity.Name)
                 .OrderByDescending(c => c.OpeningDate)
                 .FirstOrDefaultAsync();
 
@@ -138,7 +146,7 @@ namespace PadelQ.Api.Controllers
 
             var transactions = await _context.Transactions
                 .Include(t => t.PaymentMethod)
-                .Where(t => t.Date >= closure.OpeningDate && (
+                .Where(t => t.Date >= closure.OpeningDate && t.ProcessedBy == User.Identity.Name && (
                     t.Type == TransactionType.Payment || 
                     t.Type == TransactionType.MembershipPayment ||
                     t.Type == TransactionType.CashIn ||
@@ -226,8 +234,8 @@ namespace PadelQ.Api.Controllers
         [HttpPost("adjustment")]
         public async Task<IActionResult> RegisterAdjustment([FromBody] ManualAdjustmentRequest request)
         {
-            var activeClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen);
-            if (!activeClosure) return BadRequest("No hay una caja abierta para registrar movimientos.");
+            var activeClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen && c.OpenedBy == User.Identity.Name);
+            if (!activeClosure) return BadRequest("No tienes una caja abierta para registrar movimientos.");
 
             var transaction = new Transaction
             {
@@ -249,12 +257,37 @@ namespace PadelQ.Api.Controllers
         [HttpGet("history")]
         public async Task<IActionResult> GetHistory()
         {
-            var history = await _context.CashClosures
+            var isAdmin = User.IsInRole("Admin") || User.IsInRole("Staff");
+            var query = _context.CashClosures.AsQueryable();
+
+            if (!isAdmin)
+            {
+                query = query.Where(c => c.OpenedBy == User.Identity.Name);
+            }
+
+            var history = await query
                 .OrderByDescending(c => c.OpeningDate)
-                .Take(30)
+                .Take(50)
                 .ToListAsync();
 
             return Ok(history);
+        }
+
+        [HttpGet("active-sessions")]
+        [Authorize(Roles = "Admin,Staff")]
+        public async Task<IActionResult> GetActiveSessions()
+        {
+            var active = await _context.CashClosures
+                .Where(c => c.IsOpen)
+                .OrderByDescending(c => c.OpeningDate)
+                .Select(c => new { 
+                    c.OpenedBy, 
+                    c.OpeningDate, 
+                    c.Id,
+                    c.InitialCash
+                })
+                .ToListAsync();
+            return Ok(active);
         }
 
         [HttpPost("force-close-all")]

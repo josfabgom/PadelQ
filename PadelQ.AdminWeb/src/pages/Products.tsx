@@ -61,6 +61,18 @@ const ProductsPage = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [customAlert, setCustomAlert] = useState<{ title: string, message: string, type: 'success' | 'error' | 'warning' } | null>(null);
+
+  const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success', title?: string) => {
+      setCustomAlert({
+          title: title || (type === 'success' ? 'ÉXITO' : type === 'error' ? 'ERROR' : 'ATENCIÓN'),
+          message,
+          type
+      });
+  };
+
   const [formData, setFormData] = useState<Partial<Product>>({
     internalCode: '',
     barcode: '',
@@ -333,14 +345,21 @@ const ProductsPage = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (window.confirm('¿Estás seguro de eliminar este producto?')) {
-      try {
-        await api.delete(`/api/products/${id}`, config);
-        fetchProducts();
-      } catch (err) {
-        console.error("Error al eliminar producto", err);
-      }
+  const executeDeleteProduct = async () => {
+    if (!productToDelete) return;
+    try {
+      setIsDeleting(true);
+      await api.delete(`/api/products/${productToDelete.id}`, config);
+      showAlert("Producto eliminado con éxito.");
+      setProductToDelete(null);
+      fetchProducts();
+    } catch (err: any) {
+      console.error("Error al eliminar producto", err);
+      const errorMsg = err.response?.data?.message || err.response?.data || "No se pudo eliminar el producto";
+      showAlert(typeof errorMsg === 'string' ? errorMsg : "Error al eliminar producto", 'error');
+      setProductToDelete(null);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -540,7 +559,7 @@ const ProductsPage = () => {
                           </button>
                           {isAdmin && (
                             <button 
-                              onClick={() => handleDelete(product.id)}
+                              onClick={() => setProductToDelete(product)}
                               className="p-3 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-xl transition-all text-rose-400"
                               title="Dar de Baja"
                             >
@@ -1047,6 +1066,87 @@ const ProductsPage = () => {
           </div>
         </div>
       )}
+
+      {/* Custom Delete Product Modal */}
+      {productToDelete && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[80] p-6">
+              <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                  <div className="p-8 bg-black text-white">
+                      <div className="flex items-center gap-4 mb-2">
+                          <div className="p-2 bg-rose-500/20 rounded-xl">
+                              <Trash2 className="w-5 h-5 text-rose-400" />
+                          </div>
+                          <h3 className="text-xl font-black italic uppercase tracking-tight">ELIMINAR PRODUCTO</h3>
+                      </div>
+                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS ELIMINAR ESTE PRODUCTO?</p>
+                  </div>
+                  
+                  <div className="p-8 space-y-6">
+                      <div className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+                          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                              <Package className="w-5 h-5 text-black" />
+                          </div>
+                          <div>
+                              <p className="font-black italic text-sm">{productToDelete.name}</p>
+                              <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{productToDelete.category} • STOCK: {productToDelete.stock}</p>
+                          </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                          <button
+                              onClick={() => setProductToDelete(null)}
+                              className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                          >
+                              Cancelar
+                          </button>
+                          <button
+                              disabled={isDeleting}
+                              onClick={executeDeleteProduct}
+                              className="flex-1 py-5 bg-rose-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
+                          >
+                              {isDeleting ? (
+                                  <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                              ) : (
+                                  <>
+                                      <Trash2 className="w-4 h-4" /> ELIMINAR
+                                  </>
+                              )}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {customAlert && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[90] p-6">
+              <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                  <div className={`p-8 ${customAlert.type === 'success' ? 'bg-emerald-500' : customAlert.type === 'error' ? 'bg-rose-500' : 'bg-amber-500'} text-white`}>
+                      <div className="flex items-center gap-4">
+                          <div className="p-2 bg-white/20 rounded-xl">
+                              {customAlert.type === 'success' ? <CheckCircle className="w-5 h-5 text-white" /> : customAlert.type === 'error' ? <X className="w-5 h-5 text-white" /> : <AlertCircle className="w-5 h-5 text-white" />}
+                          </div>
+                          <h3 className="text-xl font-black italic uppercase tracking-tight">{customAlert.title}</h3>
+                      </div>
+                  </div>
+                  
+                  <div className="p-8 space-y-6">
+                      <p className="text-sm font-bold text-zinc-600 text-center uppercase tracking-widest leading-relaxed">
+                          {customAlert.message}
+                      </p>
+
+                      <button
+                          onClick={() => setCustomAlert(null)}
+                          className={`w-full py-5 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-colors ${customAlert.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : customAlert.type === 'error' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                      >
+                          ACEPTAR
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

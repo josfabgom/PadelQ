@@ -6,6 +6,7 @@ using PadelQ.Infrastructure.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace PadelQ.Api.Controllers
@@ -222,6 +223,9 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
+            // Eliminar consumiciones para que no aparezcan en ventas
+            _context.BookingConsumptions.RemoveRange(consumptions);
+
             // Reversar cargo en Cta Cte si hay un usuario vinculado
             if (!string.IsNullOrEmpty(booking.UserId))
             {
@@ -282,6 +286,106 @@ namespace PadelQ.Api.Controllers
             booking.DepositPaid += amount;
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Pago parcial registrado", DepositPaid = booking.DepositPaid });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/extend")]
+        public async Task<IActionResult> Extend(Guid id, [FromQuery] int minutes)
+        {
+            var booking = await _context.SpaceBookings.Include(b => b.Space).FirstOrDefaultAsync(b => b.Id == id);
+            if (booking == null) return NotFound("Reserva no encontrada.");
+
+            var newEndTime = booking.EndTime.AddMinutes(minutes);
+
+            // Check overlap
+            var overlapping = await _context.SpaceBookings
+                .Where(b => b.Id != id && b.SpaceId == booking.SpaceId && b.Status != BookingStatus.Cancelled)
+                .AnyAsync(b => b.StartTime < newEndTime && b.EndTime > booking.StartTime);
+
+            if (overlapping) return BadRequest("No se puede extender el tiempo: el espacio ya está reservado para el horario siguiente.");
+
+            // Recalcular precio (asumimos precio proporcional basado en el precio por slot si el precio original era el base)
+            // Para espacios, a veces es más complejo, pero usaremos el precio por slot del espacio dividido 60m como base
+            var space = booking.Space;
+            var pricePerSlot = space?.PricePerSlot ?? 0;
+            
+            // Calculamos el extra proporcional (asumiendo que el slot base es el que se usa habitualmente)
+            // Si no, simplemente usamos una lógica de precio por hora si existe.
+            // En este sistema parece que Space tiene PricePerSlot.
+            decimal extraPrice = (decimal)(minutes / 60.0) * (pricePerSlot / 1.0m); // Ajustar si el slot no es de 60m
+
+            // Descuento membresía
+            decimal membershipDiscount = 0;
+            if (!string.IsNullOrEmpty(booking.UserId))
+            {
+                membershipDiscount = await _context.UserMemberships
+                    .Include(um => um.Membership)
+                    .Where(um => um.UserId == booking.UserId && um.IsActive)
+                    .OrderByDescending(um => um.StartDate)
+                    .Select(um => um.Membership != null ? um.Membership.DiscountPercentage : 0)
+                    .FirstOrDefaultAsync();
+            }
+
+            var finalExtraPrice = extraPrice * (1 - (membershipDiscount / 100m));
+
+            booking.EndTime = newEndTime;
+            booking.Price += finalExtraPrice;
+
+            // Registro en Cta Cte
+            if (!string.IsNullOrEmpty(booking.UserId))
+            {
+                var transaction = new Transaction
+                {
+                    UserId = booking.UserId,
+                    Amount = finalExtraPrice,
+                    Type = TransactionType.Charge,
+                    Date = DateTime.UtcNow,
+                    Description = $"Extensión de Tiempo (+{minutes} min): {space?.Name ?? "Espacio"}",
+                    SpaceBookingId = booking.Id
+                };
+                _context.Transactions.Add(transaction);
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Tiempo extendido con éxito" });
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPost("{id}/undo-extension")]
+        public async Task<IActionResult> UndoExtension(Guid id)
+        {
+            var booking = await _context.SpaceBookings.Include(b => b.Space).FirstOrDefaultAsync(b => b.Id == id);
+            if (booking == null) return NotFound("Reserva no encontrada.");
+
+            // Buscar la última transacción de extensión
+            var lastExtension = await _context.Transactions
+                .Where(t => t.SpaceBookingId == id && t.Type == TransactionType.Charge && t.Description.Contains("Extensión de Tiempo"))
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefaultAsync();
+
+            if (lastExtension == null) return BadRequest("No se encontraron extensiones para deshacer.");
+
+            // Intentar extraer los minutos de la descripción
+            int minutesToRemove = 0;
+            var match = Regex.Match(lastExtension.Description ?? "", @"\+(\d+)\s*(?:min|m)?", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                minutesToRemove = int.Parse(match.Groups[1].Value);
+            }
+            else
+            {
+                return BadRequest($"No se pudo determinar la duración en la descripción: '{lastExtension.Description}'");
+            }
+
+            // Revertir cambios
+            booking.EndTime = booking.EndTime.AddMinutes(-minutesToRemove);
+            booking.Price -= lastExtension.Amount;
+
+            // Eliminar la transacción de la extensión
+            _context.Transactions.Remove(lastExtension);
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Última extensión deshecha con éxito" });
         }
     }
 

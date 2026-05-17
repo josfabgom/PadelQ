@@ -79,6 +79,12 @@ namespace PadelQ.Api.Controllers
             var product = await _context.Products.FindAsync(id);
             if (product == null) return NotFound();
 
+            var hasSales = await _context.BookingConsumptions.AnyAsync(bc => bc.ProductId == id);
+            if (hasSales)
+            {
+                return BadRequest("No se puede eliminar el producto porque tiene ventas registradas en el sistema.");
+            }
+
             // Soft delete
             product.IsActive = false;
             _context.Entry(product).State = EntityState.Modified;

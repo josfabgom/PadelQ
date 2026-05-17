@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import {
     format,
@@ -47,7 +47,10 @@ import {
     Minus,
     Layers,
     CreditCard,
-    History
+    History,
+    RotateCcw,
+    Zap,
+    QrCode
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -194,6 +197,44 @@ const renderFractionControl = (id: string, current: number, onChange: (n: number
     );
 };
 
+const TimeIndicator = React.memo(({ openHourForIndicator, selectedDate }: { openHourForIndicator: number, selectedDate: Date }) => {
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    if (!isSameDay(now, selectedDate)) return null;
+
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Posición: 72px (header) + (horas transcurridas * 100px) + (minutos/60 * 100px)
+    // Usamos transform en lugar de top para mejor performance (opcional, pero ayuda)
+    const topOffset = 72 + (hours - openHourForIndicator) * 100 + (minutes / 60) * 100;
+
+    return (
+        <div
+            className="absolute left-0 right-0 z-40 flex items-center pointer-events-none transition-all duration-1000 ease-linear"
+            style={{ top: `${topOffset}px` }}
+        >
+            <div className="w-[120px] pr-4 flex justify-end scale-110">
+                <div className="flex items-center gap-1.5 bg-rose-500 text-white px-2.5 py-1 rounded-full shadow-[0_4px_12px_rgba(225,29,72,0.3)] border border-white/20">
+                    <span className="text-[8px] font-black uppercase tracking-tighter">AHORA</span>
+                    <div className="w-px h-2 bg-white/30"></div>
+                    <span className="text-[10px] font-black italic tracking-tighter tabular-nums">
+                        {format(now, 'HH:mm:ss')}
+                    </span>
+                </div>
+            </div>
+            <div className="flex-1 h-0.5 bg-rose-500/50 relative">
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-rose-600 rounded-full shadow-[0_0_10px_rgba(225,29,72,0.8)] animate-pulse"></div>
+            </div>
+        </div>
+    );
+});
+
 const BookingsPage = () => {
     const [view, setView] = useState<'daily' | 'monthly'>('daily');
     const [selectedDate, setSelectedDate] = useState(startOfToday());
@@ -208,6 +249,20 @@ const BookingsPage = () => {
 
     // Modal states
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [undoExtensionConfirm, setUndoExtensionConfirm] = useState(false);
+    const [cashDrawerConfirm, setCashDrawerConfirm] = useState<{ resolve: (val: boolean) => void, message: string } | null>(null);
+    const [pendingConsumptionToDelete, setPendingConsumptionToDelete] = useState<any | null>(null);
+    const [isDeletingPendingConsumption, setIsDeletingPendingConsumption] = useState(false);
+    const [customAlert, setCustomAlert] = useState<{ title: string, message: string, type: 'success' | 'error' | 'warning' } | null>(null);
+
+    const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success', title?: string) => {
+        setCustomAlert({
+            title: title || (type === 'success' ? 'ÉXITO' : type === 'error' ? 'ERROR' : 'ATENCIÓN'),
+            message,
+            type
+        });
+    };
+
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ resource: { type: 'court' | 'space', data: Court | Space }, hour: number } | null>(null);
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -225,6 +280,8 @@ const BookingsPage = () => {
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
     const [isAddingConsumption, setIsAddingConsumption] = useState<number | null>(null);
     const [productForObservation, setProductForObservation] = useState<any | null>(null);
+    const [consumptionToDelete, setConsumptionToDelete] = useState<any | null>(null);
+    const [isDeletingConsumption, setIsDeletingConsumption] = useState(false);
     const [tempObservation, setTempObservation] = useState('');
     const [allProducts, setAllProducts] = useState<any[]>([]);
     const [barcodeInput, setBarcodeInput] = useState('');
@@ -272,7 +329,7 @@ const BookingsPage = () => {
     const [duration, setDuration] = useState(60);
     const [isFree, setIsFree] = useState(false);
     const [searchClient, setSearchClient] = useState('');
-    const [currentTime, setCurrentTime] = useState(new Date());
+
     const [isRecurring, setIsRecurring] = useState(false);
     const [multiCourtSuggestion, setMultiCourtSuggestion] = useState<{
         isOpen: boolean;
@@ -322,6 +379,7 @@ const BookingsPage = () => {
     const [dsProductSearch, setDsProductSearch] = useState('');
     const [dsFilteredProducts, setDsFilteredProducts] = useState<any[]>([]);
     const [isDsProductGridOpen, setIsDsProductGridOpen] = useState(false);
+    const [dsBarcodeValue, setDsBarcodeValue] = useState('');
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [pendingConsumptions, setPendingConsumptions] = useState<any[]>([]);
     const [selectedPendingUser, setSelectedPendingUser] = useState<any>(null);
@@ -387,6 +445,10 @@ const BookingsPage = () => {
         const totalAmount = activityChargeData.classPrice + activityChargeData.consumptions.reduce((s, c) => s + (c.price * c.quantity), 0);
         
         try {
+            // Verificar caja
+            const isCashOpen = await verifyCashDrawer();
+            if (!isCashOpen) return;
+
             // 1. Registrar el pago
             const m = paymentMethods.find(p => p.id === activityChargeData.paymentMethodId);
             const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
@@ -460,6 +522,7 @@ const BookingsPage = () => {
         setSelectedCtaCteUser(null);
         setDsClientSearch('');
         setDsProductSearch('');
+        setDsBarcodeValue('');
         setDsFractions({});
         setDsSelectedParts({});
         setIsDirectSaleModalOpen(true);
@@ -486,6 +549,31 @@ const BookingsPage = () => {
         }
         setDsProductSearch('');
         setDsFilteredProducts([]);
+    };
+
+    const handleDsBarcodeChange = (val: string) => {
+        setDsBarcodeValue(val);
+    };
+
+    const handleDsBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = dsBarcodeValue.trim().toLowerCase();
+            if (!query) return;
+
+            // Find exact match in allProducts by barcode or internalCode
+            const product = allProducts.find(p => 
+                (p.barcode && p.barcode.trim().toLowerCase() === query) ||
+                (p.internalCode && p.internalCode.trim().toLowerCase() === query)
+            );
+
+            if (product) {
+                addProductToDirectSale(product);
+                setDsBarcodeValue('');
+            } else {
+                alert(`No se encontró ningún producto con el código: "${dsBarcodeValue}"`);
+            }
+        }
     };
 
     const removeProductFromDirectSale = (index: number) => {
@@ -517,6 +605,11 @@ const BookingsPage = () => {
 
     const handleConfirmDirectSale = async (isPaid: boolean = true) => {
         try {
+            if (isPaid) {
+                const isCashOpen = await verifyCashDrawer();
+                if (!isCashOpen) return;
+            }
+
             const isInternal = directSaleData.isInternalConsumption;
             const { totalToPay, items } = getDirectSaleTotals();
 
@@ -573,6 +666,9 @@ const BookingsPage = () => {
 
     const handlePayPending = async (userId: string) => {
         try {
+            const isCashOpen = await verifyCashDrawer();
+            if (!isCashOpen) return;
+
             const m = paymentMethods.find(p => p.id === directSaleData.paymentMethodId);
             const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
 
@@ -633,6 +729,9 @@ const BookingsPage = () => {
     const [closeHour, setCloseHour] = useState(23);
     const [openHourForIndicator, setOpenHourForIndicator] = useState(8);
     const [selectedClientMembership, setSelectedClientMembership] = useState<{ name: string, discount: number } | null>(null);
+    const staticDataLoaded = useRef(false);
+    const hasInitialScrolled = useRef(false);
+
 
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
     const isAdmin = roles.includes('admin') || roles.includes('staff');
@@ -641,8 +740,6 @@ const BookingsPage = () => {
 
     useEffect(() => {
         fetchData();
-        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-        return () => clearInterval(timer);
     }, [selectedDate, view]);
 
     useEffect(() => {
@@ -669,19 +766,80 @@ const BookingsPage = () => {
     }, [dsProductSearch, allProducts]);
 
     useEffect(() => {
-        // Auto-scroll to current hour on load
+        // Auto-scroll solo la primera vez o cuando el día cambia a "hoy"
         if (view === 'daily' && !loading) {
-            const currentHour = new Date().getHours();
-            const element = document.getElementById(`hour-${currentHour}`);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const isToday = isSameDay(selectedDate, startOfToday());
+            if (!hasInitialScrolled.current || isToday) {
+                const currentHour = new Date().getHours();
+                const element = document.getElementById(`hour-${currentHour}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (!isToday) hasInitialScrolled.current = true; // Solo marcamos como "scrolled" si no es hoy, para que al volver a hoy siempre scrollee
+                }
             }
         }
-    }, [loading, view]);
+    }, [loading, view, selectedDate]);
 
     const [isConfirmingSeriesCancel, setIsConfirmingSeriesCancel] = useState(false);
     const [isConfirmingSeriesCancelSeriesId, setIsConfirmingSeriesCancelSeriesId] = useState<string | null>(null);
     const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+    
+    const verifyCashDrawer = async () => {
+        try {
+            const cashRes = await api.get('/api/cash-closures/current-status', config);
+            if (!cashRes.data.activeClosure || !cashRes.data.activeClosure.isOpen) {
+                return new Promise<boolean>((resolve) => {
+                    setCashDrawerConfirm({
+                        message: "ATENCIÓN: No tienes una caja abierta. Para registrar este cobro, debes abrir tu caja diaria.\n\n¿Deseas abrir tu caja ahora automáticamente (con saldo inicial $0)?",
+                        resolve: async (result) => {
+                            setCashDrawerConfirm(null);
+                            if (result) {
+                                try {
+                                    await api.post('/api/cash-closures/open', { initialCash: 0, notes: "Apertura automática por cobro" }, config);
+                                    resolve(true);
+                                } catch(e) {
+                                    resolve(false);
+                                }
+                            } else {
+                                resolve(false);
+                            }
+                        }
+                    });
+                });
+            }
+            return true;
+        } catch (err) {
+            console.error("Error al verificar la caja", err);
+            return new Promise<boolean>((resolve) => {
+                setCashDrawerConfirm({
+                    message: "No se pudo verificar el estado de la caja. ¿Deseas intentar procesar el cobro de todas formas?",
+                    resolve: (result) => {
+                        setCashDrawerConfirm(null);
+                        resolve(result);
+                    }
+                });
+            });
+        }
+    };
+
+    const executeDeletePendingConsumption = async () => {
+        if (!pendingConsumptionToDelete) return;
+        try {
+            setIsDeletingPendingConsumption(true);
+            await api.delete(`/api/consumptions/${pendingConsumptionToDelete.id}`, config);
+            showAlert("Consumo pendiente eliminado con éxito.");
+            if (selectedPendingUser) {
+                fetchPendingConsumptions(selectedPendingUser.id);
+            }
+            fetchDebtors();
+            setPendingConsumptionToDelete(null);
+        } catch (err) {
+            console.error(err);
+            showAlert("Error al eliminar el consumo.", "error");
+        } finally {
+            setIsDeletingPendingConsumption(false);
+        }
+    };
 
     const handleAddByBarcode = async (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && barcodeInput.trim()) {
@@ -722,70 +880,73 @@ const BookingsPage = () => {
         }
     };
 
-    const fetchData = async () => {
+    const fetchData = async (forceStatic = false) => {
         setLoading(true);
         try {
             const dateStr = format(selectedDate, 'yyyy-MM-dd');
+            const needsStatic = !staticDataLoaded.current || forceStatic;
 
-            // Peticiones en paralelo con manejo de errores individual
-            const pCourts = api.get('/api/courts', config).then(r => r.data).catch(() => []);
-            const pSpaces = api.get('/api/spaces', config).then(r => r.data).catch(() => []);
+            // Peticiones de datos dinámicos (siempre se ejecutan)
             const pBookings = api.get(`/api/bookings/by-date?date=${dateStr}`, config).then(r => r.data).catch(() => []);
             const pSpaceBookings = api.get(`/api/spacebookings/by-date?date=${dateStr}`, config).then(r => r.data).catch(() => []);
-            const pUsers = api.get('/api/users', config).then(r => r.data).catch(() => []);
-            const pPayments = api.get('/api/PaymentMethods', config).then(r => r.data).catch(() => []);
-            const pSettings = api.get('/api/SystemSettings', config).then(r => r.data).catch(() => []);
-            const pActivities = api.get('/api/activities', config).then(r => r.data).catch(() => []);
-            const pProducts = api.get('/api/products', config).then(r => r.data).catch(() => []);
             const pActivityTransactions = api.get(`/api/transaction/activities/by-date?date=${dateStr}`, config).then(r => r.data).catch(() => []);
 
-            const [resC, resS, resB, resSB, resU, resP, resSett, resA, resProducts, resActivityTransactions] = await Promise.all([
-                pCourts, pSpaces, pBookings, pSpaceBookings, pUsers, pPayments, pSettings, pActivities, pProducts, pActivityTransactions
+            // Peticiones de datos estáticos (solo si es necesario)
+            const pCourts = needsStatic ? api.get('/api/courts', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pSpaces = needsStatic ? api.get('/api/spaces', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pUsers = needsStatic ? api.get('/api/users', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pPayments = needsStatic ? api.get('/api/PaymentMethods', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pSettings = needsStatic ? api.get('/api/SystemSettings', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pActivities = needsStatic ? api.get('/api/activities', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+            const pProducts = needsStatic ? api.get('/api/products', config).then(r => r.data).catch(() => []) : Promise.resolve(null);
+
+            const [resB, resSB, resActivityTransactions, resC, resS, resU, resP, resSett, resA, resProducts] = await Promise.all([
+                pBookings, pSpaceBookings, pActivityTransactions, pCourts, pSpaces, pUsers, pPayments, pSettings, pActivities, pProducts
             ]);
 
-            setCourts(resC || []);
-            setSpaces((resS || []).filter((s: any) => (s.isActive ?? s.IsActive) && (s.showInCalendar ?? s.ShowInCalendar ?? true)));
             setBookings(resB || []);
             setSpaceBookings(resSB || []);
-            setClients(resU || []);
-            setActivities(resA || []);
             setActivityTransactions(resActivityTransactions || []);
-            
-            const fetchedMethods = resP || [];
-            // Si no existe el medio de pago Cta Cte en la base, lo agregamos virtualmente
-            if (!fetchedMethods.some((m: any) => m.name.toUpperCase().includes("CTA CTE") || m.name.toUpperCase().includes("CUENTA CORRIENTE"))) {
-                fetchedMethods.push({
-                    id: 999,
-                    name: "CTA CTE",
-                    hexColor: "#f59e0b",
-                    isActive: true
-                });
-            }
-            setPaymentMethods(fetchedMethods.filter((m: any) => m.isActive));
-            setAllProducts(resProducts || []);
 
-            if (resSett && Array.isArray(resSett)) {
-                const info = { ...companyInfo };
-                resSett.forEach((s: any) => {
-                    if (s.key === 'CompanyName') info.name = s.value;
-                    if (s.key === 'CompanyAddress') info.address = s.value;
-                    if (s.key === 'CompanyPhone') info.phone = s.value;
-                    if (s.key === 'CompanyEmail') info.email = s.value;
-                    if (s.key === 'CompanyWebsite') info.website = s.value;
-                });
-                setCompanyInfo(info);
-
-                const openH = parseInt(resSett?.find((s: any) => s.key === 'OpenHour')?.value || '8');
-                const closeH = parseInt(resSett?.find((s: any) => s.key === 'CloseHour')?.value || '23');
-                setOpenHour(openH);
-                setCloseHour(closeH);
-                setOpenHourForIndicator(openH);
-
-                const generatedHours = [];
-                for (let h = openH; h < closeH; h++) {
-                    generatedHours.push(h);
+            if (needsStatic) {
+                if (resC) setCourts(resC);
+                if (resS) setSpaces(resS.filter((s: any) => (s.isActive ?? s.IsActive) && (s.showInCalendar ?? s.ShowInCalendar ?? true)));
+                if (resU) setClients(resU);
+                if (resA) setActivities(resA);
+                if (resProducts) setAllProducts(resProducts);
+                
+                if (resP) {
+                    const fetchedMethods = resP || [];
+                    if (!fetchedMethods.some((m: any) => m.name.toUpperCase().includes("CTA CTE") || m.name.toUpperCase().includes("CUENTA CORRIENTE"))) {
+                        fetchedMethods.push({ id: 999, name: "CTA CTE", hexColor: "#f59e0b", isActive: true });
+                    }
+                    setPaymentMethods(fetchedMethods.filter((m: any) => m.isActive));
                 }
-                setHours(generatedHours);
+
+                if (resSett && Array.isArray(resSett)) {
+                    const info = { ...companyInfo };
+                    resSett.forEach((s: any) => {
+                        if (s.key === 'CompanyName') info.name = s.value;
+                        if (s.key === 'CompanyAddress') info.address = s.value;
+                        if (s.key === 'CompanyPhone') info.phone = s.value;
+                        if (s.key === 'CompanyEmail') info.email = s.value;
+                        if (s.key === 'CompanyWebsite') info.website = s.value;
+                    });
+                    setCompanyInfo(info);
+
+                    const openH = parseInt(resSett?.find((s: any) => s.key === 'OpenHour')?.value || '8');
+                    const closeH = parseInt(resSett?.find((s: any) => s.key === 'CloseHour')?.value || '23');
+                    setOpenHour(openH);
+                    setCloseHour(closeH);
+                    setOpenHourForIndicator(openH);
+
+                    const generatedHours = [];
+                    for (let h = openH; h < closeH; h++) {
+                        generatedHours.push(h);
+                    }
+                    setHours(generatedHours);
+                }
+                staticDataLoaded.current = true;
             }
         } catch (err) {
             console.error("Error al cargar datos", err);
@@ -1257,18 +1418,18 @@ const BookingsPage = () => {
             setIsConfirmingSeriesCancelSeriesId(null);
             setIsDetailsModalOpen(false);
             fetchData();
-            alert("La serie ha sido anulada con éxito.");
+            showAlert("La serie ha sido anulada con éxito.");
         } catch (err: any) {
             console.error("Error al cancelar serie", err);
             const errorDetail = err.response?.data?.message || err.response?.data || err.message;
-            alert("Error al cancelar serie: " + (typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail));
+            showAlert("Error al cancelar serie: " + (typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail), 'error');
         }
     };
 
     const handleCancelBooking = async (bookingOverride?: Booking | SpaceBooking) => {
         const booking = bookingOverride || selectedBooking || selectedSpaceBooking;
         if (!booking) {
-            alert("No hay reserva seleccionada.");
+            showAlert("No hay reserva seleccionada.", 'warning');
             return;
         }
 
@@ -1290,12 +1451,81 @@ const BookingsPage = () => {
             setIsConfirmingCancel(false);
             resetForm();
             fetchData();
-            alert("Turno anulado con éxito.");
+            showAlert("Turno anulado con éxito.");
         } catch (err: any) {
             console.error("Error al cancelar", err);
             const errorMsg = err.response?.data?.message || err.response?.data || err.message || "Error desconocido";
-            alert(`No se pudo anular la reserva: ${typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg}`);
+            showAlert(`No se pudo anular la reserva: ${typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg}`, 'error');
             setIsConfirmingCancel(false);
+        }
+    };
+
+    const handleExtendBooking = async (minutes: number) => {
+        const booking = selectedBooking || selectedSpaceBooking;
+        if (!booking) return;
+
+        try {
+            setLoading(true);
+            const isSpace = !!selectedSpaceBooking;
+            const url = isSpace ? `/api/spacebookings/${booking.id}/extend?minutes=${minutes}` : `/api/bookings/${booking.id}/extend?minutes=${minutes}`;
+            
+            await api.post(url, {}, config);
+            
+            // Recargar datos para ver el nuevo precio y horario
+            await fetchData();
+            
+            // Actualizar la vista del modal actual re-cargando el objeto
+            const updatedUrl = isSpace ? `/api/spacebookings/${booking.id}` : `/api/bookings/${booking.id}`;
+            const res = await api.get(updatedUrl, config);
+            if (isSpace) setSelectedSpaceBooking(res.data);
+            else setSelectedBooking(res.data);
+
+            showAlert(`¡Tiempo extendido +${minutes} min!`);
+        } catch (err: any) {
+            console.error("Error al extender tiempo", err);
+            const errorMsg = err.response?.data?.message || err.response?.data || "Error al extender el tiempo";
+            showAlert(typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg, 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const executeUndoExtension = async () => {
+        console.log("executeUndoExtension called");
+        const booking = selectedBooking || selectedSpaceBooking;
+        if (!booking) {
+            console.error("No booking selected for undo");
+            return;
+        }
+
+        try {
+            console.log("Initiating undo for booking:", booking.id);
+            setLoading(true);
+            const isSpace = !!selectedSpaceBooking;
+            const url = isSpace ? `/api/spacebookings/${booking.id}/undo-extension` : `/api/bookings/${booking.id}/undo-extension`;
+            
+            console.log("POST to:", url);
+            const response = await api.post(url, {}, config);
+            console.log("Undo response:", response.data);
+            
+            console.log("Refreshing data...");
+            await fetchData();
+            
+            const updatedUrl = isSpace ? `/api/spacebookings/${booking.id}` : `/api/bookings/${booking.id}`;
+            console.log("Fetching updated booking:", updatedUrl);
+            const res = await api.get(updatedUrl, config);
+            if (isSpace) setSelectedSpaceBooking(res.data);
+            else setSelectedBooking(res.data);
+
+            showAlert("Extensión deshecha con éxito.");
+        } catch (err: any) {
+            console.error("Error al deshacer extensión:", err);
+            const errorMsg = err.response?.data?.message || err.response?.data || "Error al deshacer la extensión";
+            showAlert(typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg, 'error');
+        } finally {
+            setLoading(false);
+            setUndoExtensionConfirm(false);
+            console.log("executeUndoExtension finished");
         }
     };
 
@@ -1453,19 +1683,11 @@ const BookingsPage = () => {
         try {
             setLoading(true);
 
-            // Verificar estado de caja antes de cobrar
-            try {
-                const cashRes = await api.get('/api/cash-closures/current-status', config);
-                if (!cashRes.data.activeClosure || !cashRes.data.activeClosure.isOpen) {
-                    if (window.confirm("ATENCIÓN: La caja se encuentra CERRADA. Para registrar este pago, la caja debe estar abierta.\n\n¿Deseas abrir la caja ahora automáticamente (con saldo inicial $0)?")) {
-                        await api.post('/api/cash-closures/open', { initialCash: 0, notes: "Apertura automática por cobro" }, config);
-                    } else {
-                        setLoading(false);
-                        return; // Se cancela el pago
-                    }
-                }
-            } catch (err) {
-                console.error("Error al verificar la caja", err);
+            // Verificar caja
+            const isCashOpen = await verifyCashDrawer();
+            if (!isCashOpen) {
+                setLoading(false);
+                return;
             }
 
             const startTimeFormatted = format(parseSafeDate(booking.startTime), 'HH:mm');
@@ -1973,29 +2195,8 @@ const BookingsPage = () => {
                     <div className="bg-white rounded-[40px] shadow-[0_20px_60px_rgb(0,0,0,0.03)] border border-black/5 overflow-hidden">
                         <div className="overflow-x-auto relative">
                             <div className="min-w-[1000px] relative">
-                                {/* Time Indicator Line - Forzado a hora local absoluta */}
-                                {isSameDay(currentTime, selectedDate) && (
-                                    <div
-                                        className="absolute left-0 right-0 z-40 flex items-center pointer-events-none transition-all duration-1000"
-                                        style={{
-                                            // Obtenemos la hora local real sin desfases de zona horaria
-                                            top: `calc(72px + ${(new Date().getHours() - openHourForIndicator) * 100}px + ${(new Date().getMinutes() / 60) * 100}px)`
-                                        }}
-                                    >
-                                        <div className="w-[120px] pr-4 flex justify-end scale-110">
-                                            <div className="flex items-center gap-1.5 bg-rose-500 text-white px-2.5 py-1 rounded-full shadow-[0_4px_12px_rgba(225,29,72,0.3)] border border-white/20">
-                                                <span className="text-[8px] font-black uppercase tracking-tighter">AHORA</span>
-                                                <div className="w-px h-2 bg-white/30"></div>
-                                                <span className="text-[10px] font-black italic tracking-tighter tabular-nums">
-                                                    {format(new Date(), 'HH:mm:ss')}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="flex-1 h-0.5 bg-rose-500/50 relative">
-                                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-rose-600 rounded-full shadow-[0_0_10px_rgba(225,29,72,0.8)] animate-pulse"></div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* Time Indicator Line - Componente aislado para performance */}
+                                <TimeIndicator openHourForIndicator={openHourForIndicator} selectedDate={selectedDate} />
 
                                 {/* Header */}
                                 <div
@@ -2868,13 +3069,7 @@ const BookingsPage = () => {
                                                             ) : (
                                                                 (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
                                                                     <button
-                                                                        onClick={async () => {
-                                                                            if (window.confirm(`¿Quitar ${c.product?.name}?`)) {
-                                                                                await api.delete(`/api/consumptions/${c.id}`, config);
-                                                                                const consRes = await api.get(`/api/consumptions/booking/${(selectedBooking || selectedSpaceBooking)!.id}`, config);
-                                                                                setBookingConsumptions(consRes.data || []);
-                                                                            }
-                                                                        }}
+                                                                        onClick={() => setConsumptionToDelete(c)}
                                                                         className="p-3 hover:bg-rose-50 text-rose-400 rounded-xl transition-all hover:scale-110 active:scale-90"
                                                                     >
                                                                         <Trash2 className="w-4 h-4" />
@@ -2891,6 +3086,32 @@ const BookingsPage = () => {
                                                 <p className="text-[10px] font-black uppercase tracking-widest">Sin consumos cargados</p>
                                             </div>
                                         )}
+
+                                        <div className="pt-8 border-t border-zinc-100">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block italic">Extender Tiempo</label>
+                                                <button 
+                                                    onClick={() => setUndoExtensionConfirm(true)}
+                                                    disabled={loading}
+                                                    className="flex items-center gap-1 px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[8px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all disabled:opacity-50"
+                                                    title="Deshacer última extensión"
+                                                >
+                                                    <RotateCcw className="w-2.5 h-2.5" /> Deshacer
+                                                </button>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {[15, 30, 60].map(mins => (
+                                                    <button
+                                                        key={mins}
+                                                        disabled={loading}
+                                                        onClick={() => handleExtendBooking(mins)}
+                                                        className="flex-1 py-3 bg-zinc-50 border border-zinc-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-black hover:bg-white transition-all disabled:opacity-50 active:scale-95 shadow-sm"
+                                                    >
+                                                        +{mins < 60 ? `${mins}m` : '1h'}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3432,6 +3653,234 @@ const BookingsPage = () => {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Alert Modal */}
+            {customAlert && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[999] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className={`p-8 ${customAlert.type === 'success' ? 'bg-emerald-500' : customAlert.type === 'error' ? 'bg-rose-500' : 'bg-amber-500'} text-white`}>
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    {customAlert.type === 'success' ? <Check className="w-5 h-5 text-white" /> : customAlert.type === 'error' ? <X className="w-5 h-5 text-white" /> : <RotateCcw className="w-5 h-5 text-white" />}
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">{customAlert.title}</h3>
+                            </div>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <p className="text-sm font-bold text-zinc-600 text-center uppercase tracking-widest leading-relaxed">
+                                {customAlert.message}
+                            </p>
+
+                            <button
+                                onClick={() => setCustomAlert(null)}
+                                className={`w-full py-5 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-colors ${customAlert.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : customAlert.type === 'error' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                            >
+                                ACEPTAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Cash Drawer Confirmation Modal */}
+            {cashDrawerConfirm && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[999] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-8 bg-black text-white">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-2 bg-amber-500/20 rounded-xl">
+                                    <AlertCircle className="w-5 h-5 text-amber-500" />
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">CAJA CERRADA</h3>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">SE REQUIERE ACCIÓN PARA CONTINUAR</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <p className="text-sm font-bold text-zinc-600 text-center uppercase tracking-widest leading-relaxed whitespace-pre-line">
+                                {cashDrawerConfirm.message}
+                            </p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => cashDrawerConfirm.resolve(false)}
+                                    className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={() => cashDrawerConfirm.resolve(true)}
+                                    className="flex-1 py-5 bg-amber-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-amber-600 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20"
+                                >
+                                    <Check className="w-4 h-4" /> ACEPTAR
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Delete Pending Consumption Modal */}
+            {pendingConsumptionToDelete && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[999] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-8 bg-black text-white">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-2 bg-rose-500/20 rounded-xl">
+                                    <Trash2 className="w-5 h-5 text-rose-400" />
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">ELIMINAR CONSUMO</h3>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS ELIMINAR ESTE CONSUMO PENDIENTE?</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <div className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                                    <Package className="w-5 h-5 text-black" />
+                                </div>
+                                <div>
+                                    <p className="font-black italic text-sm">{pendingConsumptionToDelete.productName || pendingConsumptionToDelete.product?.name || "Consumo"}</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">CANTIDAD: {pendingConsumptionToDelete.quantity} • PRECIO: ${pendingConsumptionToDelete.totalPrice}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setPendingConsumptionToDelete(null)}
+                                    className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    disabled={isDeletingPendingConsumption}
+                                    onClick={executeDeletePendingConsumption}
+                                    className="flex-1 py-5 bg-rose-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isDeletingPendingConsumption ? (
+                                        <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                                    ) : (
+                                        <>
+                                            <Trash2 className="w-4 h-4" /> ELIMINAR
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Undo Extension Modal */}
+            {undoExtensionConfirm && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[999] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-8 bg-black text-white">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-2 bg-amber-500/20 rounded-xl">
+                                    <RotateCcw className="w-5 h-5 text-amber-500" />
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">DESHACER EXTENSIÓN</h3>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS REVERTIR ESTA ACCIÓN?</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <p className="text-sm font-bold text-zinc-600 text-center uppercase tracking-widest leading-relaxed">
+                                Se revertirá el horario y el precio extra de la última extensión.
+                            </p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setUndoExtensionConfirm(false)}
+                                    className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    disabled={loading}
+                                    onClick={executeUndoExtension}
+                                    className="flex-1 py-5 bg-amber-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {loading ? (
+                                        <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                                    ) : (
+                                        <>
+                                            <RotateCcw className="w-4 h-4" /> ACEPTAR
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Delete Consumption Modal */}
+            {consumptionToDelete && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-8 bg-black text-white">
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-2 bg-rose-500/20 rounded-xl">
+                                    <Trash2 className="w-5 h-5 text-rose-400" />
+                                </div>
+                                <h3 className="text-xl font-black italic uppercase tracking-tight">QUITAR ITEM</h3>
+                            </div>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS QUITAR ESTE ITEM?</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <div className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                                    <Package className="w-5 h-5 text-black" />
+                                </div>
+                                <div>
+                                    <p className="font-black italic text-sm">{consumptionToDelete.product?.name}</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{consumptionToDelete.quantity} UNIDAD(ES) • ${(consumptionToDelete.totalPrice || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setConsumptionToDelete(null)}
+                                    className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    disabled={isDeletingConsumption}
+                                    onClick={async () => {
+                                        try {
+                                            setIsDeletingConsumption(true);
+                                            await api.delete(`/api/consumptions/${consumptionToDelete.id}`, config);
+                                            const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                            const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, config);
+                                            setBookingConsumptions(consRes.data || []);
+                                            setConsumptionToDelete(null);
+                                        } catch (error) {
+                                            console.error('Error deleting consumption:', error);
+                                            alert('Error al quitar la consumición');
+                                        } finally {
+                                            setIsDeletingConsumption(false);
+                                        }
+                                    }}
+                                    className="flex-1 py-5 bg-rose-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isDeletingConsumption ? (
+                                        <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                                    ) : (
+                                        <>
+                                            <Trash2 className="w-4 h-4" /> QUITAR
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4140,17 +4589,7 @@ const BookingsPage = () => {
                                                                 <span className="px-3 py-1 text-[10px] font-black text-slate-900">{item.quantity} unidad(es)</span>
                                                             </div>
                                                             <button 
-                                                                onClick={async () => {
-                                                                    if (!window.confirm("¿Estás seguro de eliminar este consumo pendiente?")) return;
-                                                                    try {
-                                                                        await api.delete(`/api/consumptions/${item.id}`, config);
-                                                                        fetchPendingConsumptions(selectedPendingUser.id);
-                                                                        fetchDebtors();
-                                                                    } catch (err) {
-                                                                        console.error(err);
-                                                                        alert("Error al eliminar el consumo.");
-                                                                    }
-                                                                }}
+                                                                onClick={() => setPendingConsumptionToDelete(item)}
                                                                 className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
@@ -4401,6 +4840,28 @@ const BookingsPage = () => {
                                     )}
                                 </div>
 
+                                {/* Carga Rápida por Código de Barras o Código Interno */}
+                                <div className="space-y-3 bg-slate-50 p-6 rounded-[28px] border border-slate-100/50 animate-in fade-in slide-in-from-top duration-300">
+                                    <div className="flex items-center gap-2">
+                                        <QrCode className="w-4 h-4 text-emerald-500" />
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Carga Rápida (Código de barras o código interno)</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input 
+                                            type="text"
+                                            value={dsBarcodeValue}
+                                            onChange={(e) => handleDsBarcodeChange(e.target.value)}
+                                            onKeyDown={handleDsBarcodeKeyDown}
+                                            className="w-full pl-6 pr-20 py-3 bg-white border border-slate-200 rounded-xl outline-none font-bold text-sm transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 uppercase"
+                                            placeholder="Escanea o escribe el código de barras y presiona Enter..."
+                                            autoFocus
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                            <span className="text-[8px] font-black text-zinc-400 bg-zinc-100 px-2.5 py-1 rounded uppercase tracking-wider border border-zinc-200">Enter</span>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Sección: Productos */}
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
@@ -4526,7 +4987,7 @@ const BookingsPage = () => {
                                                             splitPayments: !directSaleData.isSplitPayment ? [{ paymentMethodId: directSaleData.paymentMethodId, amount: totalToPay }] : []
                                                         });
                                                     }}
-                                                    className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all border ${directSaleData.isSplitPayment ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                                                    className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${directSaleData.isSplitPayment ? 'bg-black text-white' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'}`}
                                                 >
                                                     {directSaleData.isSplitPayment ? '✓ Pago Dividido' : '+ Dividir Pago'}
                                                 </button>
@@ -4601,33 +5062,38 @@ const BookingsPage = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                                <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-300">
                                                     {paymentMethods
-                                                        .filter(m => {
-                                                            const isConsumidorFinal = directSaleData.clientName?.toLowerCase().includes("consumidor final");
-                                                            if (isConsumidorFinal) {
-                                                                return m.name?.toLowerCase().includes("efectivo");
-                                                            }
-                                                            return true;
-                                                        })
-                                                        .map(m => (
-                                                        <button 
-                                                            key={m.id}
-                                                            onClick={() => {
-                                                                const isCtaCte = m.name?.toUpperCase().includes("CTA CTE") || m.name?.toUpperCase().includes("CUENTA CORRIENTE");
-                                                                if (isCtaCte) {
-                                                                    setCtaCteUserSearch('');
-                                                                    setCtaCteFilteredClients([]);
-                                                                    setIsCtaCteModalOpen(true);
-                                                                }
-                                                                setDirectSaleData({...directSaleData, paymentMethodId: m.id});
-                                                            }}
-                                                            className={`py-4 px-6 rounded-2xl border text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-3 ${directSaleData.paymentMethodId === m.id ? 'bg-black text-white border-black shadow-xl scale-[1.02]' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
-                                                        >
-                                                            <div className={`w-2 h-2 rounded-full ${directSaleData.paymentMethodId === m.id ? 'bg-emerald-400' : 'bg-slate-200'}`} />
-                                                            {m.name}
-                                                        </button>
-                                                    ))}
+                                                        .map(m => {
+                                                            const isCtaCte = m.name?.toUpperCase().includes("CTA CTE") || m.name?.toUpperCase().includes("CUENTA CORRIENTE");
+                                                            return (
+                                                                <button 
+                                                                    key={m.id}
+                                                                    onClick={() => {
+                                                                        if (isCtaCte) {
+                                                                            setCtaCteUserSearch('');
+                                                                            setCtaCteFilteredClients([]);
+                                                                            setIsCtaCteModalOpen(true);
+                                                                        }
+                                                                        setDirectSaleData({...directSaleData, paymentMethodId: m.id});
+                                                                    }}
+                                                                    className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex flex-col items-center justify-center gap-1 ${directSaleData.paymentMethodId === m.id
+                                                                        ? 'bg-black text-white border-black shadow-lg'
+                                                                        : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.hexColor || '#cbd5e1' }}></div>
+                                                                        {m.name}
+                                                                    </div>
+                                                                    {isCtaCte && selectedCtaCteUser && directSaleData.paymentMethodId === m.id && (
+                                                                        <span className="text-[7px] text-emerald-400 font-bold lowercase truncate max-w-full px-2">
+                                                                            → {selectedCtaCteUser.fullName}
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
                                                 </div>
                                             )}
                                         </div>

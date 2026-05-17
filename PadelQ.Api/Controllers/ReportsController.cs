@@ -49,9 +49,13 @@ namespace PadelQ.Api.Controllers
             // 2. Ingreso del día (Lo alquilado)
             var todayRentalsRevenue = todayBookingsList.Sum(b => b.Price) + todaySpaceBookingsList.Sum(b => b.Price);
 
-            // 3. Consumiciones del día
+            // 3. Consumiciones del día (Solo de reservas ACTIVAS o ventas directas)
             var todayConsumptionsRevenue = await _context.BookingConsumptions
-                .Where(c => c.CreatedAt >= today && c.CreatedAt < tomorrow)
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.CreatedAt >= today && c.CreatedAt < tomorrow &&
+                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                 .SumAsync(c => c.UnitPrice * c.Quantity);
 
             // 4. Pagos Reales (Lo cobrado efectivamente hoy)
@@ -149,7 +153,11 @@ namespace PadelQ.Api.Controllers
             
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)
-                .Where(c => c.CreatedAt >= startDate && c.CreatedAt < endDate)
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.CreatedAt >= startDate && c.CreatedAt < endDate &&
+                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                 .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
                 .Select(g => new
                 {
@@ -169,7 +177,11 @@ namespace PadelQ.Api.Controllers
                 var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
                 var recentSales = await _context.BookingConsumptions
                     .Include(c => c.Product)
-                    .Where(c => c.CreatedAt >= sevenDaysAgo)
+                    .Include(c => c.Booking)
+                    .Include(c => c.SpaceBooking)
+                    .Where(c => c.CreatedAt >= sevenDaysAgo &&
+                               (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                               (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                     .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
                     .Select(g => new
                     {
