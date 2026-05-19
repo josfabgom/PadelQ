@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PadelQ.Domain;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 using System;
@@ -156,7 +157,7 @@ namespace PadelQ.Api.Controllers
                     UserId = userId,
                     Amount = finalPrice,
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = TimeZoneHelper.GetArgNow(),
                     Description = $"Reserva de Espacio (Admin): {space.Name}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
                     SpaceBookingId = booking.Id
                 };
@@ -185,12 +186,27 @@ namespace PadelQ.Api.Controllers
                     .OrderByDescending(t => t.Date)
                     .FirstOrDefaultAsync();
 
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "particular@padelq.com");
+                if (user == null)
+                {
+                    user = new ApplicationUser
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserName = "particular@padelq.com",
+                        Email = "particular@padelq.com",
+                        FullName = "Consumidor Final (Particular)",
+                        IsActive = true
+                    };
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+                }
+
                 var reversalPayment = new Transaction
                 {
-                    UserId = booking.UserId ?? "Particular",
+                    UserId = booking.UserId ?? user.Id,
                     Amount = -booking.DepositPaid,
                     Type = TransactionType.Payment,
-                    Date = DateTime.UtcNow,
+                    Date = TimeZoneHelper.GetArgNow(),
                     Description = $"Devolución por Anulación Reserva Espacio PAGA: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}",
                     SpaceBookingId = booking.Id,
                     PaymentMethodId = lastPayment?.PaymentMethodId,
@@ -234,7 +250,7 @@ namespace PadelQ.Api.Controllers
                     UserId = booking.UserId,
                     Amount = -booking.Price, // Cargo negativo
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = TimeZoneHelper.GetArgNow(),
                     Description = $"Anulación Reserva Espacio: {booking.Space?.Name ?? "Espacio"} del {booking.StartTime:dd/MM HH:mm}",
                     SpaceBookingId = booking.Id
                 };
@@ -339,7 +355,7 @@ namespace PadelQ.Api.Controllers
                     UserId = booking.UserId,
                     Amount = finalExtraPrice,
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = TimeZoneHelper.GetArgNow(),
                     Description = $"Extensión de Tiempo (+{minutes} min): {space?.Name ?? "Espacio"}",
                     SpaceBookingId = booking.Id
                 };

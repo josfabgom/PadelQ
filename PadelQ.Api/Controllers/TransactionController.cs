@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PadelQ.Application.Common.Interfaces;
+using PadelQ.Domain;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 using System;
@@ -358,26 +359,7 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
         }
 
-        private DateTime GetArgNow()
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
-                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            }
-            catch
-            {
-                try
-                {
-                    var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-                }
-                catch
-                {
-                    return DateTime.UtcNow.AddHours(-3);
-                }
-            }
-        }
+        private DateTime GetArgNow() => TimeZoneHelper.GetArgNow();
 
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PadelQ.Domain;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 using System;
@@ -171,6 +172,8 @@ namespace PadelQ.Api.Controllers
             var consumptions = new List<BookingConsumption>();
             decimal totalAmount = 0;
 
+            var itemDescriptions = new List<string>();
+
             foreach (var item in request.Items)
             {
                 var product = await _context.Products.FindAsync(item.ProductId);
@@ -195,6 +198,8 @@ namespace PadelQ.Api.Controllers
                 totalAmount += consumption.DepositPaid;
                 consumptions.Add(consumption);
 
+                itemDescriptions.Add($"{product.Name} x{item.Quantity}");
+
                 // Stock Control
                 product.Stock -= item.Quantity;
                 _context.ProductStockMovements.Add(new ProductStockMovement
@@ -205,6 +210,8 @@ namespace PadelQ.Api.Controllers
                     Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado)" : $"Venta Directa Bulk: {product.Name} (PENDIENTE)")
                 });
             }
+
+            var itemsSummary = itemDescriptions.Any() ? string.Join(", ", itemDescriptions) : "Bulk";
 
             // Registrar pagos si es venta pagada
             if (request.IsPaid && !request.IsInternal)
@@ -217,10 +224,11 @@ namespace PadelQ.Api.Controllers
                         {
                             UserId = request.UserId,
                             Amount = payment.Amount,
-                            Date = DateTime.UtcNow,
+                            Date = TimeZoneHelper.GetArgNow(),
                             Type = TransactionType.Payment,
-                            Description = $"Venta Directa (Pago Dividido) - Bulk",
-                            PaymentMethodId = payment.PaymentMethodId
+                            Description = $"Venta Directa (Pago Dividido): {itemsSummary}",
+                            PaymentMethodId = payment.PaymentMethodId,
+                            ProcessedBy = User.Identity?.Name ?? "Admin"
                         };
                         _context.Transactions.Add(transaction);
                     }
@@ -231,10 +239,11 @@ namespace PadelQ.Api.Controllers
                     {
                         UserId = request.UserId,
                         Amount = totalAmount,
-                        Date = DateTime.UtcNow,
+                        Date = TimeZoneHelper.GetArgNow(),
                         Type = TransactionType.Payment,
-                        Description = $"Venta Directa - Bulk",
-                        PaymentMethodId = request.PaymentMethodId.Value
+                        Description = $"Venta Directa: {itemsSummary}",
+                        PaymentMethodId = request.PaymentMethodId.Value,
+                        ProcessedBy = User.Identity?.Name ?? "Admin"
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -276,10 +285,11 @@ namespace PadelQ.Api.Controllers
                     {
                         UserId = request.UserId,
                         Amount = consumption.TotalPrice,
-                        Date = DateTime.UtcNow,
+                        Date = TimeZoneHelper.GetArgNow(),
                         Type = TransactionType.Payment,
                         Description = $"Venta Directa: {product.Name} x{request.Quantity}",
-                        PaymentMethodId = request.PaymentMethodId.Value
+                        PaymentMethodId = request.PaymentMethodId.Value,
+                        ProcessedBy = User.Identity?.Name ?? "Admin"
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -320,10 +330,11 @@ namespace PadelQ.Api.Controllers
                     {
                         UserId = userId,
                         Amount = payment.Amount,
-                        Date = DateTime.UtcNow,
+                        Date = TimeZoneHelper.GetArgNow(),
                         Type = TransactionType.Payment,
                         Description = $"Pago de Deuda (Dividido) - Consumiciones",
-                        PaymentMethodId = payment.PaymentMethodId
+                        PaymentMethodId = payment.PaymentMethodId,
+                        ProcessedBy = User.Identity?.Name ?? "Admin"
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -334,10 +345,11 @@ namespace PadelQ.Api.Controllers
                 {
                     UserId = userId,
                     Amount = totalDebt,
-                    Date = DateTime.UtcNow,
+                    Date = TimeZoneHelper.GetArgNow(),
                     Type = TransactionType.Payment,
                     Description = $"Pago de Deuda - Consumiciones",
-                    PaymentMethodId = request.PaymentMethodId.Value
+                    PaymentMethodId = request.PaymentMethodId.Value,
+                    ProcessedBy = User.Identity?.Name ?? "Admin"
                 };
                 _context.Transactions.Add(transaction);
             }
@@ -376,10 +388,11 @@ namespace PadelQ.Api.Controllers
                     {
                         UserId = booking.UserId,
                         Amount = totalToPay,
-                        Date = DateTime.UtcNow,
+                        Date = TimeZoneHelper.GetArgNow(),
                         Type = TransactionType.Payment,
                         Description = description,
-                        PaymentMethodId = paymentMethodId
+                        PaymentMethodId = paymentMethodId,
+                        ProcessedBy = User.Identity?.Name ?? "Admin"
                     };
                     _context.Transactions.Add(transaction);
                 }

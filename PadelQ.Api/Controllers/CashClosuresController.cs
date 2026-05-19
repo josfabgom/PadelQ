@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PadelQ.Domain;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 using System;
@@ -251,9 +252,24 @@ namespace PadelQ.Api.Controllers
             var activeClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen && c.OpenedBy == User.Identity.Name);
             if (!activeClosure) return BadRequest("No tienes una caja abierta para registrar movimientos.");
 
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "particular@padelq.com");
+            if (user == null)
+            {
+                user = new ApplicationUser
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserName = "particular@padelq.com",
+                    Email = "particular@padelq.com",
+                    FullName = "Consumidor Final (Particular)",
+                    IsActive = true
+                };
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+            }
+
             var transaction = new Transaction
             {
-                UserId = "Particular",
+                UserId = user.Id,
                 Amount = request.Amount,
                 Date = GetArgNow(),
                 Type = request.IsIncome ? TransactionType.CashIn : TransactionType.CashOut,
@@ -319,26 +335,7 @@ namespace PadelQ.Api.Controllers
             return Ok("Todas las cajas abiertas han sido cerradas forzosamente.");
         }
 
-        private DateTime GetArgNow()
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
-                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            }
-            catch
-            {
-                try
-                {
-                    var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-                }
-                catch
-                {
-                    return DateTime.UtcNow.AddHours(-3);
-                }
-            }
-        }
+        private DateTime GetArgNow() => TimeZoneHelper.GetArgNow();
     }
 
     public class ManualAdjustmentRequest {

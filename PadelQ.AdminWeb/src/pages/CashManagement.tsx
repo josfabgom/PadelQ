@@ -66,6 +66,7 @@ const CashManagement = () => {
     const [activeSessions, setActiveSessions] = useState<any[]>([]);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [openingSubmit, setOpeningSubmit] = useState(false);
+    const [journalFilter, setJournalFilter] = useState<'all' | 'direct' | 'others'>('all');
 
     const config = getAuthConfig();
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
@@ -137,7 +138,8 @@ const CashManagement = () => {
             setSelectedMethodId(null);
             fetchData();
         } catch (err: any) {
-            alert(err.response?.data || "Error al registrar movimiento");
+            const errorMsg = err.response?.data?.message || err.response?.data || err.message || "Error al registrar movimiento";
+            alert(typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg);
         }
     };
 
@@ -525,7 +527,7 @@ const CashManagement = () => {
                     {/* Daily Journal Section */}
                     {currentStatus?.activeClosure && (
                         <div className="bg-white rounded-[40px] p-10 border border-black/5 shadow-[0_20px_60px_rgb(0,0,0,0.02)]">
-                            <div className="flex items-center justify-between mb-8 pb-6 border-b border-zinc-100">
+                            <div className="flex items-center justify-between mb-8 pb-6 border-b border-zinc-100 flex-wrap gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white">
                                         <History className="w-6 h-6" />
@@ -535,12 +537,38 @@ const CashManagement = () => {
                                         <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Todos los movimientos del día</p>
                                     </div>
                                 </div>
+                                <div className="flex items-center gap-1 bg-zinc-100 p-1.5 rounded-2xl border border-zinc-200">
+                                    <button
+                                        onClick={() => setJournalFilter('all')}
+                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${journalFilter === 'all' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                    >
+                                        Todos
+                                    </button>
+                                    <button
+                                        onClick={() => setJournalFilter('direct')}
+                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${journalFilter === 'direct' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                    >
+                                        Ventas Directas
+                                    </button>
+                                    <button
+                                        onClick={() => setJournalFilter('others')}
+                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${journalFilter === 'others' ? 'bg-white text-black shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                    >
+                                        Otros
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-4">
                                 {(() => {
                                     const allTransactions = currentStatus.summary
                                         .flatMap((s: any) => s.transactions.map((t: any) => ({ ...t, method: s.method, color: s.color })))
+                                        .filter((t: any) => {
+                                            const isDirect = t.description?.toUpperCase().includes('VENTA DIRECTA');
+                                            if (journalFilter === 'direct') return isDirect;
+                                            if (journalFilter === 'others') return !isDirect;
+                                            return true;
+                                        })
                                         .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                                     if (allTransactions.length === 0) {
