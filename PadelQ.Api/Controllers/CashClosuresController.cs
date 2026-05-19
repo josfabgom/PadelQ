@@ -116,22 +116,36 @@ namespace PadelQ.Api.Controllers
         [HttpPost("open")]
         public async Task<IActionResult> OpenCash([FromBody] OpenCashRequest request)
         {
-            var openClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen && c.OpenedBy == User.Identity.Name);
-            if (openClosure) return BadRequest("Ya tienes una caja abierta.");
-
-            var closure = new CashClosure
+            using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            try
             {
-                OpeningDate = GetArgNow(),
-                InitialCash = request.InitialCash,
-                OpenedBy = User.Identity?.Name ?? "Admin",
-                IsOpen = true,
-                Notes = request.Notes
-            };
+                var username = User.Identity?.Name ?? "Admin";
+                var openClosure = await _context.CashClosures.AnyAsync(c => c.IsOpen && c.OpenedBy == username);
+                if (openClosure) 
+                {
+                    return BadRequest("Ya tienes una caja abierta.");
+                }
 
-            _context.CashClosures.Add(closure);
-            await _context.SaveChangesAsync();
+                var closure = new CashClosure
+                {
+                    OpeningDate = GetArgNow(),
+                    InitialCash = request.InitialCash,
+                    OpenedBy = username,
+                    IsOpen = true,
+                    Notes = request.Notes
+                };
 
-            return Ok(closure);
+                _context.CashClosures.Add(closure);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(closure);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Error al abrir caja: {ex.Message}");
+            }
         }
 
         [HttpPost("close")]

@@ -159,7 +159,7 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
-        public async Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, decimal depositPaid = 0)
+        public async Task<(bool Success, string Message, Guid BookingId)> CreateAdminBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, decimal depositPaid = 0, decimal? price = null)
         {
             // Forzar la interpretación de la hora como LOCAL absoluta compensando conversiones UTC
             if (startTime.Kind == DateTimeKind.Utc)
@@ -235,7 +235,7 @@ namespace PadelQ.Infrastructure.Services
                         .FirstOrDefaultAsync();
                 }
 
-                var basePrice = (decimal)(durationMinutes / 60.0) * effectivePricePerHour;
+                var basePrice = price ?? ((decimal)(durationMinutes / 60.0) * effectivePricePerHour);
                 var finalPrice = basePrice * (1 - (membershipDiscount / 100m));
 
                 var booking = new Booking
@@ -315,7 +315,7 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
-        public async Task<(bool Success, string Message, List<Guid> BookingIds)> CreateRecurringBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, DateTime endDate, decimal depositPaid = 0)
+        public async Task<(bool Success, string Message, List<Guid> BookingIds)> CreateRecurringBooking(string? userId, string? guestName, string? guestPhone, string? guestEmail, string? dni, int courtId, DateTime startTime, int durationMinutes, DateTime endDate, decimal depositPaid = 0, decimal? price = null)
         {
             var bookingIds = new List<Guid>();
             var recurrenceGroupId = Guid.NewGuid();
@@ -409,7 +409,7 @@ namespace PadelQ.Infrastructure.Services
                         return (false, $"La cancha está bloqueada por una actividad programada el día {currentStartTime:dd/MM/yyyy}. Serie cancelada.", new List<Guid>());
                     }
 
-                    var basePrice = (decimal)(durationMinutes / 60.0) * effectivePricePerHour;
+                    var basePrice = price ?? ((decimal)(durationMinutes / 60.0) * effectivePricePerHour);
                     var finalPrice = basePrice * (1 - (membershipDiscount / 100m));
 
                     var booking = new Booking

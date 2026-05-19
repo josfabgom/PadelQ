@@ -65,6 +65,7 @@ const CashManagement = () => {
     const [error, setError] = useState<string | null>(null);
     const [activeSessions, setActiveSessions] = useState<any[]>([]);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const [openingSubmit, setOpeningSubmit] = useState(false);
 
     const config = getAuthConfig();
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
@@ -104,6 +105,8 @@ const CashManagement = () => {
     };
 
     const handleOpenCash = async () => {
+        if (openingSubmit) return;
+        setOpeningSubmit(true);
         try {
             await api.post('/api/cash-closures/open', { initialCash, notes }, config);
             setIsOpening(false);
@@ -112,6 +115,8 @@ const CashManagement = () => {
             fetchData();
         } catch (err: any) {
             alert(err.response?.data || "Error al abrir caja");
+        } finally {
+            setOpeningSubmit(false);
         }
     };
 
@@ -667,9 +672,10 @@ const CashManagement = () => {
                             </div>
                             <button
                                 onClick={handleOpenCash}
-                                className="w-full py-6 bg-emerald-500 text-white rounded-[28px] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all"
+                                disabled={openingSubmit}
+                                className="w-full py-6 bg-emerald-500 disabled:bg-zinc-300 text-white rounded-[28px] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all"
                             >
-                                Confirmar Apertura
+                                {openingSubmit ? "Abriendo Caja..." : "Confirmar Apertura"}
                             </button>
                         </div>
                     </div>

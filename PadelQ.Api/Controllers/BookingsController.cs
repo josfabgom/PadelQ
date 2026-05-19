@@ -122,7 +122,8 @@ namespace PadelQ.Api.Controllers
                     request.StartTime,
                     request.DurationMinutes,
                     request.EndDate.Value,
-                    request.DepositPaid
+                    request.DepositPaid,
+                    request.Price
                 );
 
                 if (!success) return BadRequest(message);
@@ -139,7 +140,8 @@ namespace PadelQ.Api.Controllers
                     request.CourtId,
                     request.StartTime,
                     request.DurationMinutes,
-                    request.DepositPaid
+                    request.DepositPaid,
+                    request.Price
                 );
 
                 if (!success) return BadRequest(message);
@@ -258,5 +260,6 @@ namespace PadelQ.Api.Controllers
         public bool IsRecurring { get; set; } = false;
         public DateTime? EndDate { get; set; }
         public decimal DepositPaid { get; set; } = 0;
+        public decimal? Price { get; set; }
     }
 }

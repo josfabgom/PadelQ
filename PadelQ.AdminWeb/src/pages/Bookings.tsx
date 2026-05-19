@@ -329,6 +329,7 @@ const BookingsPage = () => {
     const [duration, setDuration] = useState(60);
     const [isFree, setIsFree] = useState(false);
     const [searchClient, setSearchClient] = useState('');
+    const [customPrice, setCustomPrice] = useState<number | ''>('');
 
     const [isRecurring, setIsRecurring] = useState(false);
     const [multiCourtSuggestion, setMultiCourtSuggestion] = useState<{
@@ -1346,7 +1347,7 @@ const BookingsPage = () => {
                     durationMinutes: duration,
                     isRecurring: isRecurring,
                     endDate: isRecurring ? endDate : null,
-                    price: isFree ? 0 : ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour),
+                    price: isFree ? 0 : (customPrice !== '' ? Number(customPrice) : ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)),
                     depositPaid: depositPaid
                 };
                 await api.post('/api/bookings/admin-create', payload, config);
@@ -1361,7 +1362,7 @@ const BookingsPage = () => {
                     startTime: startTimeStr,
                     endTime: endTimeStr,
                     durationMinutes: duration,
-                    price: isFree ? 0 : (selectedTimeSlot.resource.data as Space).pricePerSlot,
+                    price: isFree ? 0 : (customPrice !== '' ? Number(customPrice) : (selectedTimeSlot.resource.data as Space).pricePerSlot),
                     depositPaid: depositPaid,
                     status: 1
                 };
@@ -1543,6 +1544,7 @@ const BookingsPage = () => {
         setIncludePreviousDebt(false);
         setDuration(60);
         setIsFree(false);
+        setCustomPrice('');
         setIsRecurring(false);
         setDepositPaid(0);
         setSelectedBooking(null);
@@ -2607,7 +2609,7 @@ const BookingsPage = () => {
             {/* Booking Modal */}
             {isModalOpen && selectedTimeSlot && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-6">
-                    <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
                         <div className="p-6 bg-black text-white relative">
                             <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute right-6 top-6 p-2 hover:bg-white/10 rounded-xl transition-colors">
                                 <X className="w-4 h-4" />
@@ -2698,7 +2700,7 @@ const BookingsPage = () => {
                             </div>
                         </div>
 
-                        <form onSubmit={handleCreateBooking} className="p-7 space-y-6">
+                        <form onSubmit={handleCreateBooking} className="p-7 space-y-6 overflow-y-auto flex-1">
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
@@ -2818,6 +2820,30 @@ const BookingsPage = () => {
                                 </div>
                             )}
 
+                            {existingUser?.role?.toLowerCase() === 'teacher' && (
+                                <div className="p-5 bg-amber-50/40 border border-amber-200/60 rounded-[28px] space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1 bg-amber-500 rounded-lg">
+                                            <DollarSign className="w-3.5 h-3.5 text-black" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-amber-700 tracking-wider">Importe del Alquiler (Profesor)</p>
+                                            <p className="text-[8px] font-bold text-amber-500 uppercase tracking-tight">Tarifa especial para instructores</p>
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                                        <input
+                                            type="number"
+                                            value={customPrice}
+                                            onChange={(e) => setCustomPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                                            className="w-full pl-12 pr-6 py-4 bg-white border border-amber-200 rounded-2xl focus:ring-4 focus:ring-amber-500/10 outline-none font-bold text-sm text-amber-900 shadow-sm"
+                                            placeholder="Dejar vacío para usar tarifa estándar..."
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="h-px bg-zinc-100 my-4"></div>
 
                             <div className="grid grid-cols-2 gap-8">
@@ -2911,14 +2937,19 @@ const BookingsPage = () => {
                                         <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest animate-pulse">
                                             {selectedClientMembership
                                                 ? `Beneficio ${selectedClientMembership.name} (${selectedClientMembership.discount}%): $${(
-                                                    selectedTimeSlot.resource.type === 'court'
-                                                        ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour * (1 - selectedClientMembership.discount / 100))
-                                                        : ((selectedTimeSlot.resource.data as Space).pricePerSlot * (1 - selectedClientMembership.discount / 100))
+                                                    (customPrice !== '' 
+                                                        ? Number(customPrice) 
+                                                        : (selectedTimeSlot.resource.type === 'court'
+                                                            ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)
+                                                            : (selectedTimeSlot.resource.data as Space).pricePerSlot)
+                                                    ) * (1 - selectedClientMembership.discount / 100)
                                                 ).toFixed(2)}`
                                                 : `Total Cliente (S/M): $${(
-                                                    selectedTimeSlot.resource.type === 'court'
-                                                        ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)
-                                                        : (selectedTimeSlot.resource.data as Space).pricePerSlot
+                                                    customPrice !== '' 
+                                                        ? Number(customPrice) 
+                                                        : (selectedTimeSlot.resource.type === 'court'
+                                                            ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)
+                                                            : (selectedTimeSlot.resource.data as Space).pricePerSlot)
                                                 ).toFixed(2)}`
                                             }
                                         </span>
@@ -2926,9 +2957,11 @@ const BookingsPage = () => {
                                     {bookingType === 'guest' && (
                                         <span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">
                                             Total: ${(
-                                                selectedTimeSlot.resource.type === 'court'
-                                                    ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)
-                                                    : (selectedTimeSlot.resource.data as Space).pricePerSlot
+                                                customPrice !== '' 
+                                                    ? Number(customPrice) 
+                                                    : (selectedTimeSlot.resource.type === 'court'
+                                                        ? ((duration / 60) * (selectedTimeSlot.resource.data as Court).pricePerHour)
+                                                        : (selectedTimeSlot.resource.data as Space).pricePerSlot)
                                             ).toFixed(2)}
                                         </span>
                                     )}
