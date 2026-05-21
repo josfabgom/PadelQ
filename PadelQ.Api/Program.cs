@@ -71,6 +71,7 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IQrService, QrService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IChatbotService, ChatbotService>();
 builder.Services.AddHostedService<BillingBackgroundService>();
 builder.Services.AddMemoryCache();
 
@@ -149,6 +150,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 // app.UseHttpsRedirection();
 app.UseAuthentication();
