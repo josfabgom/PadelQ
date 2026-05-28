@@ -67,11 +67,11 @@ namespace PadelQ.Api.Controllers
                         Method = m.Name,
                         MethodId = m.Id,
                         Color = m.HexColor ?? "#888888",
-                        Total = methodTransactions.Sum(t => t.Amount),
+                        Total = methodTransactions.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount),
                         Count = methodTransactions.Count(),
                         Transactions = methodTransactions.OrderByDescending(t => t.Date).Select(t => new {
                             t.Id,
-                            t.Amount,
+                            Amount = t.Type == TransactionType.CashOut ? -t.Amount : t.Amount,
                             t.Date,
                             t.Description,
                             t.ProcessedBy,
@@ -88,11 +88,11 @@ namespace PadelQ.Api.Controllers
                         Method = "No Especificado",
                         MethodId = 0,
                         Color = "#888888",
-                        Total = unassignedTrans.Sum(t => t.Amount),
+                        Total = unassignedTrans.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount),
                         Count = unassignedTrans.Count(),
                         Transactions = unassignedTrans.OrderByDescending(t => t.Date).Select(t => new {
                             t.Id,
-                            t.Amount,
+                            Amount = t.Type == TransactionType.CashOut ? -t.Amount : t.Amount,
                             t.Date,
                             t.Description,
                             t.ProcessedBy,
@@ -104,7 +104,7 @@ namespace PadelQ.Api.Controllers
                 return Ok(new {
                     activeClosure,
                     summary,
-                    totalAmount = transactions.Sum(t => t.Amount),
+                    totalAmount = transactions.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount),
                     lastClosureDate
                 });
             }
@@ -236,7 +236,7 @@ namespace PadelQ.Api.Controllers
                 closure,
                 transactions = transactions.Select(t => new {
                     t.Id,
-                    t.Amount,
+                    Amount = t.Type == TransactionType.CashOut ? -t.Amount : t.Amount,
                     t.Date,
                     t.Description,
                     t.ProcessedBy,

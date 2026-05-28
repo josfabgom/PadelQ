@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PadelQ AI Assistant - Reservas Online</title>
+    <title>Asistente de IA - Black Club de Pádel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.css">
     <style>
         :root {
-            --bg-color: #0b0c10;
-            --card-bg: rgba(26, 29, 38, 0.65);
-            --primary: #00ffcc;
-            --primary-glow: rgba(0, 255, 204, 0.4);
-            --accent: #2ecc71;
-            --accent-glow: rgba(46, 204, 113, 0.3);
+            --bg-color: #080808;
+            --card-bg: rgba(18, 18, 20, 0.8);
+            --primary: #e5c158;
+            --primary-glow: rgba(229, 193, 88, 0.25);
+            --accent: #ffffff;
+            --accent-glow: rgba(255, 255, 255, 0.15);
             --text-color: #f5f6fa;
-            --text-muted: #8b9bb4;
-            --border-color: rgba(255, 255, 255, 0.08);
-            --user-bubble: #1f2430;
-            --bot-bubble: rgba(0, 255, 204, 0.05);
-            --bot-border: rgba(0, 255, 204, 0.15);
+            --text-muted: #9aa0a6;
+            --border-color: rgba(255, 255, 255, 0.06);
+            --user-bubble: #202023;
+            --bot-bubble: rgba(229, 193, 88, 0.04);
+            --bot-border: rgba(229, 193, 88, 0.12);
         }
 
         * {
@@ -41,8 +41,8 @@
             min-height: 100vh;
             overflow: hidden;
             background-image: 
-                radial-gradient(circle at 10% 20%, rgba(0, 255, 204, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(46, 204, 113, 0.08) 0%, transparent 40%);
+                radial-gradient(circle at 10% 20%, rgba(229, 193, 88, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 255, 255, 0.03) 0%, transparent 40%);
         }
 
         /* Contenedor principal de Chat */
@@ -400,14 +400,12 @@
         <!-- Header -->
         <div class="chat-header">
             <div class="chat-profile">
-                <div class="bot-avatar">
-                    <i class="class-lucide icon-sparkles"></i>
-                </div>
-                <div class="bot-info">
-                    <h1>PadelQ AI Assistant</h1>
+                <img src="images/logo-full-white.png" alt="Black Club de Pádel" style="height: 38px; object-fit: contain;">
+                <div class="bot-info" style="margin-left: 8px;">
+                    <h1 style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400; text-transform: uppercase; letter-spacing: 1.5px;">Asistente Virtual</h1>
                     <div class="bot-status">
                         <span class="status-dot"></span>
-                        <span>Online</span>
+                        <span style="color: var(--primary);">Online</span>
                     </div>
                 </div>
             </div>
@@ -422,7 +420,7 @@
         <div class="chat-messages" id="chat-messages">
             <!-- Mensaje Inicial -->
             <div class="message bot">
-                <p>¡Hola! 🎾 Soy tu **PadelQ AI Web Assistant**.</p>
+                <p>¡Hola! 🎾 Soy tu **Asistente Virtual de Black Club**.</p>
                 <p>Estoy aquí para decirte qué turnos y canchas están disponibles y ayudarte a reservar en segundos. ¿En qué puedo ayudarte hoy?</p>
             </div>
         </div>
@@ -443,7 +441,7 @@
         <!-- Input Area -->
         <div class="chat-input-area">
             <div class="input-wrapper">
-                <input type="text" class="chat-input" id="chat-input" placeholder="Pregúntale a PadelQ AI..." autocomplete="off">
+                <input type="text" class="chat-input" id="chat-input" placeholder="Pregúntale a Black Club AI..." autocomplete="off">
             </div>
             <button class="send-btn" id="send-btn">
                 <i class="class-lucide icon-send"></i>
@@ -452,7 +450,7 @@
 
         <!-- Footer -->
         <div class="branding-footer">
-            Powered by <a href="#" target="_blank">PadelQ AI Engine</a>
+            Powered by <a href="#" target="_blank">Black Club AI Engine</a>
         </div>
     </div>
 
@@ -550,7 +548,7 @@
 
             } catch (error) {
                 removeTypingIndicator();
-                appendMessage('bot', `⚠️ **Error:** No se pudo conectar con el asistente virtual de PadelQ. Detalle: ${error.message}`);
+                appendMessage('bot', `⚠️ **Error:** No se pudo conectar con el asistente virtual de Black Club. Detalle: ${error.message}`);
             }
         }
 

@@ -36,7 +36,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> {
       setState(() {
         _messages.add(ChatMessage(
           role: 'model',
-          text: '¡Hola, $userName! 🎾 Soy tu **PadelQ AI Assistant**.\n\nPuedo ayudarte a encontrar horarios libres y reservar canchas al instante usando lenguaje natural.\n\nPrueba preguntándome:\n- *¿Qué canchas están libres hoy por la tarde?*\n- *¿Hay disponibilidad para mañana a las 18:00?*\n- *Reserva la Cancha Cristal mañana a las 19 hs por 90 min*',
+          text: '¡Hola, $userName! 🎾 Soy tu **Asistente Virtual de Black Club**.\n\nPuedo ayudarte a encontrar horarios libres y reservar canchas al instante usando lenguaje natural.\n\nPrueba preguntándome:\n- *¿Qué canchas están libres hoy por la tarde?*\n- *¿Hay disponibilidad para mañana a las 18:00?*\n- *Reserva la Cancha Cristal mañana a las 19 hs por 90 min*',
         ));
       });
     });

@@ -37,6 +37,28 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
         }
 
+        [HttpGet("booking/{bookingId}")]
+        public async Task<ActionResult<IEnumerable<Transaction>>> GetBookingTransactions(Guid bookingId)
+        {
+            return await _context.Transactions
+                .Include(t => t.PaymentMethod)
+                .Include(t => t.User)
+                .Where(t => t.BookingId == bookingId)
+                .OrderBy(t => t.Date)
+                .ToListAsync();
+        }
+
+        [HttpGet("spacebooking/{spaceBookingId}")]
+        public async Task<ActionResult<IEnumerable<Transaction>>> GetSpaceBookingTransactions(Guid spaceBookingId)
+        {
+            return await _context.Transactions
+                .Include(t => t.PaymentMethod)
+                .Include(t => t.User)
+                .Where(t => t.SpaceBookingId == spaceBookingId)
+                .OrderBy(t => t.Date)
+                .ToListAsync();
+        }
+
         [HttpGet("balance/{userId}")]
         public async Task<ActionResult<decimal>> GetUserBalance(string userId)
         {

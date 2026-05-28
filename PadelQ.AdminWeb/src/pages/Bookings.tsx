@@ -50,7 +50,8 @@ import {
     History,
     RotateCcw,
     Zap,
-    QrCode
+    QrCode,
+    Gift
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -308,8 +309,21 @@ const BookingsPage = () => {
     const [globalFractionsCount, setGlobalFractionsCount] = useState(1);
     const [selectedGlobalFractions, setSelectedGlobalFractions] = useState<number[]>([0]);
     const [paymentObservation, setPaymentObservation] = useState('');
+    const [isConfirmPaymentModalOpen, setIsConfirmPaymentModalOpen] = useState(false);
+    const [bookingTransactions, setBookingTransactions] = useState<any[]>([]);
     const [userBalance, setUserBalance] = useState<number>(0);
     const [includePreviousDebt, setIncludePreviousDebt] = useState(false);
+
+    const fetchBookingTransactions = async (bookingId: string, isSpace: boolean) => {
+        try {
+            const url = isSpace ? `/api/transaction/spacebooking/${bookingId}` : `/api/transaction/booking/${bookingId}`;
+            const res = await api.get(url, config);
+            setBookingTransactions(res.data || []);
+        } catch (e) {
+            console.error("Error fetching transactions for booking:", e);
+            setBookingTransactions([]);
+        }
+    };
     const [ctaCteUserSearch, setCtaCteUserSearch] = useState('');
     const [ctaCteFilteredClients, setCtaCteFilteredClients] = useState<any[]>([]);
     
@@ -629,6 +643,17 @@ const BookingsPage = () => {
 
             await api.post('/api/consumptions/bulk-direct-sale', payload, config);
 
+            // --- COMBO TICKET PRINT ---
+            directSaleData.consumptions.forEach(item => {
+                const prod = allProducts.find(p => p.id === item.productId);
+                if (prod && prod.isDoubleUnitCombo) {
+                    handlePrintComboTicket({
+                        productName: prod.name,
+                        quantity: item.quantity
+                    }, selectedCtaCteUser?.fullName || directSaleData.clientName || 'Particular');
+                }
+            });
+
             setIsDirectSaleModalOpen(false);
             
             if (isInternal) {
@@ -861,11 +886,18 @@ const BookingsPage = () => {
                     const booking = selectedBooking || selectedSpaceBooking;
                     if (!booking) return;
 
-                    await api.post('/api/consumptions', {
+                    const res = await api.post('/api/consumptions', {
                         bookingId: booking.id,
                         productId: product.id,
                         quantity: 1
                     }, config);
+
+                    if (product.isDoubleUnitCombo) {
+                        handlePrintComboTicket({
+                            productName: product.name,
+                            quantity: 1
+                        }, booking.user?.fullName || booking.guestName || 'Particular', res.data?.id);
+                    }
 
                     const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, config);
                     setBookingConsumptions(consRes.data || []);
@@ -1098,6 +1130,7 @@ const BookingsPage = () => {
                 setSelectedBooking(existing);
                 setSelectedSpaceBooking(null);
                 setIsDetailsModalOpen(true);
+                fetchBookingTransactions(existing.id, false);
                 // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
                 setSelectedCourtParts({ [existing.id]: [0] });
                 setCourtFractions({ [existing.id]: 1 });
@@ -1180,6 +1213,7 @@ const BookingsPage = () => {
                 setSelectedSpaceBooking(existing);
                 setSelectedBooking(null);
                 setIsDetailsModalOpen(true);
+                fetchBookingTransactions(existing.id, true);
                 // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
                 setSelectedCourtParts({ [existing.id]: [0] });
                 setCourtFractions({ [existing.id]: 1 });
@@ -1561,6 +1595,8 @@ const BookingsPage = () => {
         setBarcodeInput('');
         setProductSearch('');
         setPaymentObservation('');
+        setIsConfirmPaymentModalOpen(false);
+        setBookingTransactions([]);
         setIsMixedPayment(false);
         setIsMixedPaymentModalOpen(false);
         setSecondPaymentMethod('');
@@ -1572,6 +1608,7 @@ const BookingsPage = () => {
     };
 
     const handleConfirmPayment = async () => {
+        setIsConfirmPaymentModalOpen(false);
         const booking = selectedBooking || selectedSpaceBooking;
         const isSpace = !!selectedSpaceBooking;
 
@@ -1805,6 +1842,15 @@ const BookingsPage = () => {
                     const paymentForThisRecord = Math.min(remainingPaymentToDistribute, recordRemaining);
                     if (paymentForThisRecord >= recordRemaining) {
                         await api.put(`/api/consumptions/${record.id}/pay`, {}, config);
+                        
+                        // --- COMBO TICKET PRINT ---
+                        const prod = allProducts.find(p => p.id === record.productId);
+                        if (prod && prod.isDoubleUnitCombo) {
+                            handlePrintComboTicket({
+                                productName: prod.name,
+                                quantity: record.quantity
+                            }, booking.user?.fullName || booking.guestName || 'Particular');
+                        }
                     } else {
                         await api.post(`/api/consumptions/${record.id}/partial-pay?amount=${paymentForThisRecord}`, {}, config);
                     }
@@ -1827,6 +1873,7 @@ const BookingsPage = () => {
 
                 if (isSpace) setSelectedSpaceBooking(updatedMain);
                 else setSelectedBooking(updatedMain);
+                await fetchBookingTransactions(booking.id, isSpace);
                 
                 // Actualizar la lista de relatedBookings con los datos nuevos
                 setRelatedBookings(prev => prev.map(rb => {
@@ -1926,6 +1973,83 @@ const BookingsPage = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handlePrintComboTicket = (comboItem: any, clientName: string, consumptionId?: string) => {
+        const printWindow = window.open('', '_blank', 'width=300,height=600');
+        if (!printWindow) return;
+
+        const ticketHtml = `
+            <html>
+            <head>
+                <style>
+                    @media print {
+                        @page { margin: 0; }
+                        body { margin: 0; padding: 0; }
+                    }
+                    body { 
+                        font-family: 'Courier New', Courier, monospace; 
+                        width: 80mm; 
+                        margin: 0; 
+                        padding: 4mm; 
+                        font-size: 12px;
+                        line-height: 1.3;
+                        color: #000;
+                    }
+                    .center { text-align: center; }
+                    .bold { font-weight: bold; }
+                    .line { border-bottom: 2px dashed #000; margin: 8px 0; }
+                    .title { font-size: 20px; margin-bottom: 2px; }
+                    .combo-title { font-size: 16px; margin: 10px 0; text-align: center; border: 2px solid #000; padding: 6px; }
+                    .footer { font-size: 10px; margin-top: 15px; text-align: center; }
+                </style>
+            </head>
+            <body>
+                <div class="center">
+                    <div class="bold" style="border: 1px solid #000; padding: 2px; display: inline-block; font-size: 10px; margin-bottom: 5px;">TICKET DE RETIRO (PENDIENTE)</div>
+                    <div class="title bold">${companyInfo.name.toUpperCase()}</div>
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        Fecha: ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
+                    </div>
+                </div>
+                
+                <div class="line"></div>
+                <div class="uppercase"><strong>CLIENTE:</strong> ${clientName || 'Particular'}</div>
+                ${consumptionId ? `<div style="font-size: 10px; margin-top: 3px; text-align: center;"><strong>ID VALE:</strong> ${consumptionId.substring(0, 8).toUpperCase()}</div>` : ''}
+                <div class="line"></div>
+                
+                <div class="combo-title bold uppercase">
+                    VALE POR LA SEGUNDA UNIDAD
+                </div>
+                
+                <div class="center" style="font-size: 14px; margin: 10px 0;">
+                    <strong>PRODUCTO:</strong><br/>
+                    ${comboItem.productName}
+                </div>
+                
+                <div class="center" style="font-size: 12px; margin-top: 5px;">
+                    Cantidad: ${comboItem.quantity} vale(s)
+                </div>
+                
+                <div class="line"></div>
+                
+                <div class="footer">
+                    Presente este ticket en barra/mostrador para retirar su unidad restante.<br/><br/>
+                    ¡Muchas gracias!
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.write(ticketHtml);
+        printWindow.document.close();
     };
 
     const handlePrintTicket = () => {
@@ -2064,6 +2188,68 @@ const BookingsPage = () => {
         printWindow.document.write(ticketHtml);
         printWindow.document.close();
     };
+
+    // Horizontal Date Selector (Daily View)
+    const getCurrentTransactionBreakdown = () => {
+        const booking = selectedBooking || selectedSpaceBooking;
+        if (!booking) return { rent: 0, consumptions: 0, previousDebt: 0, total: 0 };
+
+        let rent = 0;
+        let consumptions = 0;
+
+        const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
+        const isConsolidated = selectedRelatedBookingIds.length > 0;
+        
+        if (isConsolidated) {
+            const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
+            const fractions = courtFractions['consolidated-rent'] || 1;
+            const selectedParts = selectedCourtParts['consolidated-rent'] || [];
+            if (totalConsolidatedDebt > 0 && selectedParts.length > 0) {
+                rent = (totalConsolidatedDebt / fractions) * selectedParts.length;
+            }
+        } else {
+            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+            const mainFractions = courtFractions[booking.id] || 1;
+            const mainSelectedParts = selectedCourtParts[booking.id] || [];
+            if (mainRentDebt > 0 && mainSelectedParts.length > 0) {
+                rent = (mainRentDebt / mainFractions) * mainSelectedParts.length;
+            }
+        }
+
+        const unpaidConsumptions = (bookingConsumptions || []).filter(c => !c.isPaid);
+        const grouped = unpaidConsumptions.reduce((acc, c) => {
+            const pid = c.productId;
+            if (!acc[pid]) {
+                acc[pid] = { totalPrice: 0, totalDeposit: 0 };
+            }
+            acc[pid].totalPrice += (c.totalPrice || 0);
+            acc[pid].totalDeposit += (c.depositPaid || 0);
+            return acc;
+        }, {} as Record<number, any>);
+
+        Object.keys(grouped).forEach(pid => {
+            const groupKey = `group-${pid}`;
+            const partsCount = consumptionFractions[groupKey] || 1;
+            const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
+            const remaining = grouped[Number(pid)].totalPrice - grouped[Number(pid)].totalDeposit;
+            if (remaining > 0) {
+                consumptions += (remaining / partsCount) * selectedPartsCount;
+            }
+        });
+
+        let previousDebt = 0;
+        if (includePreviousDebt && userBalance < 0) {
+            previousDebt = Math.abs(userBalance);
+        }
+
+        return { rent, consumptions, previousDebt, total: rent + consumptions + previousDebt };
+    };
+
+    const getCurrentTransactionTotal = () => {
+        return getCurrentTransactionBreakdown().total;
+    };
+
+    const currentTransactionTotal = getCurrentTransactionTotal();
 
     // Horizontal Date Selector (Daily View)
     const days = Array.from({ length: 14 }, (_, i) => addDays(startOfToday(), i));
@@ -3075,11 +3261,11 @@ const BookingsPage = () => {
                                                     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
                                                 ).map((c: any, idx) => (
                                                     <div key={idx} className="p-6 flex justify-between items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50/50 transition-colors">
-                                                        <div className="flex items-center gap-5">
+                                                        <div className="flex items-start gap-5 min-w-0 flex-1">
                                                             <div className="w-14 h-14 bg-white rounded-2xl border border-zinc-100 flex items-center justify-center shadow-sm">
                                                                 <Package className="w-6 h-6 text-black" />
                                                             </div>
-                                                            <div>
+                                                            <div className="min-w-0 flex-1">
                                                                 <p className="text-sm font-black uppercase italic tracking-tight text-black">{c.product?.name}</p>
                                                                 <p className="text-[10px] font-bold text-zinc-400 mt-0.5">
                                                                     <span className="text-black">{c.quantity}</span> UNIDADES x ${c.unitPrice.toLocaleString()}
@@ -3090,9 +3276,44 @@ const BookingsPage = () => {
                                                                         {c.notes ? `Obs: ${c.notes}` : ''}
                                                                     </p>
                                                                 ) : null}
+                                                                {c.product?.isDoubleUnitCombo && (
+                                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-2xl w-fit">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <Gift className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                                                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                                                                                2da Unidad: {c.isComboRedeemed ? 'Entregada' : 'Pendiente'}
+                                                                            </span>
+                                                                            <span className="text-[8px] font-mono bg-amber-500/20 text-amber-800 px-1.5 py-0.5 rounded font-black uppercase">
+                                                                                #{c.id.substring(0, 8).toUpperCase()}
+                                                                            </span>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    await api.put(`/api/consumptions/${c.id}/toggle-combo-redeem`, {}, getAuthConfig());
+                                                                                    const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                                                                    if (bookingId) {
+                                                                                        const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
+                                                                                        setBookingConsumptions(consRes.data || []);
+                                                                                    }
+                                                                                } catch (err: any) {
+                                                                                    console.error("Error al entregar combo:", err);
+                                                                                    alert("Error: " + (err.response?.data?.message || err.message));
+                                                                                }
+                                                                            }}
+                                                                            className={`ml-2 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
+                                                                                c.isComboRedeemed 
+                                                                                    ? 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300' 
+                                                                                    : 'bg-amber-500 text-white hover:bg-amber-600 shadow-md shadow-amber-500/10'
+                                                                            }`}
+                                                                        >
+                                                                            {c.isComboRedeemed ? 'Revertir' : 'Entregar'}
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-6">
+                                                        <div className="flex items-center gap-6 shrink-0 ml-4">
                                                             <span className="text-xl font-black italic tracking-tighter text-black">${c.totalPrice.toLocaleString()}</span>
                                                             
                                                             {c.isPaid ? (
@@ -3411,8 +3632,8 @@ const BookingsPage = () => {
                                         const totalAccountDebt = totalRentRemaining + totalConsumptionRemaining + relatedBookingsTotalDebt;
 
                                         return (
-                                            <div className="space-y-4">
-                                                <div className="space-y-4 bg-zinc-50 p-7 rounded-[32px] border border-zinc-100 shadow-sm">
+                                            <div className="space-y-3">
+                                                <div className="space-y-3 bg-zinc-50 p-5 rounded-[28px] border border-zinc-100 shadow-sm">
                                                     <div className="flex justify-between items-center text-zinc-500 text-[10px] font-black uppercase tracking-widest">
                                                         <span>Deuda Total Seleccionada</span>
                                                         <span className="font-outfit">{formatARS(totalAccountDebt)}</span>
@@ -3434,7 +3655,57 @@ const BookingsPage = () => {
                                                             </div>
                                                         )}
 
-                                                    <div className="pt-5 flex justify-between items-end border-t border-zinc-200">
+                                                        {bookingTransactions.length > 0 && (
+                                                            <div className="space-y-1.5 mt-1.5 pt-1.5 border-t border-zinc-200/50">
+                                                                <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Desglose de Transacciones:</p>
+                                                                <div className="space-y-1.5 max-h-[110px] overflow-y-auto pr-1">
+                                                                    {bookingTransactions.map((tx: any) => {
+                                                                        const hasObs = tx.description && tx.description.includes("- Obs:");
+                                                                        const obsText = hasObs ? tx.description.split("- Obs:")[1]?.trim() : "";
+                                                                        const cleanDesc = hasObs ? tx.description.split("- Obs:")[0]?.trim() : tx.description;
+                                                                        const isPayment = tx.type === 1 || tx.type === 'Payment' || tx.type === 2 || tx.type === 'MembershipPayment';
+                                                                        
+                                                                        return (
+                                                                            <div key={tx.id} className="p-2 bg-white border border-zinc-100 rounded-2xl flex flex-col gap-1 shadow-sm hover:border-zinc-200 transition-all">
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        {tx.paymentMethod ? (
+                                                                                            <span 
+                                                                                                className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full text-white" 
+                                                                                                style={{ backgroundColor: tx.paymentMethod.hexColor || '#888' }}
+                                                                                            >
+                                                                                                {tx.paymentMethod.name}
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full text-white ${isPayment ? 'bg-zinc-400' : 'bg-amber-500'}`}>
+                                                                                                {isPayment ? 'Otro' : 'Cuenta Corriente'}
+                                                                                            </span>
+                                                                                        )}
+                                                                                        <span className="text-[8px] text-zinc-400 font-bold">
+                                                                                            {format(parseISO(tx.date), 'dd/MM/yyyy HH:mm')} hs
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span className={`text-[10px] font-black font-outfit ${isPayment ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                                        {isPayment ? '-' : '+'}{formatARS(tx.amount)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="flex justify-between items-center text-[7px] text-zinc-400 font-bold uppercase tracking-wider">
+                                                                                    <span className="truncate max-w-[200px]" title={cleanDesc}>{cleanDesc}</span>
+                                                                                    <span>Por: {tx.processedBy || 'Sistema'}</span>
+                                                                                </div>
+                                                                                {obsText && (
+                                                                                    <div className="mt-0.5 p-1.5 bg-blue-50/50 border border-blue-100/50 rounded-lg text-[8px] font-medium text-blue-600 italic">
+                                                                                        Obs: {obsText}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                    <div className="pt-3 flex justify-between items-end border-t border-zinc-200">
                                                             <div>
                                                                 <p className="text-zinc-900 text-[9px] font-black uppercase tracking-[0.3em] mb-1">DEUDA RESTANTE</p>
                                                             </div>
@@ -3446,8 +3717,8 @@ const BookingsPage = () => {
 
                                                     {/* DEUDA ANTERIOR TOGGLE */}
                                                     {userBalance < 0 && (
-                                                        <div className={`p-5 rounded-[32px] border transition-all ${includePreviousDebt ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-white border-zinc-100 hover:border-zinc-200'}`}>
-                                                            <div className="flex items-center justify-between mb-3">
+                                                        <div className={`p-3.5 rounded-[24px] border transition-all ${includePreviousDebt ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-white border-zinc-100 hover:border-zinc-200'}`}>
+                                                            <div className="flex items-center justify-between mb-2">
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${includePreviousDebt ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-zinc-100 text-zinc-400'}`}>
                                                                         <History className="w-5 h-5" />
@@ -3461,7 +3732,7 @@ const BookingsPage = () => {
                                                             </div>
                                                             <button
                                                                 onClick={() => setIncludePreviousDebt(!includePreviousDebt)}
-                                                                className={`w-full py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${includePreviousDebt 
+                                                                className={`w-full py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${includePreviousDebt 
                                                                     ? 'bg-amber-500 text-white shadow-xl shadow-amber-500/20 hover:bg-amber-600' 
                                                                     : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
                                                             >
@@ -3472,13 +3743,13 @@ const BookingsPage = () => {
                                                     )}
                                                 </div>
 
-                                                <div className="flex justify-between items-end pt-2 pb-2">
+                                                <div className="flex justify-between items-end pt-1 pb-1">
                                                     <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Total de Selección</span>
                                                     <span className="text-3xl font-black italic text-emerald-500 tracking-tighter">{formatARS(currentTransactionTotal)}</span>
                                                 </div>
 
                                                 {currentTransactionTotal > 0 && currentTransactionTotal < totalAccountDebt && (
-                                                    <div className="flex justify-between items-center mb-4 px-4 py-2 bg-zinc-50 rounded-2xl border border-zinc-100">
+                                                    <div className="flex justify-between items-center mb-3 px-4 py-1.5 bg-zinc-50 rounded-2xl border border-zinc-100">
                                                         <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Saldo Pendiente Después</span>
                                                         <span className="text-sm font-black italic text-zinc-600">{formatARS(totalAccountDebt - currentTransactionTotal)}</span>
                                                     </div>
@@ -3525,7 +3796,7 @@ const BookingsPage = () => {
                                                                         }
                                                                         setSelectedPaymentMethod(method.id.toString());
                                                                     }}
-                                                                    className={`p-4 rounded-[20px] border transition-all text-[10px] font-black uppercase flex flex-col items-center justify-center gap-1 ${selectedPaymentMethod === method.id.toString()
+                                                                    className={`p-2.5 rounded-[16px] border transition-all text-[9px] font-black uppercase flex flex-col items-center justify-center gap-1 ${selectedPaymentMethod === method.id.toString()
                                                                         ? 'bg-black text-white border-black shadow-lg'
                                                                         : 'bg-zinc-50 text-zinc-400 border-zinc-100 hover:border-black/20'
                                                                         }`}
@@ -3545,21 +3816,21 @@ const BookingsPage = () => {
                                                 </div>
 
                                                 {isMixedPayment && !isMixedPaymentModalOpen && (
-                                                    <div className="mt-2 p-3 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-top-1">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center">
-                                                                <DollarSign className="w-4 h-4 text-white" />
+                                                    <div className="mt-1.5 p-2 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
+                                                                <DollarSign className="w-3.5 h-3.5 text-white" />
                                                             </div>
                                                             <div>
                                                                 <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Configuración Mixta</p>
-                                                                <p className="text-[10px] font-black italic">
+                                                                <p className="text-[9px] font-black italic">
                                                                     {paymentMethods.find(m => m.id.toString() === selectedPaymentMethod)?.name}: {formatARS(firstMethodAmount)} + {paymentMethods.find(m => m.id.toString() === secondPaymentMethod)?.name}: {formatARS(currentTransactionTotal - firstMethodAmount)}
                                                                 </p>
                                                             </div>
                                                         </div>
                                                         <button 
                                                             onClick={() => setIsMixedPayment(false)}
-                                                            className="p-1.5 hover:bg-rose-50 text-rose-400 rounded-lg transition-colors"
+                                                            className="p-1 hover:bg-rose-50 text-rose-400 rounded-lg transition-colors"
                                                             title="Anular Pago Mixto"
                                                         >
                                                             <X className="w-3 h-3" />
@@ -3567,11 +3838,11 @@ const BookingsPage = () => {
                                                     </div>
                                                 )}
 
-                                                <div className="flex gap-3 pt-4">
+                                                <div className="flex gap-3 pt-3">
                                                     {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
                                                         <button
                                                             onClick={() => handleCancelBooking(selectedBooking || selectedSpaceBooking!)}
-                                                            className={`flex-1 py-5 rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-all ${isConfirmingCancel
+                                                            className={`flex-1 py-4 rounded-[24px] font-black uppercase text-[10px] tracking-widest transition-all ${isConfirmingCancel
                                                                 ? "bg-rose-600 text-white animate-pulse"
                                                                 : "bg-rose-50 text-rose-500"
                                                                 }`}
@@ -3580,9 +3851,9 @@ const BookingsPage = () => {
                                                         </button>
                                                     )}
                                                     <button
-                                                        onClick={handleConfirmPayment}
+                                                        onClick={() => setIsConfirmPaymentModalOpen(true)}
                                                         disabled={!selectedPaymentMethod || (isMixedPayment && !secondPaymentMethod) || currentTransactionTotal <= 0}
-                                                        className="flex-[2] py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                                                        className="flex-[2] py-4 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                                                     >
                                                         {isMixedPayment ? 'Efectuar Pago Mixto' : 'Efectuar Pago'}
                                                     </button>
@@ -3591,7 +3862,7 @@ const BookingsPage = () => {
                                                 {selectedBooking?.recurrenceGroupId && (
                                                     <button
                                                         onClick={() => handleCancelSeries(selectedBooking.recurrenceGroupId!)}
-                                                        className={`w-full py-4 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-3 border-2 ${isConfirmingSeriesCancel
+                                                        className={`w-full py-3.5 rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-3 border-2 ${isConfirmingSeriesCancel
                                                             ? 'bg-rose-500 text-white border-rose-500 animate-pulse'
                                                             : 'border-zinc-200 text-zinc-400 hover:border-rose-200 hover:text-rose-500'
                                                             }`}
@@ -3957,14 +4228,23 @@ const BookingsPage = () => {
                                     onClick={async () => {
                                         try {
                                             setIsAddingConsumption(productForObservation.id);
-                                            const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                            const booking = selectedBooking || selectedSpaceBooking;
+                                            const bookingId = booking?.id;
+                                            if (!bookingId) return;
                                             
-                                            await api.post('/api/consumptions', {
+                                            const res = await api.post('/api/consumptions', {
                                                 bookingId: bookingId,
                                                 productId: productForObservation.id,
                                                 quantity: 1,
                                                 notes: tempObservation
                                             }, getAuthConfig());
+
+                                            if (productForObservation.isDoubleUnitCombo) {
+                                                handlePrintComboTicket({
+                                                    productName: productForObservation.name,
+                                                    quantity: 1
+                                                }, booking.user?.fullName || booking.guestName || 'Particular', res.data?.id);
+                                            }
 
                                             const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
                                             setBookingConsumptions(consRes.data || []);
@@ -4182,6 +4462,127 @@ const BookingsPage = () => {
                                 {paymentSuccessInfo.isPartial ? 'Continuar Cobrando' : 'Finalizar'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE CONFIRMACIÓN DE PAGO (POPUP TÁCTIL) */}
+            {isConfirmPaymentModalOpen && (selectedBooking || selectedSpaceBooking) && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[110] p-6 font-outfit">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/10 flex flex-col">
+                        
+                        {/* Cabecera */}
+                        <div className="p-8 bg-zinc-900 text-white relative flex flex-col items-center text-center">
+                            <button 
+                                onClick={() => setIsConfirmPaymentModalOpen(false)} 
+                                className="absolute right-6 top-6 p-2 hover:bg-white/10 rounded-xl transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                            <div className="w-16 h-16 bg-emerald-500 rounded-3xl flex items-center justify-center mb-4 shadow-xl shadow-emerald-500/20">
+                                <DollarSign className="w-8 h-8 text-white" />
+                            </div>
+                            <h3 className="text-2xl font-black italic uppercase tracking-tight mb-1">Confirmar Cobro</h3>
+                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Verifica los datos e ingresa un comentario si es necesario</p>
+                        </div>
+
+                        {/* Contenido principal */}
+                        <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                            
+                            {/* Monto Destacado */}
+                            <div className="bg-zinc-50 rounded-3xl p-6 text-center border border-zinc-100">
+                                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1">Total a Cobrar</span>
+                                <span className="text-4xl font-black text-emerald-600 block tracking-tight">
+                                    {formatARS(currentTransactionTotal)}
+                                </span>
+                            </div>
+
+                            {/* Medio(s) de Pago */}
+                            <div className="space-y-3">
+                                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Medio de Pago</h4>
+                                <div className="bg-zinc-50 rounded-2xl p-4 flex items-center justify-between border border-zinc-100">
+                                    {isMixedPayment ? (
+                                        <div className="w-full space-y-2">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-bold text-zinc-500 uppercase">Mixto 1: {paymentMethods.find(m => m.id.toString() === selectedPaymentMethod)?.name}</span>
+                                                <span className="font-black text-zinc-700">{formatARS(firstMethodAmount)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs pt-2 border-t border-zinc-100">
+                                                <span className="font-bold text-zinc-500 uppercase">Mixto 2: {paymentMethods.find(m => m.id.toString() === secondPaymentMethod)?.name}</span>
+                                                <span className="font-black text-zinc-700">{formatARS(currentTransactionTotal - firstMethodAmount)}</span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex justify-between items-center w-full text-sm">
+                                            <span className="font-black text-zinc-700 uppercase italic">
+                                                {paymentMethods.find(m => m.id.toString() === selectedPaymentMethod)?.name}
+                                            </span>
+                                            <span className="font-black text-zinc-900">{formatARS(currentTransactionTotal)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Desglose de Conceptos */}
+                            {(() => {
+                                const breakdown = getCurrentTransactionBreakdown();
+                                return (
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Desglose de Conceptos</h4>
+                                        <div className="bg-zinc-50 rounded-2xl p-4 space-y-2 border border-zinc-100">
+                                            {breakdown.rent > 0 && (
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold text-zinc-400 uppercase">Renta de Cancha / Espacio</span>
+                                                    <span className="font-bold text-zinc-600">{formatARS(breakdown.rent)}</span>
+                                                </div>
+                                            )}
+                                            {breakdown.consumptions > 0 && (
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold text-zinc-400 uppercase">Consumiciones</span>
+                                                    <span className="font-bold text-zinc-600">{formatARS(breakdown.consumptions)}</span>
+                                                </div>
+                                            )}
+                                            {breakdown.previousDebt > 0 && (
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold text-zinc-400 uppercase">Deuda Anterior</span>
+                                                    <span className="font-bold text-zinc-600">{formatARS(breakdown.previousDebt)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Campo de Comentario / Observación */}
+                            <div className="space-y-3">
+                                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Observación / Quién pagó</h4>
+                                <textarea
+                                    value={paymentObservation}
+                                    onChange={(e) => setPaymentObservation(e.target.value)}
+                                    placeholder="EJ: PAGÓ JUAN EL TOTAL, DEJA SEÑA PARA LA PRÓXIMA..."
+                                    rows={3}
+                                    className="w-full p-4 bg-zinc-100 border-none rounded-2xl text-xs font-black uppercase focus:ring-4 focus:ring-black/5 outline-none transition-all resize-none custom-scrollbar"
+                                />
+                            </div>
+
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="p-8 bg-zinc-50 border-t border-zinc-100 flex gap-4 shrink-0">
+                            <button
+                                onClick={() => setIsConfirmPaymentModalOpen(false)}
+                                className="flex-1 py-5 bg-white border border-zinc-200 text-zinc-500 rounded-[24px] font-black uppercase text-xs tracking-widest hover:bg-zinc-50 active:scale-95 transition-all shadow-sm"
+                            >
+                                Volver
+                            </button>
+                            <button
+                                onClick={handleConfirmPayment}
+                                className="flex-[2] py-5 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-xs tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+                            >
+                                Confirmar Pago
+                            </button>
+                        </div>
+
                     </div>
                 </div>
             )}

@@ -434,6 +434,26 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Pago parcial de consumo registrado", DepositPaid = consumption.DepositPaid });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPut("{id}/toggle-combo-redeem")]
+        public async Task<IActionResult> ToggleComboRedeem(Guid id)
+        {
+            var consumption = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .FirstOrDefaultAsync(c => c.Id == id);
+                
+            if (consumption == null) return NotFound("Consumo no encontrado");
+            if (consumption.Product == null || !consumption.Product.IsDoubleUnitCombo)
+            {
+                return BadRequest("Este consumo no corresponde a un combo de doble unidad.");
+            }
+
+            consumption.IsComboRedeemed = !consumption.IsComboRedeemed;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { isComboRedeemed = consumption.IsComboRedeemed });
+        }
     }
 
     public class AddConsumptionRequest

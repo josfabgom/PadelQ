@@ -194,7 +194,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("SpaceId");
 
-                    b.ToTable("ActivitySchedules");
+                    b.ToTable("ActivitySchedules", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ActivitySignup", b =>
@@ -219,7 +219,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ActivitySignups");
+                    b.ToTable("ActivitySignups", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ApplicationUser", b =>
@@ -375,7 +375,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Bookings");
+                    b.ToTable("Bookings", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.BookingConsumption", b =>
@@ -426,7 +426,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("BookingConsumptions");
+                    b.ToTable("BookingConsumptions", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.CashClosure", b =>
@@ -497,7 +497,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CashClosures");
+                    b.ToTable("CashClosures", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ClubActivity", b =>
@@ -533,7 +533,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ClubActivities");
+                    b.ToTable("ClubActivities", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Court", b =>
@@ -567,7 +567,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Courts");
+                    b.ToTable("Courts", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Membership", b =>
@@ -601,7 +601,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Memberships");
+                    b.ToTable("Memberships", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.PaymentMethod", b =>
@@ -628,7 +628,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PaymentMethods");
+                    b.ToTable("PaymentMethods", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Product", b =>
@@ -683,7 +683,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.ProductStockMovement", b =>
@@ -713,7 +713,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("ProductStockMovements");
+                    b.ToTable("ProductStockMovements", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Space", b =>
@@ -748,7 +748,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Spaces");
+                    b.ToTable("Spaces", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.SpaceBooking", b =>
@@ -801,7 +801,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("SpaceBookings");
+                    b.ToTable("SpaceBookings", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Supplier", b =>
@@ -824,7 +824,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Suppliers");
+                    b.ToTable("Suppliers", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.SupplierPurchase", b =>
@@ -858,7 +858,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("SupplierPurchases");
+                    b.ToTable("SupplierPurchases", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.SupplierPurchaseItem", b =>
@@ -890,7 +890,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("SupplierPurchaseId");
 
-                    b.ToTable("SupplierPurchaseItems");
+                    b.ToTable("SupplierPurchaseItems", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.SystemSetting", b =>
@@ -907,7 +907,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasKey("Key");
 
-                    b.ToTable("SystemSettings");
+                    b.ToTable("SystemSettings", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.Transaction", b =>
@@ -953,7 +953,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Transactions");
+                    b.ToTable("Transactions", (string)null);
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.UserMembership", b =>
@@ -989,7 +989,7 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserMemberships");
+                    b.ToTable("UserMemberships", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

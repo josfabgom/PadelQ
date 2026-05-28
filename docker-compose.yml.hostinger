@@ -22,6 +22,8 @@ services:
       - Jwt__Key=${JWT_SECRET}
       - Jwt__Issuer=PadelQ.Api
       - Jwt__Audience=PadelQ.Clients
+      - Gemini__ApiKey=${GEMINI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - db
     networks:

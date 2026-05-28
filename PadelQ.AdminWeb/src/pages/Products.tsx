@@ -24,6 +24,7 @@ interface Product {
   category: string;
   isActive: boolean;
   minimumStock: number;
+  isDoubleUnitCombo?: boolean;
 }
 
 const formatARS = (amount: number) => {
@@ -84,7 +85,8 @@ const ProductsPage = () => {
     imageUrl: '',
     category: 'Bebidas',
     isActive: true,
-    minimumStock: 0
+    minimumStock: 0,
+    isDoubleUnitCombo: false
   });
 
   const [stockFormData, setStockFormData] = useState({
@@ -147,7 +149,8 @@ const ProductsPage = () => {
         imageUrl: '',
         category: 'Bebidas', 
         isActive: true,
-        minimumStock: 0
+        minimumStock: 0,
+        isDoubleUnitCombo: false
       });
     }
     setIsModalOpen(true);
@@ -497,7 +500,12 @@ const ProductsPage = () => {
                           </div>
                           <div>
                             <p className="text-sm font-black text-black italic leading-tight">{product.name}</p>
-                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest mt-0.5">{product.category}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest leading-none">{product.category}</p>
+                              {product.isDoubleUnitCombo && (
+                                <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded-md text-[7px] font-black uppercase tracking-tighter">COMBO X2</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -757,6 +765,20 @@ const ProductsPage = () => {
                       className={`w-12 h-6 rounded-full relative transition-all ${formData.isActive ? 'bg-emerald-500' : 'bg-zinc-300'}`}
                     >
                       <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isActive ? 'right-1' : 'left-1'}`}></div>
+                    </button>
+                  </div>
+
+                  <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${formData.isDoubleUnitCombo ? 'bg-emerald-500' : 'bg-zinc-400'}`}></div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Combo x 2 Unidades (Ticket de Retiro)</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setFormData({...formData, isDoubleUnitCombo: !formData.isDoubleUnitCombo})}
+                      className={`w-12 h-6 rounded-full relative transition-all ${formData.isDoubleUnitCombo ? 'bg-emerald-500' : 'bg-zinc-300'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isDoubleUnitCombo ? 'right-1' : 'left-1'}`}></div>
                     </button>
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import 'package:padelq_mobile/presentation/pages/admin_settings_page.dart';
 import 'package:padelq_mobile/presentation/pages/activities_page.dart';
 import 'package:padelq_mobile/presentation/pages/membership_page.dart';
 import 'package:padelq_mobile/presentation/pages/chatbot_page.dart';
+import 'package:padelq_mobile/presentation/pages/admin_dashboard_page.dart';
 
 
 void main() {
@@ -30,6 +31,7 @@ final _router = GoRouter(
     GoRoute(path: '/activities', builder: (context, state) => const ActivitiesPage()),
     GoRoute(path: '/membership', builder: (context, state) => const MembershipPage()),
     GoRoute(path: '/chatbot', builder: (context, state) => const ChatbotPage()),
+    GoRoute(path: '/admin-dashboard', builder: (context, state) => const AdminDashboardPage()),
 
   ],
 );

@@ -9,6 +9,7 @@ import {
     Check,
     X,
     TrendingUp,
+    TrendingDown,
     Wallet,
     History,
     CreditCard,
@@ -578,8 +579,16 @@ const CashManagement = () => {
                                     return allTransactions.map((t: any) => (
                                         <div key={t.id} className="p-5 bg-zinc-50 border border-zinc-100 rounded-[28px] flex items-center justify-between hover:bg-white hover:border-black/10 transition-all group">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${t.color}15`, color: t.color }}>
-                                                    {t.method.includes('Efectivo') ? <Wallet className="w-5 h-5" /> :
+                                                <div 
+                                                    className="w-10 h-10 rounded-xl flex items-center justify-center border" 
+                                                    style={{ 
+                                                        backgroundColor: t.amount < 0 ? '#fff1f2' : '#ecfdf5', 
+                                                        color: t.amount < 0 ? '#f43f5e' : '#10b981',
+                                                        borderColor: t.amount < 0 ? '#ffe4e6' : '#d1fae5'
+                                                    }}
+                                                >
+                                                    {t.amount < 0 ? <TrendingDown className="w-5 h-5" /> :
+                                                     t.method.includes('Efectivo') ? <Wallet className="w-5 h-5" /> :
                                                      t.method.includes('Transferencia') ? <ArrowRightLeft className="w-5 h-5" /> :
                                                      <CreditCard className="w-5 h-5" />}
                                                 </div>
@@ -589,7 +598,7 @@ const CashManagement = () => {
                                                         <span className="px-2 py-0.5 bg-zinc-100 rounded-md text-[7px] font-black text-zinc-400 uppercase tracking-tighter">{t.method}</span>
                                                     </div>
                                                     <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
-                                                        {new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs • Por: {t.processedBy || 'Sistema'}
+                                                        {new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs • Por: {t.processedBy || 'Sistema'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -933,16 +942,23 @@ const CashManagement = () => {
                             {selectedMethodDetail.transactions.map((t: any) => (
                                 <div key={t.id} className="p-5 bg-zinc-50 border border-zinc-100 rounded-[24px] flex items-center justify-between group hover:bg-white hover:border-black/10 transition-all">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-white border border-zinc-100 flex items-center justify-center">
-                                            <TrendingUp className="w-5 h-5 text-zinc-300" />
+                                        <div 
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center border"
+                                            style={{
+                                                backgroundColor: t.amount < 0 ? '#fff1f2' : '#ecfdf5',
+                                                color: t.amount < 0 ? '#f43f5e' : '#10b981',
+                                                borderColor: t.amount < 0 ? '#ffe4e6' : '#d1fae5'
+                                            }}
+                                        >
+                                            {t.amount < 0 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-black text-black uppercase">{t.userName}</p>
-                                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs • Por: {t.processedBy || 'Sistema'}</p>
+                                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{new Date(t.date).toLocaleDateString()} {new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs • Por: {t.processedBy || 'Sistema'}</p>
                                             <p className="text-[9px] text-zinc-500 mt-1 italic">{t.description}</p>
                                         </div>
                                     </div>
-                                    <span className="text-lg font-black italic text-black">{formatARS(t.amount)}</span>
+                                    <span className={`text-lg font-black italic ${t.amount < 0 ? 'text-rose-600' : 'text-black'}`}>{formatARS(t.amount)}</span>
                                 </div>
                             ))}
 

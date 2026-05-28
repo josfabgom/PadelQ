@@ -91,7 +91,7 @@ namespace PadelQ.Infrastructure.Services
                     : string.Join("\n", schedules.Select(s => $"- Cancha ID: {s.CourtId} ({s.Court?.Name}), Día: {s.DayOfWeek}, Horario: {s.StartTime:hh\\:mm} a {s.EndTime:hh\\:mm}"));
 
                 // 3. Crear el System Prompt
-                var systemInstruction = $@"Eres el Asistente de IA de PadelQ, una plataforma premium de gestión de clubes de pádel.
+                var systemInstruction = $@"Eres el Asistente de IA de Black Club de Pádel, un club premium de pádel.
 Tu objetivo es responder de forma muy amigable, directa y deportiva a las consultas de los clientes sobre la disponibilidad de canchas y permitirles alquilar/reservar en lenguaje natural.
 
 Fecha y hora actual: {nowLocal:dddd dd/MM/yyyy HH:mm} (Hora local de Argentina/Uruguay).
@@ -150,7 +150,7 @@ Ejemplo si el cliente dice 'Reservame la cancha 1 para mañana a las 19 hs por 9
                 // Aquí construimos el formato de contenidos compatible con la API de Gemini:
                 var systemPart = new { text = systemInstruction };
                 contentsList.Add(new { role = "user", parts = new[] { systemPart } });
-                contentsList.Add(new { role = "model", parts = new[] { new { text = "Entendido. Asistiré al cliente como PadelQ AI Assistant." } } });
+                contentsList.Add(new { role = "model", parts = new[] { new { text = "Entendido. Asistiré al cliente como Asistente Virtual de Black Club." } } });
 
                 // Agregar historial previo
                 foreach (var h in history.TakeLast(10)) // Tomar las últimas 10 interacciones para no saturar
@@ -299,7 +299,7 @@ Ejemplo si el cliente dice 'Reservame la cancha 1 para mañana a las 19 hs por 9
                     : string.Join("\n", schedules.Select(s => $"- Cancha ID: {s.CourtId} ({s.Court?.Name}), Día: {s.DayOfWeek}, Horario: {s.StartTime:hh\\:mm} a {s.EndTime:hh\\:mm}"));
 
                 // 2. Crear el System Prompt para Público
-                var systemInstruction = $@"Eres el Asistente de IA de PadelQ, una plataforma premium de gestión de clubes de pádel.
+                var systemInstruction = $@"Eres el Asistente de IA de Black Club de Pádel, un club premium de pádel.
 Este es el CHATBOT WEB PÚBLICO del club para clientes y visitantes no logueados. Tu objetivo es responder amigablemente a las consultas sobre disponibilidad de canchas y permitirles alquilar en lenguaje natural.
 
 Fecha y hora actual: {nowLocal:dddd dd/MM/yyyy HH:mm} (Hora local).
@@ -346,7 +346,7 @@ Debes responder SIEMPRE con un objeto JSON válido con los siguientes campos y n
 
                 var systemPart = new { text = systemInstruction };
                 contentsList.Add(new { role = "user", parts = new[] { systemPart } });
-                contentsList.Add(new { role = "model", parts = new[] { new { text = "Entendido. Asistiré a los visitantes públicos como PadelQ AI Web Assistant." } } });
+                contentsList.Add(new { role = "model", parts = new[] { new { text = "Entendido. Asistiré a los visitantes públicos como Asistente Virtual de Black Club." } } });
 
                 foreach (var h in history.TakeLast(10))
                 {

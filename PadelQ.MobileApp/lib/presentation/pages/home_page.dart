@@ -53,8 +53,18 @@ class _HomePageState extends ConsumerState<HomePage> {
         elevation: 0,
         backgroundColor: Colors.white,
         actions: [
-          if (authState.isAdmin)
-            IconButton(icon: const Icon(Icons.settings, color: Colors.black, size: 20), onPressed: () => context.push('/admin-settings')),
+          if (authState.isAdmin) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.barChart2, color: Colors.black, size: 20),
+              onPressed: () => context.push('/admin-dashboard'),
+              tooltip: 'Panel de Control',
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.settings, color: Colors.black, size: 20),
+              onPressed: () => context.push('/admin-settings'),
+              tooltip: 'Configuración Club',
+            ),
+          ],
           IconButton(icon: const Icon(Icons.logout, color: Colors.black, size: 20), onPressed: () async {
             await ref.read(authProvider.notifier).logout();
             if (mounted) context.go('/login');
@@ -179,6 +189,66 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                   ),
+                  if (authState.isAdmin) ...[
+                    SizedBox(height: 24.h),
+                    GestureDetector(
+                      onTap: () => context.push('/admin-dashboard'),
+                      child: Container(
+                        padding: EdgeInsets.all(24.w),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(32.r),
+                          border: Border.all(color: Colors.black.withOpacity(0.05)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.02),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            )
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(12.r),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.shade50,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(LucideIcons.barChart2, color: Colors.indigo.shade600, size: 24.sp),
+                            ),
+                            SizedBox(width: 16.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'PANEL DE CONTROL',
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.black,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4.h),
+                                  Text(
+                                    'Ver ventas diarias, caja diaria y métricas.',
+                                    style: TextStyle(
+                                      fontSize: 10.sp,
+                                      color: Colors.grey.shade500,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(LucideIcons.chevronRight, color: Colors.grey.shade400, size: 20.sp),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

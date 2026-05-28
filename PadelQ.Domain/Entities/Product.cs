@@ -38,6 +38,7 @@ namespace PadelQ.Domain.Entities
 
         public bool IsActive { get; set; } = true;
 
+        public bool IsDoubleUnitCombo { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

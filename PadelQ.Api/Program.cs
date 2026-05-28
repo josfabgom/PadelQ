@@ -17,7 +17,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // DB Context
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 
 // Identity
@@ -131,6 +132,12 @@ using (var scope = app.Services.CreateScope())
             // Parche para Transactions (ActivityId, ActivityDate)
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'ActivityId') ALTER TABLE Transactions ADD ActivityId INT NULL;");
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Transactions') AND name = 'ActivityDate') ALTER TABLE Transactions ADD ActivityDate DATETIME2 NULL;");
+            
+            // Parche para Products (IsDoubleUnitCombo)
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Products') AND name = 'IsDoubleUnitCombo') ALTER TABLE Products ADD IsDoubleUnitCombo BIT NOT NULL DEFAULT 0;");
+
+            // Parche para BookingConsumptions (IsComboRedeemed)
+            await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('BookingConsumptions') AND name = 'IsComboRedeemed') ALTER TABLE BookingConsumptions ADD IsComboRedeemed BIT NOT NULL DEFAULT 0;");
         } catch { /* Ignorar errores si las columnas ya existen o SQL no es compatible */ }
 
         await context.Database.MigrateAsync();
