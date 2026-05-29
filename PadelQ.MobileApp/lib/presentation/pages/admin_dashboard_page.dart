@@ -3,17 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/auth_provider.dart';
 import '../../data/services/admin_service.dart';
 
-class AdminDashboardPage extends StatefulWidget {
+class AdminDashboardPage extends ConsumerStatefulWidget {
   const AdminDashboardPage({super.key});
 
   @override
-  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+  ConsumerState<AdminDashboardPage> createState() => _AdminDashboardPageState();
 }
 
-class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTickerProviderStateMixin {
+class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final AdminService _adminService = AdminService();
   final TextEditingController _searchController = TextEditingController();
@@ -30,6 +33,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
   List<dynamic> _todayBookings = [];
   List<dynamic> _todaySpaceBookings = [];
   final Map<String, Map<String, dynamic>> _selectedToOrder = {};
+
+  bool _showingHistory = false;
+  bool _isLoadingHistory = false;
+  List<dynamic> _cashHistory = [];
+  Map<String, dynamic>? _selectedClosureDetails;
+  bool _isLoadingClosureDetails = false;
 
   @override
   void initState() {
@@ -74,13 +83,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     });
 
     try {
-      final today = DateTime.now();
       final salesData = await _adminService.getReportsSummary();
       final cashData = await _adminService.getCashStatus();
       final alertsData = await _adminService.getStockAlerts();
       final productsData = await _adminService.getProducts();
-      final bookingsData = await _adminService.getBookingsByDate(today);
-      final spaceBookingsData = await _adminService.getSpaceBookingsByDate(today);
 
       setState(() {
         _salesSummary = salesData;
@@ -88,13 +94,21 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
         _stockAlerts = alertsData;
         _products = productsData;
         _filteredProducts = productsData;
-        _todayBookings = bookingsData;
-        _todaySpaceBookings = spaceBookingsData;
+        _todayBookings = salesData?['todayBookingsList'] ?? [];
+        _todaySpaceBookings = salesData?['todaySpaceBookingsList'] ?? [];
         _isLoadingSales = false;
         _isLoadingCash = false;
         _isLoadingStock = false;
         _isLoadingBookings = false;
       });
+
+      if (_showingHistory) {
+        _loadHistory();
+        if (_selectedClosureDetails != null) {
+          final int closureId = _selectedClosureDetails!['closure']['id'];
+          _loadClosureDetails(closureId);
+        }
+      }
     } catch (e) {
       setState(() {
         _isLoadingSales = false;
@@ -105,6 +119,50 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Error al cargar datos del panel')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() {
+      _isLoadingHistory = true;
+    });
+    try {
+      final history = await _adminService.getCashHistory();
+      setState(() {
+        _cashHistory = history;
+        _isLoadingHistory = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingHistory = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al cargar historial de cajas')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadClosureDetails(int id) async {
+    setState(() {
+      _isLoadingClosureDetails = true;
+    });
+    try {
+      final details = await _adminService.getClosureDetails(id);
+      setState(() {
+        _selectedClosureDetails = details;
+        _isLoadingClosureDetails = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingClosureDetails = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al cargar detalles de la caja')),
         );
       }
     }
@@ -552,12 +610,74 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     final payments = _salesSummary!['todayActualPayments'] ?? 0.0;
     final bookings = _salesSummary!['todayBookings'] ?? 0;
 
+    final bool hasActiveClosure = _salesSummary!['activeClosureIsOpen'] ?? false;
+    final String? activeClosureOpenedBy = _salesSummary!['activeClosureOpenedBy'];
+    final String? activeClosureOpeningDateRaw = _salesSummary!['activeClosureOpeningDate'];
+    
+    String activeClosureDateStr = 'N/A';
+    if (activeClosureOpeningDateRaw != null) {
+      try {
+        final parsed = DateTime.parse(activeClosureOpeningDateRaw).toLocal();
+        activeClosureDateStr = DateFormat('dd/MM/yyyy HH:mm').format(parsed);
+      } catch (e) {
+        activeClosureDateStr = activeClosureOpeningDateRaw;
+      }
+    }
+
     return RefreshIndicator(
       onRefresh: _loadData,
       color: Colors.black,
       child: ListView(
         padding: EdgeInsets.all(24.w),
         children: [
+          // Banner summarizing Active Cash date and user for daily sales alignment
+          Container(
+            margin: EdgeInsets.only(bottom: 16.h),
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              color: hasActiveClosure ? Colors.green.shade50.withOpacity(0.9) : Colors.red.shade50.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(16.r),
+              border: Border.all(color: hasActiveClosure ? Colors.green.shade200 : Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasActiveClosure ? LucideIcons.checkCircle : LucideIcons.alertTriangle,
+                  size: 16.sp,
+                  color: hasActiveClosure ? Colors.green.shade800 : Colors.red.shade800,
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasActiveClosure ? 'VENTAS DE LA CAJA ABIERTA' : 'CAJA CERRADA',
+                        style: TextStyle(
+                          fontSize: 9.sp,
+                          fontWeight: FontWeight.w900,
+                          color: hasActiveClosure ? Colors.green.shade800 : Colors.red.shade800,
+                          letterSpacing: 1.w,
+                        ),
+                      ),
+                      SizedBox(height: 2.h),
+                      Text(
+                        hasActiveClosure
+                            ? 'Fecha de Caja: $activeClosureDateStr  |  Usuario: ${activeClosureOpenedBy ?? 'Admin'}'
+                            : 'No hay una caja abierta actualmente. Las estadísticas corresponden al día de hoy.',
+                        style: TextStyle(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.bold,
+                          color: hasActiveClosure ? Colors.green.shade900 : Colors.red.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Row of main metrics
           _buildMetricCard(
             title: 'INGRESOS TOTALES HOY',
@@ -805,7 +925,97 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     );
   }
 
-  Widget _buildCashTab() {
+  Widget _buildCashTabSelector() {
+    return Container(
+      margin: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 8.h),
+      padding: EdgeInsets.all(4.r),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showingHistory = false;
+                  _selectedClosureDetails = null;
+                });
+              },
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: 10.h),
+                decoration: BoxDecoration(
+                  color: !_showingHistory ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12.r),
+                  boxShadow: !_showingHistory
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Center(
+                  child: Text(
+                    'CAJA ACTUAL',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w900,
+                      color: !_showingHistory ? Colors.black : Colors.grey.shade600,
+                      letterSpacing: 0.5.w,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showingHistory = true;
+                  _selectedClosureDetails = null;
+                });
+                _loadHistory();
+              },
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: 10.h),
+                decoration: BoxDecoration(
+                  color: _showingHistory ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12.r),
+                  boxShadow: _showingHistory
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Center(
+                  child: Text(
+                    'HISTORIAL DE CAJAS',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w900,
+                      color: _showingHistory ? Colors.black : Colors.grey.shade600,
+                      letterSpacing: 0.5.w,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveCashView() {
     if (_isLoadingCash) {
       return const Center(child: CircularProgressIndicator(color: Colors.black));
     }
@@ -813,6 +1023,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
     if (_cashStatus == null) {
       return _buildErrorState();
     }
+
+    final authState = ref.watch(authProvider);
+    final currentUser = authState.user;
+    final String currentUserName = currentUser != null 
+        ? (currentUser['fullName'] ?? currentUser['FullName'] ?? 'Usuario') 
+        : 'Administrador';
+
+    final String todayDateStr = DateFormat('dd/MM/yyyy').format(DateTime.now());
 
     final activeClosure = _cashStatus!['activeClosure'];
     final summary = _cashStatus!['summary'] as List<dynamic>? ?? [];
@@ -846,6 +1064,54 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
       child: ListView(
         padding: EdgeInsets.all(24.w),
         children: [
+          // Banner summarizing Active Cash date and user
+          Container(
+            margin: EdgeInsets.only(bottom: 16.h),
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              color: isOpen ? Colors.green.shade50.withOpacity(0.9) : Colors.red.shade50.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(16.r),
+              border: Border.all(color: isOpen ? Colors.green.shade200 : Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isOpen ? LucideIcons.checkCircle : LucideIcons.alertTriangle,
+                  size: 16.sp,
+                  color: isOpen ? Colors.green.shade800 : Colors.red.shade800,
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isOpen ? 'CAJA ABIERTA ACTIVA' : 'CAJA CERRADA',
+                        style: TextStyle(
+                          fontSize: 9.sp,
+                          fontWeight: FontWeight.w900,
+                          color: isOpen ? Colors.green.shade800 : Colors.red.shade800,
+                          letterSpacing: 1.w,
+                        ),
+                      ),
+                      SizedBox(height: 2.h),
+                      Text(
+                        isOpen
+                            ? 'Fecha de Caja: ${activeClosure['openingDate'] != null ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(activeClosure['openingDate']).toLocal()) : 'N/A'}  |  Usuario: $cashier'
+                            : 'No hay una caja abierta actualmente en el sistema.',
+                        style: TextStyle(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.bold,
+                          color: isOpen ? Colors.green.shade900 : Colors.red.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Active Cash closure status card
           Container(
             padding: EdgeInsets.all(24.w),
@@ -883,10 +1149,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                   ],
                 ),
                 SizedBox(height: 20.h),
-                _buildClosureDetailRow('Cajero Responsable', cashier, LucideIcons.user),
+                _buildClosureDetailRow('Usuario de Caja', cashier, LucideIcons.user),
                 SizedBox(height: 12.h),
                 _buildClosureDetailRow(
-                  'Fecha de Apertura',
+                  'Fecha de Caja',
                   isOpen && activeClosure['openingDate'] != null
                       ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(activeClosure['openingDate']).toLocal())
                       : 'N/A',
@@ -896,6 +1162,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
                 _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote),
                 SizedBox(height: 12.h),
                 _buildClosureDetailRow('Monto Total Cobrado', '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}', LucideIcons.coins),
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Usuario Conectado', currentUserName, LucideIcons.userCheck),
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Fecha de Operación', todayDateStr, LucideIcons.clock),
               ],
             ),
           ),
@@ -1092,6 +1362,763 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> with SingleTick
             }),
         ],
       ),
+    );
+  }
+
+  Widget _buildCashHistoryListView() {
+    if (_isLoadingHistory) {
+      return const Center(child: CircularProgressIndicator(color: Colors.black));
+    }
+
+    if (_cashHistory.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadHistory,
+        color: Colors.black,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(height: 100.h),
+            Center(
+              child: Text(
+                'No hay historial de cajas registrado.',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13.sp, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadHistory,
+      color: Colors.black,
+      child: ListView.builder(
+        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _cashHistory.length,
+        itemBuilder: (context, index) {
+          final item = _cashHistory[index];
+          final int id = item['id'];
+          final DateTime openingDate = DateTime.parse(item['openingDate']).toLocal();
+          final DateTime? closingDate = item['closingDate'] != null 
+              ? DateTime.parse(item['closingDate']).toLocal() 
+              : null;
+          final double initialCash = (item['initialCash'] ?? 0.0).toDouble();
+          final double expectedCash = (item['expectedCash'] ?? 0.0).toDouble();
+          final double actualCash = (item['actualCash'] ?? 0.0).toDouble();
+          final String openedBy = item['openedBy'] ?? 'Admin';
+          final bool isOpen = item['isOpen'] ?? false;
+          
+          final double diff = actualCash - expectedCash;
+          final bool hasDiff = !isOpen && diff.abs() > 0.01;
+
+          String dateStr = DateFormat('EEEE, d MMMM yyyy', 'es_AR').format(openingDate);
+          // Capitalize first letter of day/month
+          dateStr = dateStr.split(' ').map((word) {
+            if (word.length > 2) {
+              return word[0].toUpperCase() + word.substring(1);
+            }
+            return word;
+          }).join(' ');
+
+          final timeRangeStr = closingDate != null
+              ? "${DateFormat('HH:mm').format(openingDate)} - ${DateFormat('HH:mm').format(closingDate)}"
+              : "${DateFormat('HH:mm').format(openingDate)} - Abierta";
+
+          return GestureDetector(
+            onTap: () => _loadClosureDetails(id),
+            child: Container(
+              margin: EdgeInsets.only(bottom: 16.h),
+              padding: EdgeInsets.all(20.w),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24.r),
+                border: Border.all(color: Colors.black.withOpacity(0.04)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.01),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row with Date & Status
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          dateStr,
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.black,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                        decoration: BoxDecoration(
+                          color: isOpen ? Colors.green.shade50 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8.r),
+                          border: Border.all(color: isOpen ? Colors.green.shade100 : Colors.grey.shade200),
+                        ),
+                        child: Text(
+                          isOpen ? 'ABIERTA' : 'CERRADA',
+                          style: TextStyle(
+                            fontSize: 8.sp,
+                            fontWeight: FontWeight.w900,
+                            color: isOpen ? Colors.green.shade800 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 4.h),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.clock, size: 12.sp, color: Colors.grey.shade400),
+                      SizedBox(width: 4.w),
+                      Text(
+                        timeRangeStr,
+                        style: TextStyle(
+                          fontSize: 11.sp,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        "por: $openedBy",
+                        style: TextStyle(
+                          fontSize: 10.sp,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24, thickness: 0.5),
+                  // Financial summaries
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildMiniDetailSummary('Inicial', initialCash),
+                      _buildMiniDetailSummary('Esperado', expectedCash),
+                      _buildMiniDetailSummary('Real', actualCash),
+                    ],
+                  ),
+                  if (hasDiff) ...[
+                    SizedBox(height: 12.h),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                      decoration: BoxDecoration(
+                        color: diff < 0 ? Colors.red.shade50 : Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10.r),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            diff < 0 ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
+                            size: 14.sp,
+                            color: diff < 0 ? Colors.red.shade700 : Colors.green.shade700,
+                          ),
+                          SizedBox(width: 8.w),
+                          Expanded(
+                            child: Text(
+                              diff < 0
+                                  ? "Faltante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff.abs())}"
+                                  : "Sobrante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff)}",
+                              style: TextStyle(
+                                fontSize: 10.sp,
+                                fontWeight: FontWeight.w900,
+                                color: diff < 0 ? Colors.red.shade800 : Colors.green.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMiniDetailSummary(String label, double value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 8.sp,
+            fontWeight: FontWeight.w900,
+            color: Colors.grey.shade400,
+            letterSpacing: 0.5.w,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        Text(
+          '\$${NumberFormat('#,##0', 'es_AR').format(value)}',
+          style: TextStyle(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w900,
+            color: Colors.black,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoricalClosureDetailsView() {
+    if (_isLoadingClosureDetails || _selectedClosureDetails == null) {
+      return const Center(child: CircularProgressIndicator(color: Colors.black));
+    }
+
+    final closure = _selectedClosureDetails!['closure'];
+    final transactions = _selectedClosureDetails!['transactions'] as List<dynamic>? ?? [];
+
+    final int id = closure['id'];
+    final DateTime openingDate = DateTime.parse(closure['openingDate']).toLocal();
+    final DateTime? closingDate = closure['closingDate'] != null 
+        ? DateTime.parse(closure['closingDate']).toLocal() 
+        : null;
+    final double initialCash = (closure['initialCash'] ?? 0.0).toDouble();
+    final double expectedCash = (closure['expectedCash'] ?? 0.0).toDouble();
+    final double actualCash = (closure['actualCash'] ?? 0.0).toDouble();
+    final String openedBy = closure['openedBy'] ?? 'Admin';
+    final String? closedBy = closure['closedBy'];
+    final bool isOpen = closure['isOpen'] ?? false;
+    final String? notes = closure['notes'];
+
+    Map<String, double> declaredTotals = {};
+    if (closure['actualTotals'] != null) {
+      try {
+        final String rawJson = closure['actualTotals'].toString();
+        final dynamic decoded = jsonDecode(rawJson);
+        if (decoded is Map) {
+          decoded.forEach((key, value) {
+            declaredTotals[key.toString()] = (value ?? 0.0).toDouble();
+          });
+        }
+      } catch (e) {
+        print("Error parsing actualTotals: $e");
+      }
+    }
+
+    final double diff = actualCash - expectedCash;
+    final bool hasDiff = !isOpen && diff.abs() > 0.01;
+
+    // Group transactions by method
+    final Map<String, List<Map<String, dynamic>>> groupedTransactions = {};
+    for (var tx in transactions) {
+      final String method = tx['method'] ?? 'No Especificado';
+      if (!groupedTransactions.containsKey(method)) {
+        groupedTransactions[method] = [];
+      }
+      groupedTransactions[method]!.add(tx as Map<String, dynamic>);
+    }
+
+    // Convert grouped transactions to a summary list
+    final List<Map<String, dynamic>> summaryList = [];
+    groupedTransactions.forEach((method, txs) {
+      final double total = txs.fold(0.0, (sum, tx) => sum + (tx['amount'] ?? 0.0).toDouble());
+      summaryList.add({
+        'method': method,
+        'total': total,
+        'count': txs.length,
+        'color': _getMethodHexColor(method),
+        'transactions': txs,
+      });
+    });
+
+    // Sort summaryList by total descending
+    summaryList.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
+
+    final totalAmount = transactions.fold(0.0, (sum, tx) => sum + (tx['amount'] ?? 0.0).toDouble());
+
+    String dateStr = DateFormat('EEEE, d MMMM yyyy', 'es_AR').format(openingDate);
+    dateStr = dateStr.split(' ').map((word) {
+      if (word.length > 2) {
+        return word[0].toUpperCase() + word.substring(1);
+      }
+      return word;
+    }).join(' ');
+
+    return RefreshIndicator(
+      onRefresh: () => _loadClosureDetails(id),
+      color: Colors.black,
+      child: ListView(
+        padding: EdgeInsets.all(24.w),
+        children: [
+          // Back Button
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedClosureDetails = null;
+              });
+            },
+            child: Row(
+              children: [
+                Icon(LucideIcons.arrowLeft, size: 14.sp, color: Colors.black),
+                SizedBox(width: 8.w),
+                Text(
+                  'VOLVER AL HISTORIAL',
+                  style: TextStyle(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    letterSpacing: 1.w,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16.h),
+
+          // Detail Card
+          Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24.r),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        dateStr.toUpperCase(),
+                        style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.5.w),
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                      decoration: BoxDecoration(
+                        color: isOpen ? Colors.green.shade50.withOpacity(0.9) : Colors.grey.shade50.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(color: isOpen ? Colors.green.shade200 : Colors.grey.shade200),
+                      ),
+                      child: Text(
+                        isOpen ? 'ABIERTA' : 'CERRADA',
+                        style: TextStyle(
+                          color: isOpen ? Colors.green.shade800 : Colors.grey.shade800,
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20.h),
+                _buildClosureDetailRow('Cajero Responsable', openedBy, LucideIcons.user),
+                if (closedBy != null) ...[
+                  SizedBox(height: 12.h),
+                  _buildClosureDetailRow('Cerrado por', closedBy, LucideIcons.userCheck),
+                ],
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow(
+                  'Fecha de Apertura',
+                  DateFormat('dd/MM/yyyy HH:mm').format(openingDate),
+                  LucideIcons.calendar,
+                ),
+                if (closingDate != null) ...[
+                  SizedBox(height: 12.h),
+                  _buildClosureDetailRow(
+                    'Fecha de Cierre',
+                    DateFormat('dd/MM/yyyy HH:mm').format(closingDate),
+                    LucideIcons.calendarCheck,
+                  ),
+                ],
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote),
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Monto Esperado', '\$${NumberFormat('#,##0.00', 'es_AR').format(expectedCash)}', LucideIcons.calculator),
+                if (!isOpen) ...[
+                  SizedBox(height: 12.h),
+                  _buildClosureDetailRow('Efectivo Real', '\$${NumberFormat('#,##0.00', 'es_AR').format(actualCash)}', LucideIcons.wallet),
+                ],
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Monto Total Cobrado', '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}', LucideIcons.coins),
+                
+                if (hasDiff) ...[
+                  SizedBox(height: 16.h),
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: diff < 0 ? Colors.red.shade50 : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(color: diff < 0 ? Colors.red.shade100 : Colors.green.shade100),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          diff < 0 ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
+                          size: 16.sp,
+                          color: diff < 0 ? Colors.red.shade700 : Colors.green.shade700,
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Text(
+                            diff < 0
+                                ? "Faltante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff.abs())}"
+                                : "Sobrante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff)}",
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w900,
+                              color: diff < 0 ? Colors.red.shade800 : Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (notes != null && notes.trim().isNotEmpty) ...[
+                  SizedBox(height: 16.h),
+                  Text(
+                    'OBSERVACIONES / NOTAS:',
+                    style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.w),
+                  ),
+                  SizedBox(height: 6.h),
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Text(
+                      notes,
+                      style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade700, height: 1.4),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(height: 24.h),
+
+          // Payment methods details header
+          Text(
+            'COBROS POR MEDIO DE PAGO',
+            style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
+          ),
+          SizedBox(height: 16.h),
+
+          ...summaryList.map((category) {
+            final String method = category['method'] ?? '';
+            final double total = (category['total'] ?? 0.0).toDouble();
+            final int count = category['count'] ?? 0;
+            final String hexColor = category['color'] ?? '#888888';
+            final Color color = _parseHexColor(hexColor);
+
+            final double declared = declaredTotals[method] ?? total;
+            final double methodDiff = declared - total;
+
+            return Container(
+              margin: EdgeInsets.only(bottom: 12.h),
+              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20.r),
+                border: Border.all(color: Colors.black.withOpacity(0.04)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 12.w,
+                        height: 32.h,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(6.r),
+                        ),
+                      ),
+                      SizedBox(width: 16.w),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              method.toUpperCase(),
+                              style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                            ),
+                            SizedBox(height: 2.h),
+                            Text(
+                              '$count transacciones',
+                              style: TextStyle(fontSize: 10.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isOpen)
+                        Text(
+                          '\$${NumberFormat('#,##0.00', 'es_AR').format(total)}',
+                          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                        ),
+                    ],
+                  ),
+                  if (!isOpen) ...[
+                    SizedBox(height: 12.h),
+                    const Divider(height: 1, thickness: 0.5),
+                    SizedBox(height: 12.h),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildMethodMetricColumn('Sistema (Esperado)', total),
+                        _buildMethodMetricColumn('Rendido (Real)', declared),
+                        _buildMethodDiffColumn('Diferencia', methodDiff),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+
+          SizedBox(height: 24.h),
+
+          // Transactions list header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'TRANSACCIONES DE LA SESIÓN',
+                style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
+              ),
+              Text(
+                '${transactions.length} registros',
+                style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          SizedBox(height: 16.h),
+
+          if (transactions.isEmpty)
+            Container(
+              padding: EdgeInsets.all(32.w),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24.r),
+                border: Border.all(color: Colors.black.withOpacity(0.05)),
+              ),
+              child: Center(
+                child: Text(
+                  'No hay transacciones registradas en esta caja.',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13.sp),
+                ),
+              ),
+            )
+          else
+            ...transactions.map((tx) {
+              final double amount = (tx['amount'] ?? 0.0).toDouble();
+              final String description = tx['description'] ?? 'Sin descripción';
+              final String userName = tx['userName'] ?? 'Particular';
+              final String method = tx['method'] ?? 'Efectivo';
+              final String time = tx['date'] != null
+                  ? DateFormat('HH:mm').format(DateTime.parse(tx['date']).toLocal())
+                  : '--:--';
+              final String processedBy = tx['processedBy'] ?? 'Admin';
+              final Color methodColor = _getMethodColor(method);
+
+              final bool isPositive = amount >= 0;
+
+              return Container(
+                margin: EdgeInsets.only(bottom: 12.h),
+                padding: EdgeInsets.all(16.w),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(color: Colors.black.withOpacity(0.04)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 8.r,
+                      height: 48.r,
+                      decoration: BoxDecoration(
+                        color: methodColor,
+                        borderRadius: BorderRadius.circular(4.r),
+                      ),
+                    ),
+                    SizedBox(width: 16.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                userName,
+                                style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                              ),
+                              const Spacer(),
+                              Text(
+                                time,
+                                style: TextStyle(fontSize: 10.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            description,
+                            style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade600),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 4.h),
+                          Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4.r),
+                                ),
+                                child: Text(
+                                  method.toUpperCase(),
+                                  style: TextStyle(fontSize: 8.sp, color: Colors.grey.shade500, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Text(
+                                'por: $processedBy',
+                                style: TextStyle(fontSize: 8.sp, color: Colors.grey.shade400),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 16.w),
+                    Text(
+                      '${isPositive ? '+' : ''}\$${NumberFormat('#,##0.00', 'es_AR').format(amount)}',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w900,
+                        color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodMetricColumn(String label, double value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 7.sp,
+            fontWeight: FontWeight.w900,
+            color: Colors.grey.shade400,
+            letterSpacing: 0.5.w,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        Text(
+          '\$${NumberFormat('#,##0.00', 'es_AR').format(value)}',
+          style: TextStyle(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w900,
+            color: Colors.black,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMethodDiffColumn(String label, double diff) {
+    final bool hasDiff = diff.abs() > 0.01;
+    final Color textColor = !hasDiff
+        ? Colors.grey.shade600
+        : diff < 0
+            ? Colors.red.shade700
+            : Colors.green.shade700;
+
+    final String diffStr = !hasDiff
+        ? '\$0.00'
+        : "${diff > 0 ? '+' : ''}\$${NumberFormat('#,##0.00', 'es_AR').format(diff)}";
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 7.sp,
+            fontWeight: FontWeight.w900,
+            color: Colors.grey.shade400,
+            letterSpacing: 0.5.w,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        Text(
+          diffStr,
+          style: TextStyle(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w900,
+            color: textColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+
+
+  String _getMethodHexColor(String method) {
+    final m = method.toLowerCase();
+    if (m.contains('efectivo')) return '#2E7D32'; // green.shade800
+    if (m.contains('transfer')) return '#1565C0'; // blue.shade800
+    if (m.contains('tarjeta') || m.contains('deb') || m.contains('cred')) return '#EF6C00'; // orange.shade800
+    if (m.contains('mercado') || m.contains('mp')) return '#6A1B9A'; // purple.shade800
+    return '#888888';
+  }
+
+  Color _getMethodColor(String method) {
+    return _parseHexColor(_getMethodHexColor(method));
+  }
+
+  Widget _buildCashTab() {
+    if (_selectedClosureDetails != null) {
+      return _buildHistoricalClosureDetailsView();
+    }
+
+    return Column(
+      children: [
+        _buildCashTabSelector(),
+        Expanded(
+          child: _showingHistory 
+              ? _buildCashHistoryListView() 
+              : _buildActiveCashView(),
+        ),
+      ],
     );
   }
 

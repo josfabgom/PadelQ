@@ -29,18 +29,36 @@ namespace PadelQ.Api.Controllers
         [HttpGet("summary")]
         public async Task<IActionResult> GetSummary()
         {
-            // Ajuste para horario local (UTC-3) para que "Hoy" coincida con el usuario
+            // Ajuste para horario local (UTC-3)
             var todayUtc = DateTime.UtcNow;
-            var today = todayUtc.AddHours(-3).Date; 
-            var tomorrow = today.AddDays(1);
+            var fallbackToday = todayUtc.AddHours(-3).Date; 
+            
+            // Buscar si hay alguna caja abierta activa en el sistema
+            var activeClosure = await _context.CashClosures
+                .Where(c => c.IsOpen)
+                .OrderByDescending(c => c.OpeningDate)
+                .FirstOrDefaultAsync();
+
+            // Si hay una caja abierta, tomamos su fecha de apertura como el inicio del turno comercial
+            var today = activeClosure?.OpeningDate ?? fallbackToday;
+            
+            // El turno comercial abarca hasta 6 horas después de finalizar el día de apertura de la caja (ej: hasta 6am del día siguiente)
+            var tomorrow = activeClosure != null 
+                ? today.Date.AddDays(1).AddHours(6) 
+                : fallbackToday.AddDays(1);
+
             var startOfMonth = new DateTime(today.Year, today.Month, 1);
             
             // 1. Reservas de Hoy (Filtramos en la base de datos para rendimiento)
             var todayBookingsList = await _context.Bookings
+                .Include(b => b.Court)
+                .Include(b => b.User)
                 .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= today && b.StartTime < tomorrow)
                 .ToListAsync();
 
             var todaySpaceBookingsList = await _context.SpaceBookings
+                .Include(b => b.Space)
+                .Include(b => b.User)
                 .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= today && b.StartTime < tomorrow)
                 .ToListAsync();
 
@@ -74,7 +92,7 @@ namespace PadelQ.Api.Controllers
 
             for (int h = Math.Max(startHour, 8); h < 24; h++) // De 8hs a 24hs
             {
-                var slotStart = today.AddHours(h);
+                var slotStart = today.Date.AddHours(h); // Usar hoy comercial sin hora
                 var slotEnd = slotStart.AddHours(1);
 
                 foreach (var court in courts)
@@ -105,10 +123,33 @@ namespace PadelQ.Api.Controllers
                 todayConsumptionsRevenue,
                 todayActualPayments,
                 todayBookings = todayBookingsCount,
+                todayBookingsList = todayBookingsList.Select(b => new {
+                    b.Id,
+                    b.Price,
+                    b.StartTime,
+                    b.EndTime,
+                    b.Status,
+                    b.GuestName,
+                    Court = b.Court != null ? new { b.Court.Id, b.Court.Name } : null,
+                    User = b.User != null ? new { b.User.Id, FullName = b.User.FullName } : null
+                }).ToList(),
+                todaySpaceBookingsList = todaySpaceBookingsList.Select(b => new {
+                    b.Id,
+                    b.Price,
+                    b.StartTime,
+                    b.EndTime,
+                    b.Status,
+                    b.GuestName,
+                    Space = b.Space != null ? new { b.Space.Id, b.Space.Name } : null,
+                    User = b.User != null ? new { b.User.Id, FullName = b.User.FullName } : null
+                }).ToList(),
                 monthlyRevenue,
                 monthlyGoal,
                 monthlyProgress = Math.Min(100, (int)progress),
-                freeSlots
+                freeSlots,
+                activeClosureOpeningDate = activeClosure?.OpeningDate,
+                activeClosureOpenedBy = activeClosure?.OpenedBy,
+                activeClosureIsOpen = activeClosure != null
             });
         }
 
@@ -144,12 +185,32 @@ namespace PadelQ.Api.Controllers
         [HttpGet("product-sales-daily")]
         public async Task<IActionResult> GetProductSalesDaily([FromQuery] DateTime? date)
         {
-            // Si no se especifica fecha, usamos hoy (en UTC para comparar con CreatedAt)
-            // Para ser más precisos con el usuario local, podríamos recibir el offset,
-            // pero por ahora compararemos el rango del día solicitado.
-            
-            var startDate = date?.Date ?? DateTime.Today;
-            var endDate = startDate.AddDays(1);
+            DateTime startDate;
+            DateTime endDate;
+
+            if (date == null)
+            {
+                var activeClosure = await _context.CashClosures
+                    .Where(c => c.IsOpen)
+                    .OrderByDescending(c => c.OpeningDate)
+                    .FirstOrDefaultAsync();
+
+                if (activeClosure != null)
+                {
+                    startDate = activeClosure.OpeningDate;
+                    endDate = startDate.Date.AddDays(1).AddHours(6);
+                }
+                else
+                {
+                    startDate = DateTime.UtcNow.AddHours(-3).Date;
+                    endDate = startDate.AddDays(1);
+                }
+            }
+            else
+            {
+                startDate = date.Value.Date;
+                endDate = startDate.AddDays(1);
+            }
             
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)

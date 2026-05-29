@@ -63,6 +63,19 @@ class AdminService {
     }
   }
 
+  Future<Map<String, dynamic>?> getClosureDetails(int id) async {
+    try {
+      final response = await _dio.get('/api/cash-closures/$id/details', options: await _getOptions());
+      if (response.statusCode == 200) {
+        return response.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print("Error fetching closure details: $e");
+      return null;
+    }
+  }
+
   Future<List<dynamic>> getStockAlerts() async {
     try {
       final response = await _dio.get('/api/reports/stock-alerts', options: await _getOptions());
