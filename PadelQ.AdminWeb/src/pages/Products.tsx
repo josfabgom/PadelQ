@@ -3,10 +3,10 @@ import api, { getAuthConfig } from '../api/api';
 import { 
     Package, Plus, Edit2, Trash2, DollarSign, ArrowLeft, Tag, Search, X, 
     TrendingUp, TrendingDown, RefreshCcw, Camera, AlertCircle, ShoppingCart, Info,
-    ChevronRight, ChevronDown, Filter, History, CheckCircle
+    ChevronRight, ChevronDown, Filter, History, CheckCircle, BarChart2
 } from 'lucide-react';
 import Header from '../components/Header';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { es } from 'date-fns/locale';
@@ -53,12 +53,17 @@ const ProductsPage = () => {
   const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [companyInfo, setCompanyInfo] = useState({
-    name: 'PadelQ',
-    address: '',
-    phone: '',
-    email: '',
-    website: ''
+    name: 'Tu Club', address: '', phone: '', email: '', website: ''
   });
+
+  // Ranking states
+  const [isRankingModalOpen, setIsRankingModalOpen] = useState(false);
+  const [rankingData, setRankingData] = useState<any[]>([]);
+  const [rankingStartDate, setRankingStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [rankingEndDate, setRankingEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [rankingSortColumn, setRankingSortColumn] = useState<string>('totalQuantity');
+  const [rankingSortDirection, setRankingSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [loadingRanking, setLoadingRanking] = useState(false);
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
@@ -210,6 +215,39 @@ const ProductsPage = () => {
     } catch (err) {
       console.error("Error al cargar reporte de ventas", err);
     }
+  };
+
+  const fetchRankingData = async () => {
+    try {
+      setLoadingRanking(true);
+      const response = await api.get(`/api/reports/products-ranking-by-day?startDate=${rankingStartDate}&endDate=${rankingEndDate}`, config);
+      setRankingData(response.data);
+      if (!isRankingModalOpen) setIsRankingModalOpen(true);
+    } catch (err) {
+      console.error("Error al cargar ranking", err);
+      showAlert("Error al cargar el ranking de ventas.", "error");
+    } finally {
+      setLoadingRanking(false);
+    }
+  };
+
+  const handleSortRanking = (column: string) => {
+    if (rankingSortColumn === column) {
+      setRankingSortDirection(rankingSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setRankingSortColumn(column);
+      setRankingSortDirection('desc');
+    }
+  };
+
+  const getSortedRankingData = () => {
+    return [...rankingData].sort((a, b) => {
+      const valA = a[rankingSortColumn] || 0;
+      const valB = b[rankingSortColumn] || 0;
+      if (valA < valB) return rankingSortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return rankingSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
   };
 
   const fetchStockAlerts = async () => {
@@ -451,6 +489,14 @@ const ProductsPage = () => {
           >
             <TrendingUp className="w-5 h-5 text-blue-500" />
             Ventas Diarias
+          </button>
+
+          <button 
+            onClick={fetchRankingData}
+            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
+          >
+            <BarChart2 className="w-5 h-5 text-purple-500" />
+            Ranking Semanal
           </button>
 
           <button 
@@ -1242,6 +1288,129 @@ const ProductsPage = () => {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ranking Modal */}
+      {isRankingModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[100] p-6">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="p-10 bg-black text-white relative shrink-0">
+              <button onClick={() => setIsRankingModalOpen(false)} className="absolute right-8 top-8 p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-purple-500/20 text-purple-400 rounded-2xl">
+                    <BarChart2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tight">Ranking de Ventas por Día</h2>
+                    <p className="text-white/60 font-bold uppercase tracking-widest text-xs mt-1">Mapa de calor de consumo</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-4 mr-16">
+                  <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
+                    <span className="text-[10px] font-bold text-white/50 uppercase">Desde</span>
+                    <input 
+                      type="date" 
+                      value={rankingStartDate}
+                      onChange={(e) => setRankingStartDate(e.target.value)}
+                      onBlur={fetchRankingData}
+                      className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
+                    <span className="text-[10px] font-bold text-white/50 uppercase">Hasta</span>
+                    <input 
+                      type="date" 
+                      value={rankingEndDate}
+                      onChange={(e) => setRankingEndDate(e.target.value)}
+                      onBlur={fetchRankingData}
+                      className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-auto bg-zinc-50 flex-1">
+              {loadingRanking ? (
+                <div className="flex flex-col items-center justify-center py-20 h-full">
+                  <RefreshCcw className="w-10 h-10 animate-spin text-zinc-300 mb-4" />
+                  <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Calculando ranking...</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-white sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5 whitespace-nowrap">Producto</th>
+                      {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'totalQuantity'].map((col) => {
+                        const labels: Record<string, string> = {
+                          monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue', friday: 'Vie', saturday: 'Sáb', sunday: 'Dom', totalQuantity: 'Total'
+                        };
+                        return (
+                          <th 
+                            key={col} 
+                            onClick={() => handleSortRanking(col)}
+                            className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5 cursor-pointer hover:bg-zinc-50 transition-colors text-center group whitespace-nowrap"
+                          >
+                            <div className="flex items-center justify-center gap-1">
+                              {labels[col]}
+                              {rankingSortColumn === col ? (
+                                rankingSortDirection === 'asc' ? <ChevronDown className="w-3 h-3 rotate-180" /> : <ChevronDown className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {getSortedRankingData().map((item, idx) => {
+                      const maxDaily = Math.max(item.monday, item.tuesday, item.wednesday, item.thursday, item.friday, item.saturday, item.sunday);
+                      
+                      const getCellColor = (val: number) => {
+                        if (val === 0) return 'text-zinc-300';
+                        if (maxDaily > 0 && val === maxDaily) return 'bg-purple-100 text-purple-700 font-black';
+                        if (maxDaily > 0 && val >= maxDaily * 0.7) return 'bg-purple-50 text-purple-600 font-bold';
+                        return 'text-zinc-600';
+                      };
+
+                      return (
+                        <tr key={item.productId} className="hover:bg-white transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-black text-zinc-400 w-4 text-right">#{idx + 1}</span>
+                              <div>
+                                <p className="font-bold text-sm text-black uppercase">{item.productName}</p>
+                                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{item.category}</p>
+                              </div>
+                            </div>
+                          </td>
+                          {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                            <td key={day} className="p-2 text-center align-middle">
+                              <div className={`mx-auto w-10 h-10 flex items-center justify-center rounded-xl text-xs transition-colors ${getCellColor(item[day])}`}>
+                                {item[day]}
+                              </div>
+                            </td>
+                          ))}
+                          <td className="p-4 text-center">
+                            <div className="inline-flex items-center justify-center px-4 py-2 bg-black text-white rounded-xl text-xs font-black">
+                              {item.totalQuantity}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>

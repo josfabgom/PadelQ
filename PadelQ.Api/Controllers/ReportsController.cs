@@ -263,6 +263,57 @@ namespace PadelQ.Api.Controllers
             return Ok(sales);
         }
 
+        [HttpGet("products-ranking-by-day")]
+        public async Task<IActionResult> GetProductsRankingByDay([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date.AddDays(-30);
+            var filterEnd = (endDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date).AddDays(1);
+
+            var consumptions = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.CreatedAt >= filterStart && c.CreatedAt < filterEnd &&
+                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
+                .Select(c => new
+                {
+                    c.ProductId,
+                    c.Product.Name,
+                    c.Product.Category,
+                    c.Quantity,
+                    Date = c.CreatedAt.AddHours(-3) // Local time adjustment
+                })
+                .ToListAsync();
+
+            var ranking = consumptions
+                .GroupBy(c => new { c.ProductId, c.Name, c.Category })
+                .Select(g =>
+                {
+                    var byDay = g.GroupBy(x => x.Date.DayOfWeek)
+                                 .ToDictionary(x => x.Key, x => x.Sum(y => y.Quantity));
+
+                    return new
+                    {
+                        productId = g.Key.ProductId,
+                        productName = g.Key.Name,
+                        category = g.Key.Category,
+                        totalQuantity = g.Sum(x => x.Quantity),
+                        monday = byDay.ContainsKey(DayOfWeek.Monday) ? byDay[DayOfWeek.Monday] : 0,
+                        tuesday = byDay.ContainsKey(DayOfWeek.Tuesday) ? byDay[DayOfWeek.Tuesday] : 0,
+                        wednesday = byDay.ContainsKey(DayOfWeek.Wednesday) ? byDay[DayOfWeek.Wednesday] : 0,
+                        thursday = byDay.ContainsKey(DayOfWeek.Thursday) ? byDay[DayOfWeek.Thursday] : 0,
+                        friday = byDay.ContainsKey(DayOfWeek.Friday) ? byDay[DayOfWeek.Friday] : 0,
+                        saturday = byDay.ContainsKey(DayOfWeek.Saturday) ? byDay[DayOfWeek.Saturday] : 0,
+                        sunday = byDay.ContainsKey(DayOfWeek.Sunday) ? byDay[DayOfWeek.Sunday] : 0
+                    };
+                })
+                .OrderByDescending(x => x.totalQuantity)
+                .ToList();
+
+            return Ok(ranking);
+        }
+
         [HttpGet("stock-alerts")]
         public async Task<IActionResult> GetStockAlerts()
         {
