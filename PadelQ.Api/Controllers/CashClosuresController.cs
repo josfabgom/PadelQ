@@ -37,7 +37,7 @@ namespace PadelQ.Api.Controllers
                 }
 
                 var activeClosure = await _context.CashClosures
-                    .Where(c => c.OpenedBy == targetUser)
+                    .Where(c => c.OpenedBy == targetUser && c.IsOpen)
                     .OrderByDescending(c => c.OpeningDate)
                     .FirstOrDefaultAsync();
 
