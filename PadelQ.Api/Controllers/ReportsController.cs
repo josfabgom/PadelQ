@@ -39,13 +39,12 @@ namespace PadelQ.Api.Controllers
                 .OrderByDescending(c => c.OpeningDate)
                 .FirstOrDefaultAsync();
 
-            // Si hay una caja abierta, tomamos su fecha de apertura como el inicio del turno comercial
-            var today = activeClosure?.OpeningDate ?? fallbackToday;
+            // Para "Ventas Diarias" y "Reservas del día", usamos el día calendario
+            // independientemente de a qué hora se abrió la caja.
+            var today = fallbackToday;
             
             // El turno comercial abarca hasta 6 horas después de finalizar el día de apertura de la caja (ej: hasta 6am del día siguiente)
-            var tomorrow = activeClosure != null 
-                ? today.Date.AddDays(1).AddHours(6) 
-                : fallbackToday.AddDays(1);
+            var tomorrow = fallbackToday.AddDays(1).AddHours(6);
 
             var startOfMonth = new DateTime(today.Year, today.Month, 1);
             
