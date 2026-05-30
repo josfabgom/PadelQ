@@ -37,21 +37,17 @@ namespace PadelQ.Api.Controllers
                 }
 
                 var activeClosure = await _context.CashClosures
-                    .Where(c => c.IsOpen && c.OpenedBy == targetUser)
+                    .Where(c => c.OpenedBy == targetUser)
                     .OrderByDescending(c => c.OpeningDate)
                     .FirstOrDefaultAsync();
 
-                var lastClosureDate = activeClosure?.OpeningDate ?? GetArgNow().Date;
-                
-                // Si no hay caja abierta, tomamos desde el inicio del día
-                if (activeClosure == null) {
-                    lastClosureDate = GetArgNow().Date; 
-                }
+                var startDate = activeClosure?.OpeningDate ?? GetArgNow().Date;
+                var endDate = activeClosure?.ClosingDate ?? GetArgNow();
 
                 var transactions = await _context.Transactions
                     .Include(t => t.PaymentMethod)
                     .Include(t => t.User)
-                    .Where(t => t.Date >= lastClosureDate && t.ProcessedBy == targetUser && (
+                    .Where(t => t.Date >= startDate && t.Date <= endDate && t.ProcessedBy == targetUser && (
                         t.Type == TransactionType.Payment || 
                         t.Type == TransactionType.MembershipPayment ||
                         t.Type == TransactionType.CashIn ||
@@ -101,11 +97,28 @@ namespace PadelQ.Api.Controllers
                     });
                 }
 
+                var rentalsTotal = await _context.Bookings
+                    .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= startDate && b.StartTime < endDate)
+                    .SumAsync(b => b.Price) 
+                    + await _context.SpaceBookings
+                    .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= startDate && b.StartTime < endDate)
+                    .SumAsync(b => b.Price);
+
+                var consumptionsTotal = await _context.BookingConsumptions
+                    .Include(c => c.Booking)
+                    .Include(c => c.SpaceBooking)
+                    .Where(c => c.CreatedAt >= startDate && c.CreatedAt < endDate &&
+                               (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                               (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
+                    .SumAsync(c => c.UnitPrice * c.Quantity);
+
                 return Ok(new {
                     activeClosure,
                     summary,
                     totalAmount = transactions.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount),
-                    lastClosureDate
+                    lastClosureDate = startDate,
+                    rentalsTotal,
+                    consumptionsTotal
                 });
             }
             catch (Exception ex)
@@ -232,6 +245,21 @@ namespace PadelQ.Api.Controllers
                 .OrderBy(t => t.Date)
                 .ToListAsync();
 
+            var rentalsTotal = await _context.Bookings
+                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= start && b.StartTime < end)
+                .SumAsync(b => b.Price) 
+                + await _context.SpaceBookings
+                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= start && b.StartTime < end)
+                .SumAsync(b => b.Price);
+
+            var consumptionsTotal = await _context.BookingConsumptions
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.CreatedAt >= start && c.CreatedAt < end &&
+                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
+                .SumAsync(c => c.UnitPrice * c.Quantity);
+
             return Ok(new {
                 closure,
                 transactions = transactions.Select(t => new {
@@ -242,7 +270,9 @@ namespace PadelQ.Api.Controllers
                     t.ProcessedBy,
                     Method = t.PaymentMethod?.Name ?? "No Especificado",
                     UserName = t.User != null ? t.User.FullName : "Particular"
-                })
+                }),
+                rentalsTotal,
+                consumptionsTotal
             });
         }
 

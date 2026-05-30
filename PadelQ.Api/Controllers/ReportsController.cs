@@ -183,12 +183,12 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet("product-sales-daily")]
-        public async Task<IActionResult> GetProductSalesDaily([FromQuery] DateTime? date)
+        public async Task<IActionResult> GetProductSalesDaily([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
-            DateTime startDate;
-            DateTime endDate;
+            DateTime filterStart;
+            DateTime filterEnd;
 
-            if (date == null)
+            if (startDate == null && endDate == null)
             {
                 var activeClosure = await _context.CashClosures
                     .Where(c => c.IsOpen)
@@ -197,26 +197,26 @@ namespace PadelQ.Api.Controllers
 
                 if (activeClosure != null)
                 {
-                    startDate = activeClosure.OpeningDate;
-                    endDate = startDate.Date.AddDays(1).AddHours(6);
+                    filterStart = activeClosure.OpeningDate;
+                    filterEnd = filterStart.Date.AddDays(1).AddHours(6);
                 }
                 else
                 {
-                    startDate = DateTime.UtcNow.AddHours(-3).Date;
-                    endDate = startDate.AddDays(1);
+                    filterStart = DateTime.UtcNow.AddHours(-3).Date;
+                    filterEnd = filterStart.AddDays(1);
                 }
             }
             else
             {
-                startDate = date.Value.Date;
-                endDate = startDate.AddDays(1);
+                filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
+                filterEnd = (endDate?.Date ?? filterStart).AddDays(1);
             }
             
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)
                 .Include(c => c.Booking)
                 .Include(c => c.SpaceBooking)
-                .Where(c => c.CreatedAt >= startDate && c.CreatedAt < endDate &&
+                .Where(c => c.CreatedAt >= filterStart && c.CreatedAt < filterEnd &&
                            (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
                            (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                 .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
@@ -233,7 +233,7 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
 
             // Si no hay ventas hoy, devolvemos también un resumen de los últimos 7 días para que el usuario vea que hay datos
-            if (!sales.Any() && date == null)
+            if (!sales.Any() && startDate == null && endDate == null)
             {
                 var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
                 var recentSales = await _context.BookingConsumptions
@@ -279,16 +279,22 @@ namespace PadelQ.Api.Controllers
                 .Where(p => p.IsActive)
                 .ToListAsync();
 
+            var coverageSetting = await _context.SystemSettings.FindAsync("CoverageDays");
+            int coverageDays = int.TryParse(coverageSetting?.Value, out var c) ? c : 4;
+
             var alerts = products
                 .Select(p => {
                     var weeklySales = recentSales.ContainsKey(p.Id) ? recentSales[p.Id] : 0;
-                    // El cálculo inteligente: 
-                    // Si el stock actual es menor al mínimo O el stock actual es menor a lo que se vende en una semana
-                    var isCritical = p.Stock <= p.MinimumStock || p.Stock <= (weeklySales * 0.5); // alerta si queda menos de media semana de ventas
+                    double dailySales = weeklySales / 7.0;
+                    int targetStock = (int)Math.Ceiling(dailySales * coverageDays) + p.MinimumStock;
+                    
+                    var isCritical = p.Stock <= p.MinimumStock || p.Stock <= Math.Ceiling(dailySales * 2);
                     
                     return new {
                         p,
                         weeklySales,
+                        dailySales,
+                        targetStock,
                         isCritical
                     };
                 })
@@ -302,8 +308,9 @@ namespace PadelQ.Api.Controllers
                     stock = x.p.Stock,
                     minimumStock = x.p.MinimumStock,
                     weeklySales = x.weeklySales,
-                    // Sugerencia: Reponer para cubrir el mínimo + 1 semana de ventas promedio
-                    needed = Math.Max(0, (x.p.MinimumStock - x.p.Stock) + x.weeklySales)
+                    dailySales = (int)Math.Round(x.dailySales, MidpointRounding.AwayFromZero),
+                    targetStock = x.targetStock,
+                    needed = Math.Max(0, x.targetStock - x.p.Stock)
                 })
                 .Where(x => x.needed > 0)
                 .ToList();

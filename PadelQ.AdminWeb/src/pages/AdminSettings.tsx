@@ -114,17 +114,29 @@ const AdminSettings = () => {
 
   const handleWipeAccount = async () => {
     if (!selectedUserForWipe) return;
-    if (!window.confirm(`¿Estás SEGURO de querer resetear la cuenta de ${selectedUserForWipe.fullName}? Se borrarán todos sus movimientos y pagos.`)) return;
+    if (!window.confirm(`¿Está SEGURO que desea eliminar TODOS los pagos y deudas del usuario ${selectedUserForWipe.fullName}? Esta acción es irreversible y requiere privilegios de administrador.`)) return;
 
     try {
-      await api.post(`/api/transaction/reset-account/${selectedUserForWipe.id}`, {}, getAuthConfig());
-      setMessage({ text: 'Cuenta reseteada con éxito', type: 'success' });
+      await api.delete(`/api/transactions/user/${selectedUserForWipe.id}/wipe-account`, getAuthConfig());
+      alert('Cuenta corriente limpiada con éxito.');
       setSelectedUserForWipe(null);
       setUserSearch('');
     } catch (err: any) {
       const errorMsg = err.response?.data?.Message || err.response?.data || err.message;
       setMessage({ text: 'Error: ' + errorMsg, type: 'error' });
       alert('Error detallado: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
+    }
+  };
+
+  const handleAutoAdjustMinimums = async () => {
+    if (!window.confirm('¿Desea auto-ajustar todos los stocks mínimos ahora mismo según el historial de ventas?')) return;
+    
+    try {
+      const response = await api.post('/api/products/auto-adjust-minimums', {}, getAuthConfig());
+      alert(response.data.Message || 'Stocks mínimos actualizados correctamente.');
+    } catch (error: any) {
+      console.error('Error ajustando stocks:', error);
+      alert(error.response?.data || 'Error al auto-ajustar los stocks mínimos');
     }
   };
 
@@ -369,6 +381,56 @@ const AdminSettings = () => {
                 suffix="días antes"
                 type="number"
               />
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 bg-cyan-50 text-cyan-600 rounded-2xl">
+                <Briefcase className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Inventario y Stock</h2>
+                <p className="text-sm text-slate-500">Parámetros para sugerencias de compra inteligente</p>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <SettingInput 
+                label="Días de Cobertura de Stock" 
+                value={getSettingValue('CoverageDays', '4')} 
+                onChange={(val: string) => handleChange('CoverageDays', val)}
+                onSave={() => handleSave('CoverageDays')}
+                icon={<Clock className="w-4 h-4" />}
+                suffix="días (ciclo + envío)"
+                type="number"
+              />
+              <SettingInput 
+                label="Días de Demora de Proveedor" 
+                value={getSettingValue('ProviderDelayDays', '2')} 
+                onChange={(val: string) => handleChange('ProviderDelayDays', val)}
+                onSave={() => handleSave('ProviderDelayDays')}
+                icon={<Clock className="w-4 h-4" />}
+                suffix="días"
+                type="number"
+              />
+              <SettingInput 
+                label="Días de Historial de Ventas" 
+                value={getSettingValue('SalesHistoryDays', '7')} 
+                onChange={(val: string) => handleChange('SalesHistoryDays', val)}
+                onSave={() => handleSave('SalesHistoryDays')}
+                icon={<Clock className="w-4 h-4" />}
+                suffix="días (para promediar)"
+                type="number"
+              />
+              <div className="pt-4 border-t border-slate-100">
+                <button 
+                  onClick={handleAutoAdjustMinimums}
+                  className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3"
+                >
+                  <Briefcase className="w-4 h-4" />
+                  Auto-Ajustar Stocks Mínimos
+                </button>
+              </div>
             </div>
           </div>
 

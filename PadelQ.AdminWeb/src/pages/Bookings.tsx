@@ -3937,11 +3937,13 @@ const BookingsPage = () => {
                                             >
                                                 <div className="absolute top-0 right-0 w-12 h-12 bg-black/5 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:bg-black group-hover:scale-150 duration-500"></div>
 
-                                                <div className="p-4 bg-white rounded-2xl border border-zinc-100 mb-3 group-hover:bg-black group-hover:text-white transition-all shadow-sm z-10">
+                                                <div className="w-14 h-14 bg-white rounded-2xl border border-zinc-100 mb-3 group-hover:border-black transition-all shadow-sm z-10 overflow-hidden flex items-center justify-center">
                                                     {isAddingConsumption === product.id ? (
-                                                        <RefreshCw className="w-6 h-6 animate-spin" />
+                                                        <RefreshCw className="w-6 h-6 animate-spin text-zinc-400 group-hover:text-black" />
+                                                    ) : product.imageUrl ? (
+                                                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <Package className="w-6 h-6" />
+                                                        <Package className="w-6 h-6 text-zinc-400 group-hover:text-black" />
                                                     )}
                                                 </div>
                                                 <p className="text-[10px] font-black uppercase italic text-center leading-tight mb-1 z-10">{product.name}</p>

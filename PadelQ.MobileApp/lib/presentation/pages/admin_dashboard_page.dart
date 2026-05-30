@@ -604,13 +604,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
       return _buildErrorState();
     }
 
-    final todayRevenue = _salesSummary!['todayRevenue'] ?? 0.0;
-    final rentals = _salesSummary!['todayRentalsRevenue'] ?? 0.0;
-    final consumptions = _salesSummary!['todayConsumptionsRevenue'] ?? 0.0;
-    final payments = _salesSummary!['todayActualPayments'] ?? 0.0;
-    final bookings = _salesSummary!['todayBookings'] ?? 0;
-
     final bool hasActiveClosure = _salesSummary!['activeClosureIsOpen'] ?? false;
+    
+    final todayRevenue = hasActiveClosure ? (_salesSummary!['todayRevenue'] ?? 0.0) : 0.0;
+    final rentals = hasActiveClosure ? (_salesSummary!['todayRentalsRevenue'] ?? 0.0) : 0.0;
+    final consumptions = hasActiveClosure ? (_salesSummary!['todayConsumptionsRevenue'] ?? 0.0) : 0.0;
+    final payments = hasActiveClosure ? (_salesSummary!['todayActualPayments'] ?? 0.0) : 0.0;
+    final bookings = hasActiveClosure ? (_salesSummary!['todayBookings'] ?? 0) : 0;
+
     final String? activeClosureOpenedBy = _salesSummary!['activeClosureOpenedBy'];
     final String? activeClosureOpeningDateRaw = _salesSummary!['activeClosureOpeningDate'];
     
@@ -664,7 +665,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                       Text(
                         hasActiveClosure
                             ? 'Fecha de Caja: $activeClosureDateStr  |  Usuario: ${activeClosureOpenedBy ?? 'Admin'}'
-                            : 'No hay una caja abierta actualmente. Las estadísticas corresponden al día de hoy.',
+                            : 'No hay una caja abierta actualmente. Abre una caja para ver las estadísticas.',
                         style: TextStyle(
                           fontSize: 10.sp,
                           fontWeight: FontWeight.bold,
@@ -680,7 +681,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
           // Row of main metrics
           _buildMetricCard(
-            title: 'INGRESOS TOTALES HOY',
+            title: hasActiveClosure ? 'INGRESOS DE CAJA ACTIVA' : 'INGRESOS TOTALES (CAJA CERRADA)',
             value: '\$${NumberFormat('#,##0.00', 'es_AR').format(todayRevenue)}',
             subtitle: 'Alquileres + Consumiciones',
             icon: LucideIcons.trendingUp,
@@ -735,7 +736,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
           // Title Section: Reservas de Hoy
           Text(
-            'DETALLE DE RESERVAS DE HOY',
+            hasActiveClosure ? 'DETALLE DE RESERVAS DE LA CAJA' : 'RESERVAS',
             style: TextStyle(
               fontSize: 10.sp,
               fontWeight: FontWeight.w900,
@@ -754,6 +755,24 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
   Widget _buildTodayBookingsList() {
     if (_isLoadingBookings) {
       return const Center(child: CircularProgressIndicator(color: Colors.black));
+    }
+
+    final bool hasActiveClosure = _salesSummary?['activeClosureIsOpen'] ?? false;
+    if (!hasActiveClosure) {
+      return Container(
+        padding: EdgeInsets.all(24.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24.r),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Center(
+          child: Text(
+            'Abre una caja para ver las reservas de la sesión activa.',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 12.sp, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
     }
 
     final allTodayBookings = <Map<String, dynamic>>[];
@@ -793,7 +812,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
         ),
         child: Center(
           child: Text(
-            'No hay reservas registradas para hoy.',
+            'No hay reservas registradas para esta caja.',
             style: TextStyle(color: Colors.grey.shade400, fontSize: 12.sp, fontWeight: FontWeight.bold),
           ),
         ),
@@ -1038,8 +1057,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     final lastClosureDateRaw = _cashStatus!['lastClosureDate'];
 
     final bool isOpen = activeClosure != null && activeClosure['isOpen'] == true;
-    final String cashier = isOpen ? (activeClosure['openedBy'] ?? 'Admin') : 'Ninguno';
-    final double initialCash = isOpen ? (activeClosure['initialCash'] ?? 0.0) : 0.0;
+    final String cashier = activeClosure != null ? (activeClosure['openedBy'] ?? 'Admin') : 'Ninguno';
+    final double initialCash = activeClosure != null ? (activeClosure['initialCash'] ?? 0.0) : 0.0;
     
     // Extract all transactions from summary categories for easy viewing
     final allTransactions = <Map<String, dynamic>>[];
@@ -1096,9 +1115,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                       ),
                       SizedBox(height: 2.h),
                       Text(
-                        isOpen
-                            ? 'Fecha de Caja: ${activeClosure['openingDate'] != null ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(activeClosure['openingDate']).toLocal()) : 'N/A'}  |  Usuario: $cashier'
-                            : 'No hay una caja abierta actualmente en el sistema.',
+                        'Fecha de Caja: ${activeClosure != null && activeClosure['openingDate'] != null ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(activeClosure['openingDate']).toLocal()) : 'N/A'}  |  Usuario: $cashier',
                         style: TextStyle(
                           fontSize: 10.sp,
                           fontWeight: FontWeight.bold,
@@ -1127,7 +1144,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'SESIÓN DE CAJA ACTIVA',
+                      isOpen ? 'SESIÓN DE CAJA ACTIVA' : 'ÚLTIMA SESIÓN DE CAJA',
                       style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.5.w),
                     ),
                     Container(
@@ -1153,7 +1170,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                 SizedBox(height: 12.h),
                 _buildClosureDetailRow(
                   'Fecha de Caja',
-                  isOpen && activeClosure['openingDate'] != null
+                  activeClosure != null && activeClosure['openingDate'] != null
                       ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(activeClosure['openingDate']).toLocal())
                       : 'N/A',
                   LucideIcons.calendar,
@@ -1168,6 +1185,73 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                 _buildClosureDetailRow('Fecha de Operación', todayDateStr, LucideIcons.clock),
               ],
             ),
+          ),
+          SizedBox(height: 24.h),
+
+          // Sales summary details header
+          Text(
+            'RESUMEN DE INGRESOS',
+            style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
+          ),
+          SizedBox(height: 16.h),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(LucideIcons.calendar, size: 14.sp, color: Colors.blue.shade500),
+                          SizedBox(width: 8.w),
+                          Text('ALQUILERES', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      Text(
+                        '\$${NumberFormat('#,##0', 'es_AR').format(_cashStatus != null ? _cashStatus!['rentalsTotal'] ?? 0 : 0)}',
+                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(LucideIcons.shoppingCart, size: 14.sp, color: Colors.orange.shade500),
+                          SizedBox(width: 8.w),
+                          Text('CONSUMOS', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      Text(
+                        '\$${NumberFormat('#,##0', 'es_AR').format(_cashStatus != null ? _cashStatus!['consumptionsTotal'] ?? 0 : 0)}',
+                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24.h),
 
@@ -1811,6 +1895,73 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                 ],
               ],
             ),
+          ),
+          SizedBox(height: 24.h),
+
+          // Sales summary details header
+          Text(
+            'RESUMEN DE INGRESOS',
+            style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
+          ),
+          SizedBox(height: 16.h),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(LucideIcons.calendar, size: 14.sp, color: Colors.blue.shade500),
+                          SizedBox(width: 8.w),
+                          Text('ALQUILERES', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      Text(
+                        '\$${NumberFormat('#,##0', 'es_AR').format(_selectedClosureDetails?['rentalsTotal'] ?? 0)}',
+                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(LucideIcons.shoppingCart, size: 14.sp, color: Colors.orange.shade500),
+                          SizedBox(width: 8.w),
+                          Text('CONSUMOS', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      Text(
+                        '\$${NumberFormat('#,##0', 'es_AR').format(_selectedClosureDetails?['consumptionsTotal'] ?? 0)}',
+                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24.h),
 

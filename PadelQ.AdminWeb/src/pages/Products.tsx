@@ -50,7 +50,8 @@ const ProductsPage = () => {
   const [isStockAlertsOpen, setIsStockAlertsOpen] = useState(false);
   const [salesReport, setSalesReport] = useState<any[]>([]);
   const [stockAlerts, setStockAlerts] = useState<any[]>([]);
-  const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [companyInfo, setCompanyInfo] = useState({
     name: 'PadelQ',
     address: '',
@@ -65,6 +66,11 @@ const ProductsPage = () => {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [customAlert, setCustomAlert] = useState<{ title: string, message: string, type: 'success' | 'error' | 'warning' } | null>(null);
+
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+  const [stockMovements, setStockMovements] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success', title?: string) => {
       setCustomAlert({
@@ -198,7 +204,7 @@ const ProductsPage = () => {
 
   const fetchSalesReport = async () => {
     try {
-      const response = await api.get(`/api/reports/product-sales-daily?date=${reportDate}`, config);
+      const response = await api.get(`/api/reports/product-sales-daily?startDate=${reportStartDate}&endDate=${reportEndDate}`, config);
       setSalesReport(response.data);
       setIsSalesReportOpen(true);
     } catch (err) {
@@ -245,7 +251,10 @@ const ProductsPage = () => {
       
       doc.setFontSize(10);
       doc.setTextColor(255, 255, 255);
-      doc.text(isRecent ? 'MOSTRANDO ÚLTIMOS 7 DÍAS (ACUMULADO)' : `FECHA: ${format(new Date(reportDate + 'T00:00:00'), 'dd/MM/yyyy')}`, 195, 38, { align: 'right' });
+      const dateText = isRecent 
+        ? 'MOSTRANDO ÚLTIMOS 7 DÍAS (ACUMULADO)' 
+        : `FECHA: ${format(new Date(reportStartDate + 'T00:00:00'), 'dd/MM/yyyy')} al ${format(new Date(reportEndDate + 'T00:00:00'), 'dd/MM/yyyy')}`;
+      doc.text(dateText, 195, 38, { align: 'right' });
       
       const tableData = salesReport.map(sale => [
         sale.productName,
@@ -280,7 +289,7 @@ const ProductsPage = () => {
       doc.setFont('helvetica', 'bold');
       doc.text(`UTILIDAD ESTIMADA: ${formatARS(totalUtility)}`, 140, finalY + 22, { align: 'right' });
       
-      doc.save(`Reporte_Ventas_${reportDate}.pdf`);
+      doc.save(`Reporte_Ventas_${reportStartDate}_al_${reportEndDate}.pdf`);
     } catch (error) {
       console.error("Error al generar PDF de ventas:", error);
       alert("Hubo un error al generar el PDF. Revisa la consola.");
@@ -363,6 +372,22 @@ const ProductsPage = () => {
       setProductToDelete(null);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleOpenHistory = async (product: Product) => {
+    setHistoryProduct(product);
+    setStockMovements([]);
+    setIsHistoryModalOpen(true);
+    setLoadingHistory(true);
+    try {
+      const response = await api.get(`/api/products/${product.id}/movements`, config);
+      setStockMovements(response.data);
+    } catch (error) {
+      console.error('Error fetching stock history:', error);
+      alert('No se pudo cargar el historial.');
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -551,6 +576,13 @@ const ProductsPage = () => {
                       </td>
                       <td className="px-8 py-5">
                         <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleOpenHistory(product)}
+                            className="p-3 bg-indigo-50 hover:bg-indigo-600 hover:text-white rounded-xl transition-all text-indigo-400"
+                            title="Historial de Movimientos"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
                           <button 
                             onClick={() => handleOpenStockModal(product)}
                             className="p-3 bg-zinc-100 hover:bg-black hover:text-white rounded-xl transition-all text-zinc-500"
@@ -918,13 +950,26 @@ const ProductsPage = () => {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <input 
-                  type="date" 
-                  value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                  onBlur={fetchSalesReport}
-                  className="bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                />
+                <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
+                  <span className="text-[10px] font-bold text-white/50 uppercase">Desde</span>
+                  <input 
+                    type="date" 
+                    value={reportStartDate}
+                    onChange={(e) => setReportStartDate(e.target.value)}
+                    onBlur={fetchSalesReport}
+                    className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  />
+                </div>
+                <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
+                  <span className="text-[10px] font-bold text-white/50 uppercase">Hasta</span>
+                  <input 
+                    type="date" 
+                    value={reportEndDate}
+                    onChange={(e) => setReportEndDate(e.target.value)}
+                    onBlur={fetchSalesReport}
+                    className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  />
+                </div>
                 <button onClick={() => setIsSalesReportOpen(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
                   <X className="w-5 h-5" />
                 </button>
@@ -1024,7 +1069,7 @@ const ProductsPage = () => {
             <div className="p-8">
               {stockAlerts.length > 0 ? (
                 <div className="space-y-6">
-                  <p className="text-sm font-medium text-zinc-500">Los siguientes productos están por debajo del stock mínimo definido. Se sugiere realizar una reposición inmediata.</p>
+                  <p className="text-sm font-medium text-zinc-500">Los siguientes productos están por debajo de su nivel mínimo o de cobertura. La cantidad sugerida contempla el stock mínimo más la proyección de venta diaria para los días de cobertura configurados.</p>
                   
                   <div className="space-y-2">
                     {stockAlerts.map((alert, i) => (
@@ -1044,8 +1089,8 @@ const ProductsPage = () => {
                             <p className="font-black italic text-rose-600">{alert.stock} uds</p>
                           </div>
                           <div className="text-center border-l border-rose-200 pl-10">
-                            <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Ventas (7d)</p>
-                            <p className="font-bold text-blue-600">{alert.weeklySales} uds</p>
+                            <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Venta / Día</p>
+                            <p className="font-bold text-blue-600">{alert.dailySales} uds</p>
                           </div>
                           <div className="text-center border-l border-rose-200 pl-10">
                             <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Mínimo</p>
@@ -1138,6 +1183,66 @@ const ProductsPage = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* History Modal */}
+      {isHistoryModalOpen && historyProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[100] p-6">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="p-10 bg-black text-white relative">
+              <button onClick={() => setIsHistoryModalOpen(false)} className="absolute right-8 top-8 p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl">
+                  <History className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black italic uppercase tracking-tight">Historial de Stock</h2>
+                  <p className="text-white/60 font-bold uppercase tracking-widest text-xs mt-1">{historyProduct.name}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-10 max-h-[60vh] overflow-y-auto">
+              {loadingHistory ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <RefreshCcw className="w-10 h-10 animate-spin text-zinc-300 mb-4" />
+                  <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Cargando movimientos...</p>
+                </div>
+              ) : stockMovements.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <History className="w-12 h-12 text-zinc-200 mb-4" />
+                  <p className="text-zinc-400 font-bold uppercase tracking-widest text-xs">No hay movimientos registrados</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {stockMovements.map((mov) => {
+                    const typeLabel = mov.type === 0 ? 'COMPRA' : mov.type === 1 ? 'AJUSTE' : 'VENTA';
+                    const typeColor = mov.type === 0 ? 'bg-blue-50 text-blue-600' : mov.type === 1 ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-purple-600';
+                    const isPositive = mov.quantity > 0;
+                    return (
+                      <div key={mov.id} className="flex items-center justify-between p-6 bg-zinc-50 rounded-3xl border border-zinc-100 hover:border-zinc-300 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-6">
+                          <div className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest ${typeColor}`}>
+                            {typeLabel}
+                          </div>
+                          <div>
+                            <p className="text-sm font-black italic uppercase text-black">{mov.note || 'Sin observación'}</p>
+                            <p className="text-xs font-bold text-zinc-400 mt-1">{format(new Date(mov.createdAt), "dd/MM/yyyy HH:mm'hs'")}</p>
+                          </div>
+                        </div>
+                        <div className={`text-2xl font-black italic tracking-tighter ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {isPositive ? '+' : ''}{mov.quantity}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Custom Alert Modal */}

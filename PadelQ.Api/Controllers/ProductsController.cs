@@ -73,6 +73,17 @@ namespace PadelQ.Api.Controllers
             return Ok(product);
         }
 
+        [HttpGet("{id}/movements")]
+        public async Task<ActionResult<IEnumerable<ProductStockMovement>>> GetStockMovements(int id)
+        {
+            var movements = await _context.ProductStockMovements
+                .Where(m => m.ProductId == id)
+                .OrderByDescending(m => m.CreatedAt)
+                .ToListAsync();
+
+            return Ok(movements);
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
@@ -159,6 +170,50 @@ namespace PadelQ.Api.Controllers
 
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Importación completada", Updated = updated, Created = created });
+        }
+
+        [HttpPost("auto-adjust-minimums")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AutoAdjustMinimums()
+        {
+            var delaySetting = await _context.SystemSettings.FindAsync("ProviderDelayDays");
+            int providerDelayDays = int.TryParse(delaySetting?.Value, out var delay) ? delay : 2;
+
+            var historySetting = await _context.SystemSettings.FindAsync("SalesHistoryDays");
+            int salesHistoryDays = int.TryParse(historySetting?.Value, out var history) ? history : 7;
+
+            var startDate = DateTime.UtcNow.AddDays(-salesHistoryDays);
+
+            // Fetch consumptions in the period
+            var recentConsumptions = await _context.BookingConsumptions
+                .Where(c => c.CreatedAt >= startDate)
+                .GroupBy(c => c.ProductId)
+                .Select(g => new { ProductId = g.Key, TotalQuantity = g.Sum(c => c.Quantity) })
+                .ToDictionaryAsync(g => g.ProductId, g => g.TotalQuantity);
+
+            var products = await _context.Products.Where(p => p.IsActive).ToListAsync();
+
+            int updatedCount = 0;
+            foreach (var p in products)
+            {
+                var totalSales = recentConsumptions.ContainsKey(p.Id) ? recentConsumptions[p.Id] : 0;
+                double dailySales = totalSales / (double)salesHistoryDays;
+                int newMinimum = (int)Math.Ceiling(dailySales * providerDelayDays);
+
+                if (p.MinimumStock != newMinimum)
+                {
+                    p.MinimumStock = newMinimum;
+                    _context.Entry(p).Property(x => x.MinimumStock).IsModified = true;
+                    updatedCount++;
+                }
+            }
+
+            if (updatedCount > 0)
+            {
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { Message = "Stocks mínimos actualizados correctamente.", UpdatedProductsCount = updatedCount });
         }
     }
 }
