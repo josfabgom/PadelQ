@@ -185,11 +185,13 @@ namespace PadelQ.Api.Controllers
             var startDate = DateTime.UtcNow.AddDays(-salesHistoryDays);
 
             // Fetch consumptions in the period
-            var recentConsumptions = await _context.BookingConsumptions
+            var recentConsumptionsList = await _context.BookingConsumptions
                 .Where(c => c.CreatedAt >= startDate)
                 .GroupBy(c => c.ProductId)
                 .Select(g => new { ProductId = g.Key, TotalQuantity = g.Sum(c => c.Quantity) })
-                .ToDictionaryAsync(g => g.ProductId, g => g.TotalQuantity);
+                .ToListAsync();
+
+            var recentConsumptions = recentConsumptionsList.ToDictionary(g => g.ProductId, g => g.TotalQuantity);
 
             var products = await _context.Products.Where(p => p.IsActive).ToListAsync();
 

@@ -1090,7 +1090,10 @@ const ProductsPage = () => {
                           </div>
                           <div className="text-center border-l border-rose-200 pl-10">
                             <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Venta / Día</p>
-                            <p className="font-bold text-blue-600">{alert.dailySales} uds</p>
+                            <div className="flex flex-col items-center justify-center">
+                              <p className="font-bold text-blue-600 leading-none">{alert.dailySales} uds</p>
+                              <p className="text-[9px] font-black text-blue-400 mt-1 uppercase tracking-widest">{alert.weeklySales} uds en 7 días</p>
+                            </div>
                           </div>
                           <div className="text-center border-l border-rose-200 pl-10">
                             <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1">Mínimo</p>

@@ -267,13 +267,14 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> GetStockAlerts()
         {
             var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
+            
+            var recentSalesList = await _context.BookingConsumptions
+                .Where(b => b.CreatedAt >= sevenDaysAgo)
+                .GroupBy(b => b.ProductId)
+                .Select(g => new { ProductId = g.Key, TotalQuantity = g.Sum(c => c.Quantity) })
+                .ToListAsync();
 
-            // Obtenemos las ventas de la última semana agrupadas por producto
-            var recentSales = await _context.BookingConsumptions
-                .Where(c => c.CreatedAt >= sevenDaysAgo)
-                .GroupBy(c => c.ProductId)
-                .Select(g => new { ProductId = g.Key, WeeklyQuantity = g.Sum(x => x.Quantity) })
-                .ToDictionaryAsync(x => x.ProductId, x => x.WeeklyQuantity);
+            var recentSales = recentSalesList.ToDictionary(g => g.ProductId, g => g.TotalQuantity);
 
             var products = await _context.Products
                 .Where(p => p.IsActive)
