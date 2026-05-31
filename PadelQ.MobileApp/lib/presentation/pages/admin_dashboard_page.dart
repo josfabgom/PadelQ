@@ -611,6 +611,10 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     final consumptions = hasActiveClosure ? (_salesSummary!['todayConsumptionsRevenue'] ?? 0.0) : 0.0;
     final payments = hasActiveClosure ? (_salesSummary!['todayActualPayments'] ?? 0.0) : 0.0;
     final bookings = hasActiveClosure ? (_salesSummary!['todayBookings'] ?? 0) : 0;
+    final bookingsRevenue = hasActiveClosure ? ((_salesSummary!['todayBookingsRevenue'] ?? 0.0) as num).toDouble() : 0.0;
+    final manualIncome = hasActiveClosure ? ((_salesSummary!['todayManualIncome'] ?? 0.0) as num).toDouble() : 0.0;
+    final manualExpense = hasActiveClosure ? ((_salesSummary!['todayManualExpense'] ?? 0.0) as num).toDouble() : 0.0;
+    final initialCash = hasActiveClosure ? ((_salesSummary!['initialCash'] ?? 0.0) as num).toDouble() : 0.0;
 
     final String? activeClosureOpenedBy = _salesSummary!['activeClosureOpenedBy'];
     final String? activeClosureOpeningDateRaw = _salesSummary!['activeClosureOpeningDate'];
@@ -692,6 +696,30 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
             children: [
               Expanded(
                 child: _buildMiniMetricCard(
+                  title: 'COBROS EN CAJA',
+                  value: '\$${NumberFormat('#,##0', 'es_AR').format(payments)}',
+                  icon: LucideIcons.wallet,
+                  color: Colors.purple.shade700,
+                  tooltip: 'Flujo neto de transacciones procesadas hoy',
+                ),
+              ),
+              SizedBox(width: 16.w),
+              Expanded(
+                child: _buildMiniMetricCard(
+                  title: 'RESERVAS DEL DÍA',
+                  value: '$bookings',
+                  icon: LucideIcons.checkSquare,
+                  color: Colors.teal.shade700,
+                  tooltip: '\$${NumberFormat('#,##0', 'es_AR').format(bookingsRevenue)} (Proyección)',
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16.h),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMiniMetricCard(
                   title: 'ALQUILERES',
                   value: '\$${NumberFormat('#,##0', 'es_AR').format(rentals)}',
                   icon: LucideIcons.calendar,
@@ -714,20 +742,30 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
             children: [
               Expanded(
                 child: _buildMiniMetricCard(
-                  title: 'COBROS EN CAJA',
-                  value: '\$${NumberFormat('#,##0', 'es_AR').format(payments)}',
+                  title: 'FONDO INICIAL',
+                  value: '\$${NumberFormat('#,##0', 'es_AR').format(initialCash)}',
                   icon: LucideIcons.wallet,
-                  color: Colors.purple.shade700,
-                  tooltip: 'Flujo neto de transacciones procesadas hoy',
+                  color: Colors.blueGrey.shade700,
                 ),
               ),
               SizedBox(width: 16.w),
               Expanded(
                 child: _buildMiniMetricCard(
-                  title: 'RESERVAS DEL DÍA',
-                  value: '$bookings',
-                  icon: LucideIcons.checkSquare,
-                  color: Colors.teal.shade700,
+                  title: 'OTROS INGRESOS',
+                  value: '\$${NumberFormat('#,##0', 'es_AR').format(manualIncome)}',
+                  icon: LucideIcons.arrowDownCircle,
+                  color: Colors.green.shade600,
+                  tooltip: 'Ingresos manuales o pagos de membresías',
+                ),
+              ),
+              SizedBox(width: 16.w),
+              Expanded(
+                child: _buildMiniMetricCard(
+                  title: 'EGRESOS',
+                  value: '\$${NumberFormat('#,##0', 'es_AR').format(manualExpense)}',
+                  icon: LucideIcons.arrowUpCircle,
+                  color: Colors.red.shade600,
+                  tooltip: 'Egresos manuales de caja',
                 ),
               ),
             ],
@@ -1059,6 +1097,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     final bool isOpen = activeClosure != null && activeClosure['isOpen'] == true;
     final String cashier = activeClosure != null ? (activeClosure['openedBy'] ?? 'Admin') : 'Ninguno';
     final double initialCash = activeClosure != null ? (activeClosure['initialCash'] ?? 0.0) : 0.0;
+    final double expectedTotalCash = _cashStatus!['expectedTotalCash'] ?? 0.0;
     
     // Extract all transactions from summary categories for easy viewing
     final allTransactions = <Map<String, dynamic>>[];
@@ -1179,6 +1218,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                 _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote),
                 SizedBox(height: 12.h),
                 _buildClosureDetailRow('Monto Total Cobrado', '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}', LucideIcons.coins),
+                SizedBox(height: 12.h),
+                _buildClosureDetailRow('Total Esperado en Caja', '\$${NumberFormat('#,##0.00', 'es_AR').format(expectedTotalCash)}', LucideIcons.wallet),
                 SizedBox(height: 12.h),
                 _buildClosureDetailRow('Usuario Conectado', currentUserName, LucideIcons.userCheck),
                 SizedBox(height: 12.h),
@@ -1493,6 +1534,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
           final String openedBy = item['openedBy'] ?? 'Admin';
           final bool isOpen = item['isOpen'] ?? false;
           
+          final double totalCashSales = (item['totalCashSales'] ?? 0.0).toDouble();
+          final double totalCardSales = (item['totalCardSales'] ?? 0.0).toDouble();
+          final double totalTransferSales = (item['totalTransferSales'] ?? 0.0).toDouble();
+          final double totalOtherSales = (item['totalOtherSales'] ?? 0.0).toDouble();
+          final double totalCashIn = (item['totalCashIn'] ?? 0.0).toDouble();
+          final double totalCashOut = (item['totalCashOut'] ?? 0.0).toDouble();
+          final double totalCobrado = totalCashSales + totalCardSales + totalTransferSales + totalOtherSales + totalCashIn - totalCashOut;
+
           final double diff = actualCash - expectedCash;
           final bool hasDiff = !isOpen && diff.abs() > 0.01;
 
@@ -1594,7 +1643,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                     children: [
                       _buildMiniDetailSummary('Inicial', initialCash),
                       _buildMiniDetailSummary('Esperado', expectedCash),
-                      _buildMiniDetailSummary('Real', actualCash),
+                      _buildMiniDetailSummary('Ef. Real', actualCash),
+                      _buildMiniDetailSummary('Ingresos', totalCobrado),
                     ],
                   ),
                   if (hasDiff) ...[
@@ -1730,6 +1780,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     summaryList.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
 
     final totalAmount = transactions.fold(0.0, (sum, tx) => sum + (tx['amount'] ?? 0.0).toDouble());
+    final manualIncomeTxs = transactions.where((tx) => tx['type'] == 3).toList();
+    final manualExpenseTxs = transactions.where((tx) => tx['type'] == 4).toList();
 
     String dateStr = DateFormat('EEEE, d MMMM yyyy', 'es_AR').format(openingDate);
     dateStr = dateStr.split(' ').map((word) {
@@ -1829,15 +1881,108 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                   ),
                 ],
                 SizedBox(height: 12.h),
-                _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote),
+                _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote, valueColor: Colors.blue.shade700),
+                ...manualIncomeTxs.map((tx) {
+                  return Padding(
+                    padding: EdgeInsets.only(top: 12.h),
+                    child: _buildClosureDetailRow('Ingreso: ${tx['description'] ?? 'Manual'}', '\$${NumberFormat('#,##0.00', 'es_AR').format(tx['amount'] ?? 0)}', LucideIcons.arrowDownCircle, valueColor: Colors.blue.shade700),
+                  );
+                }).toList(),
+                ...manualExpenseTxs.map((tx) {
+                  return Padding(
+                    padding: EdgeInsets.only(top: 12.h),
+                    child: _buildClosureDetailRow('Egreso: ${tx['description'] ?? 'Manual'}', '\$${NumberFormat('#,##0.00', 'es_AR').format((tx['amount'] ?? 0).abs())}', LucideIcons.arrowUpCircle, valueColor: Colors.red.shade700),
+                  );
+                }).toList(),
                 SizedBox(height: 12.h),
-                _buildClosureDetailRow('Monto Esperado', '\$${NumberFormat('#,##0.00', 'es_AR').format(expectedCash)}', LucideIcons.calculator),
+                _buildClosureDetailRow('Efectivo Esperado (Incl. Inicial)', '\$${NumberFormat('#,##0.00', 'es_AR').format(expectedCash)}', LucideIcons.calculator),
                 if (!isOpen) ...[
                   SizedBox(height: 12.h),
-                  _buildClosureDetailRow('Efectivo Real', '\$${NumberFormat('#,##0.00', 'es_AR').format(actualCash)}', LucideIcons.wallet),
+                  _buildClosureDetailRow('Efectivo Declarado', '\$${NumberFormat('#,##0.00', 'es_AR').format(actualCash)}', LucideIcons.wallet),
                 ],
-                SizedBox(height: 12.h),
-                _buildClosureDetailRow('Monto Total Cobrado', '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}', LucideIcons.coins),
+                if (summaryList.isNotEmpty) ...[
+                  SizedBox(height: 12.h),
+                  Container(
+                    margin: EdgeInsets.only(left: 36.w), // Indent to align under the text
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(color: Colors.black.withOpacity(0.05)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DESGLOSE POR MEDIO DE PAGO:', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.w)),
+                        SizedBox(height: 10.h),
+                        ...summaryList.map((s) {
+                          return Padding(
+                            padding: EdgeInsets.only(bottom: 6.h),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 6.w,
+                                      height: 6.w,
+                                      decoration: BoxDecoration(
+                                        color: _getMethodColor(s['method'].toString()),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8.w),
+                                    Text(
+                                      s['method'],
+                                      style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '\$${NumberFormat('#,##0.00', 'es_AR').format(s['total'])}',
+                                  style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ],
+                
+                SizedBox(height: 16.h),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(16.r),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(8.w),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(LucideIcons.coins, size: 16.sp, color: Colors.blue.shade800),
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: Text(
+                          'Monto Total Cobrado',
+                          style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.blue.shade900),
+                        ),
+                      ),
+                      Text(
+                        '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}',
+                        style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.blue.shade900),
+                      ),
+                    ],
+                  ),
+                ),
                 
                 if (hasDiff) ...[
                   SizedBox(height: 16.h),
@@ -2380,7 +2525,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     );
   }
 
-  Widget _buildClosureDetailRow(String label, String value, IconData icon) {
+  Widget _buildClosureDetailRow(String label, String value, IconData icon, {Color? valueColor}) {
     return Row(
       children: [
         Icon(icon, color: Colors.grey.shade400, size: 16.sp),
@@ -2392,7 +2537,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
         const Spacer(),
         Text(
           value,
-          style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.bold, color: Colors.black),
+          style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.bold, color: valueColor ?? Colors.black),
         ),
       ],
     );

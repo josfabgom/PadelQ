@@ -33,52 +33,96 @@ namespace PadelQ.Api.Controllers
             var todayUtc = DateTime.UtcNow;
             var fallbackToday = todayUtc.AddHours(-3).Date; 
             
-            // Buscar si hay alguna caja abierta activa en el sistema
+            // Buscar la ÚLTIMA caja (abierta o cerrada)
+            var latestClosure = await _context.CashClosures
+                .OrderByDescending(c => c.OpeningDate)
+                .FirstOrDefaultAsync();
+
             var activeClosure = await _context.CashClosures
                 .Where(c => c.IsOpen)
                 .OrderByDescending(c => c.OpeningDate)
                 .FirstOrDefaultAsync();
 
-            // Para "Ventas Diarias" y "Reservas del día", usamos el día calendario
-            // independientemente de a qué hora se abrió la caja.
-            var today = fallbackToday;
-            
-            // El turno comercial abarca hasta 6 horas después de finalizar el día de apertura de la caja (ej: hasta 6am del día siguiente)
-            var tomorrow = fallbackToday.AddDays(1).AddHours(6);
+            DateTime today = fallbackToday;
+            DateTime tomorrow = fallbackToday.AddDays(1).AddHours(6);
 
-            var startOfMonth = new DateTime(today.Year, today.Month, 1);
+            // Para la caja (dinero cobrado) usamos el horario de la última caja
+            if (latestClosure != null)
+            {
+                today = latestClosure.OpeningDate;
+                tomorrow = latestClosure.ClosingDate ?? DateTime.UtcNow.AddHours(24);
+            }
+
+            // Para la proyección (Reservas del Día) usamos el día calendario (desde 00:00)
+            DateTime calendarToday = fallbackToday;
+            DateTime calendarTomorrow = fallbackToday.AddDays(1).AddHours(6);
+
+            var startOfMonth = new DateTime(todayUtc.Year, todayUtc.Month, 1);
             
-            // 1. Reservas de Hoy (Filtramos en la base de datos para rendimiento)
+            // 1. Reservas de Hoy (Filtramos usando el calendario del día)
             var todayBookingsList = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.User)
-                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= today && b.StartTime < tomorrow)
+                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= calendarToday && b.StartTime < calendarTomorrow)
                 .ToListAsync();
 
             var todaySpaceBookingsList = await _context.SpaceBookings
                 .Include(b => b.Space)
                 .Include(b => b.User)
-                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= today && b.StartTime < tomorrow)
+                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= calendarToday && b.StartTime < calendarTomorrow)
                 .ToListAsync();
 
             var todayBookingsCount = todayBookingsList.Count + todaySpaceBookingsList.Count;
             
-            // 2. Ingreso del día (Lo alquilado)
-            var todayRentalsRevenue = todayBookingsList.Sum(b => b.Price) + todaySpaceBookingsList.Sum(b => b.Price);
+            // 2. Ingreso del día (Lo alquilado teóricamente, todas las reservas)
+            var todayBookingsRevenue = todayBookingsList.Sum(b => b.Price) + todaySpaceBookingsList.Sum(b => b.Price);
 
-            // 3. Consumiciones del día (Solo de reservas ACTIVAS o ventas directas)
-            var todayConsumptionsRevenue = await _context.BookingConsumptions
-                .Include(c => c.Booking)
-                .Include(c => c.SpaceBooking)
-                .Where(c => c.CreatedAt >= today && c.CreatedAt < tomorrow &&
-                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
-                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
-                .SumAsync(c => c.UnitPrice * c.Quantity);
-
-            // 4. Pagos Reales (Lo cobrado efectivamente hoy)
-            var todayActualPayments = await _context.Transactions
+            // 3. Consumiciones del día (Solo lo COBRADO, según lo solicitado)
+            var transactions = await _context.Transactions
                 .Where(t => t.Date >= today && t.Date < tomorrow && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn || t.Type == TransactionType.CashOut))
-                .SumAsync(t => (t.Type == TransactionType.CashOut ? -t.Amount : t.Amount));
+                .ToListAsync();
+
+            var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn).ToList();
+            decimal todayConsumptionsRevenue = 0;
+            decimal todayRentalsRevenue = 0;
+
+            foreach (var t in incomeTransactions)
+            {
+                var desc = t.Description ?? "";
+                if (desc.Contains("Alquiler + Consumiciones", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (t.BookingId.HasValue)
+                    {
+                        var bookingCons = await _context.BookingConsumptions
+                            .Where(c => c.BookingId == t.BookingId.Value)
+                            .SumAsync(c => c.UnitPrice * c.Quantity);
+                        var consAmount = Math.Min(t.Amount, bookingCons);
+                        todayConsumptionsRevenue += consAmount;
+                        todayRentalsRevenue += (t.Amount - consAmount);
+                    }
+                    else
+                    {
+                        todayRentalsRevenue += t.Amount;
+                    }
+                }
+                else if (desc.Contains("Consumo", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Consumicion", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Cantina", StringComparison.OrdinalIgnoreCase))
+                {
+                    todayConsumptionsRevenue += t.Amount;
+                }
+                else if (t.Type == TransactionType.Payment)
+                {
+                    // Si es un Payment normal y no dice consumo, entonces es alquiler de cancha
+                    todayRentalsRevenue += t.Amount;
+                }
+            }
+
+            var todayActualPayments = todayRentalsRevenue + todayConsumptionsRevenue;
+
+            var todayManualIncome = transactions.Where(t => t.Type == TransactionType.CashIn || t.Type == TransactionType.MembershipPayment).Sum(t => t.Amount);
+            var todayManualExpense = transactions.Where(t => t.Type == TransactionType.CashOut).Sum(t => t.Amount);
 
             // 5. Slots Libres (Desde ahora hasta las 24hs)
             var courts = await _context.Courts.Where(c => c.IsActive).ToListAsync();
@@ -86,12 +130,12 @@ namespace PadelQ.Api.Controllers
             
             var nowLocal = todayUtc.AddHours(-3);
             var startHour = nowLocal.Hour;
-            if (nowLocal.Date < today) startHour = 0;
-            if (nowLocal.Date > today) startHour = 24;
+            if (nowLocal.Date < calendarToday) startHour = 0;
+            if (nowLocal.Date > calendarToday) startHour = 24;
 
             for (int h = Math.Max(startHour, 8); h < 24; h++) // De 8hs a 24hs
             {
-                var slotStart = today.Date.AddHours(h); // Usar hoy comercial sin hora
+                var slotStart = calendarToday.Date.AddHours(h); // Usar hoy comercial sin hora
                 var slotEnd = slotStart.AddHours(1);
 
                 foreach (var court in courts)
@@ -117,11 +161,15 @@ namespace PadelQ.Api.Controllers
                                + await _context.SpaceBookings.Where(b => b.Status != BookingStatus.Cancelled).SumAsync(b => b.Price),
                 totalBookings = await _context.Bookings.CountAsync(b => b.Status != BookingStatus.Cancelled) 
                                 + await _context.SpaceBookings.CountAsync(b => b.Status != BookingStatus.Cancelled),
-                todayRevenue = todayRentalsRevenue + todayConsumptionsRevenue,
+                todayRevenue = todayActualPayments + todayManualIncome - todayManualExpense, // Ingreso neto real de la caja
                 todayRentalsRevenue,
                 todayConsumptionsRevenue,
                 todayActualPayments,
+                todayManualIncome,
+                todayManualExpense,
                 todayBookings = todayBookingsCount,
+                todayBookingsRevenue,
+                initialCash = latestClosure?.InitialCash ?? 0,
                 todayBookingsList = todayBookingsList.Select(b => new {
                     b.Id,
                     b.Price,

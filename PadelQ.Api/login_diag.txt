@@ -16,3 +16,7 @@ Login Failed: User admin found, but password invalid.
 Login Failed: User admin found, but password invalid.
 Login Failed: User test@test.com not found.
 Login Failed: User admin found, but password invalid.
+Login Failed: User admn not found.
+Login Failed: User admn not found.
+Login Failed: User  admin not found.
+Login Failed: User  admin not found.

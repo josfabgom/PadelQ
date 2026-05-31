@@ -392,7 +392,8 @@ namespace PadelQ.Api.Controllers
                         Type = TransactionType.Payment,
                         Description = description,
                         PaymentMethodId = paymentMethodId,
-                        ProcessedBy = User.Identity?.Name ?? "Admin"
+                        ProcessedBy = User.Identity?.Name ?? "Admin",
+                        BookingId = bookingId
                     };
                     _context.Transactions.Add(transaction);
                 }

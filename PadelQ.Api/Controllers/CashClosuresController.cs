@@ -41,6 +41,14 @@ namespace PadelQ.Api.Controllers
                     .OrderByDescending(c => c.OpeningDate)
                     .FirstOrDefaultAsync();
 
+                if (activeClosure == null)
+                {
+                    activeClosure = await _context.CashClosures
+                        .Where(c => c.OpenedBy == targetUser && !c.IsOpen)
+                        .OrderByDescending(c => c.OpeningDate)
+                        .FirstOrDefaultAsync();
+                }
+
                 var startDate = activeClosure?.OpeningDate ?? GetArgNow().Date;
                 var endDate = activeClosure?.ClosingDate ?? GetArgNow();
 
@@ -97,25 +105,54 @@ namespace PadelQ.Api.Controllers
                     });
                 }
 
-                var rentalsTotal = await _context.Bookings
-                    .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= startDate && b.StartTime < endDate)
-                    .SumAsync(b => b.Price) 
-                    + await _context.SpaceBookings
-                    .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= startDate && b.StartTime < endDate)
-                    .SumAsync(b => b.Price);
+                var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn).ToList();
+                decimal rentalsTotal = 0;
+                decimal consumptionsTotal = 0;
 
-                var consumptionsTotal = await _context.BookingConsumptions
-                    .Include(c => c.Booking)
-                    .Include(c => c.SpaceBooking)
-                    .Where(c => c.CreatedAt >= startDate && c.CreatedAt < endDate &&
-                               (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
-                               (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
-                    .SumAsync(c => c.UnitPrice * c.Quantity);
+                foreach (var t in incomeTransactions)
+                {
+                    var desc = t.Description ?? "";
+                    if (desc.Contains("Alquiler + Consumiciones", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (t.BookingId.HasValue)
+                        {
+                            var bookingCons = await _context.BookingConsumptions
+                                .Where(c => c.BookingId == t.BookingId.Value)
+                                .SumAsync(c => c.UnitPrice * c.Quantity);
+                            var consAmount = Math.Min(t.Amount, bookingCons);
+                            consumptionsTotal += consAmount;
+                            rentalsTotal += (t.Amount - consAmount);
+                        }
+                        else
+                        {
+                            // Si no tiene BookingId, es una transacción antigua. La sumamos a alquileres para no distorsionar consumos.
+                            rentalsTotal += t.Amount;
+                        }
+                    }
+                    else if (desc.Contains("Consumo", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Consumicion", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Cantina", StringComparison.OrdinalIgnoreCase))
+                    {
+                        consumptionsTotal += t.Amount;
+                    }
+                    else if (t.Type == TransactionType.Payment)
+                    {
+                        rentalsTotal += t.Amount;
+                    }
+                }
+                
+                var manualIncome = transactions.Where(t => t.Type == TransactionType.CashIn || t.Type == TransactionType.MembershipPayment).Sum(t => t.Amount);
+                var manualExpense = transactions.Where(t => t.Type == TransactionType.CashOut).Sum(t => t.Amount);
+                var opsTotal = rentalsTotal + consumptionsTotal;
 
                 return Ok(new {
                     activeClosure,
                     summary,
-                    totalAmount = transactions.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount),
+                    totalAmount = opsTotal,
+                    manualIncome,
+                    manualExpense,
+                    expectedTotalCash = (activeClosure?.InitialCash ?? 0) + opsTotal + manualIncome - manualExpense,
                     lastClosureDate = startDate,
                     rentalsTotal,
                     consumptionsTotal
@@ -245,25 +282,47 @@ namespace PadelQ.Api.Controllers
                 .OrderBy(t => t.Date)
                 .ToListAsync();
 
-            var rentalsTotal = await _context.Bookings
-                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= start && b.StartTime < end)
-                .SumAsync(b => b.Price) 
-                + await _context.SpaceBookings
-                .Where(b => b.Status != BookingStatus.Cancelled && b.StartTime >= start && b.StartTime < end)
-                .SumAsync(b => b.Price);
+            var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn).ToList();
+            decimal rentalsTotal = 0;
+            decimal consumptionsTotal = 0;
 
-            var consumptionsTotal = await _context.BookingConsumptions
-                .Include(c => c.Booking)
-                .Include(c => c.SpaceBooking)
-                .Where(c => c.CreatedAt >= start && c.CreatedAt < end &&
-                           (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
-                           (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
-                .SumAsync(c => c.UnitPrice * c.Quantity);
+            foreach (var t in incomeTransactions)
+            {
+                var desc = t.Description ?? "";
+                if (desc.Contains("Alquiler + Consumiciones", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (t.BookingId.HasValue)
+                    {
+                        var bookingCons = await _context.BookingConsumptions
+                            .Where(c => c.BookingId == t.BookingId.Value)
+                            .SumAsync(c => c.UnitPrice * c.Quantity);
+                        var consAmount = Math.Min(t.Amount, bookingCons);
+                        consumptionsTotal += consAmount;
+                        rentalsTotal += (t.Amount - consAmount);
+                    }
+                    else
+                    {
+                        rentalsTotal += t.Amount;
+                    }
+                }
+                else if (desc.Contains("Consumo", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Consumicion", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase) || 
+                         desc.Contains("Cantina", StringComparison.OrdinalIgnoreCase))
+                {
+                    consumptionsTotal += t.Amount;
+                }
+                else
+                {
+                    rentalsTotal += t.Amount;
+                }
+            }
 
             return Ok(new {
                 closure,
                 transactions = transactions.Select(t => new {
                     t.Id,
+                    Type = (int)t.Type,
                     Amount = t.Type == TransactionType.CashOut ? -t.Amount : t.Amount,
                     t.Date,
                     t.Description,
