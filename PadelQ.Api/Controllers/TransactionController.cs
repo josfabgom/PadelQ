@@ -337,6 +337,25 @@ namespace PadelQ.Api.Controllers
             return Ok(new { Message = $"Historial de cuenta corriente para {user.FullName} ha sido reseteado correctamente." });
         }
 
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPut("{id}/payment-method")]
+        public async Task<IActionResult> ChangePaymentMethod(int id, [FromBody] ChangePaymentMethodRequest request)
+        {
+            var transaction = await _context.Transactions.FindAsync(id);
+            if (transaction == null) return NotFound("Transacción no encontrada");
+
+            transaction.PaymentMethodId = request.PaymentMethodId;
+            _context.Entry(transaction).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
+            return Ok(transaction);
+        }
+
+        public class ChangePaymentMethodRequest
+        {
+            public int? PaymentMethodId { get; set; }
+        }
+
         [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTransaction(int id)

@@ -20,3 +20,4 @@ Login Failed: User admn not found.
 Login Failed: User admn not found.
 Login Failed: User  admin not found.
 Login Failed: User  admin not found.
+Login Failed: User admin@padelq.com found, but password invalid.

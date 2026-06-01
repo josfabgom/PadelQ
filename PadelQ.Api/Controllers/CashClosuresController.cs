@@ -105,7 +105,7 @@ namespace PadelQ.Api.Controllers
                     });
                 }
 
-                var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn).ToList();
+                var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment).ToList();
                 decimal rentalsTotal = 0;
                 decimal consumptionsTotal = 0;
 
@@ -142,9 +142,12 @@ namespace PadelQ.Api.Controllers
                     }
                 }
                 
-                var manualIncome = transactions.Where(t => t.Type == TransactionType.CashIn || t.Type == TransactionType.MembershipPayment).Sum(t => t.Amount);
+                var manualIncome = transactions.Where(t => t.Type == TransactionType.CashIn).Sum(t => t.Amount);
                 var manualExpense = transactions.Where(t => t.Type == TransactionType.CashOut).Sum(t => t.Amount);
                 var opsTotal = rentalsTotal + consumptionsTotal;
+
+                var cashTransactions = transactions.Where(t => t.PaymentMethod != null && t.PaymentMethod.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase)).ToList();
+                var expectedTotalCash = (activeClosure?.InitialCash ?? 0) + cashTransactions.Sum(t => t.Type == TransactionType.CashOut ? -t.Amount : t.Amount);
 
                 return Ok(new {
                     activeClosure,
@@ -152,7 +155,7 @@ namespace PadelQ.Api.Controllers
                     totalAmount = opsTotal,
                     manualIncome,
                     manualExpense,
-                    expectedTotalCash = (activeClosure?.InitialCash ?? 0) + opsTotal + manualIncome - manualExpense,
+                    expectedTotalCash = expectedTotalCash,
                     lastClosureDate = startDate,
                     rentalsTotal,
                     consumptionsTotal
@@ -219,33 +222,36 @@ namespace PadelQ.Api.Controllers
                 ))
                 .ToListAsync();
 
-            // Calcular totales por tipo de método
-            closure.TotalCashSales = transactions
+            // Calcular totales por tipo de método (solo ventas/pagos)
+            var salesTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment).ToList();
+
+            closure.TotalCashSales = salesTransactions
                 .Where(t => t.PaymentMethod?.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase) == true)
                 .Sum(t => t.Amount);
 
-            closure.TotalTransferSales = transactions
+            closure.TotalTransferSales = salesTransactions
                 .Where(t => t.PaymentMethod?.Name.Contains("Transferencia", StringComparison.OrdinalIgnoreCase) == true)
                 .Sum(t => t.Amount);
 
-            closure.TotalCardSales = transactions
+            closure.TotalCardSales = salesTransactions
                 .Where(t => (t.PaymentMethod?.Name.Contains("Tarjeta", StringComparison.OrdinalIgnoreCase) == true || 
                              t.PaymentMethod?.Name.Contains("Débito", StringComparison.OrdinalIgnoreCase) == true ||
                              t.PaymentMethod?.Name.Contains("Crédito", StringComparison.OrdinalIgnoreCase) == true))
                 .Sum(t => t.Amount);
 
             // Otros: Cualquier cosa que no sea efectivo, transferencia o tarjeta (incluyendo los que no tienen método)
-            closure.TotalOtherSales = transactions.Sum(t => t.Amount) 
+            closure.TotalOtherSales = salesTransactions.Sum(t => t.Amount) 
                 - (closure.TotalCashSales ?? 0) 
                 - (closure.TotalTransferSales ?? 0) 
                 - (closure.TotalCardSales ?? 0);
 
+            // Ingresos y egresos manuales EN EFECTIVO para el cuadro de control de caja
             closure.TotalCashIn = transactions
-                .Where(t => t.Type == TransactionType.CashIn)
+                .Where(t => t.Type == TransactionType.CashIn && t.PaymentMethod?.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase) == true)
                 .Sum(t => t.Amount);
 
             closure.TotalCashOut = transactions
-                .Where(t => t.Type == TransactionType.CashOut)
+                .Where(t => t.Type == TransactionType.CashOut && t.PaymentMethod?.Name.Contains("Efectivo", StringComparison.OrdinalIgnoreCase) == true)
                 .Sum(t => t.Amount);
 
             closure.ExpectedCash = closure.InitialCash + (closure.TotalCashSales ?? 0) + (closure.TotalCashIn ?? 0) - (closure.TotalCashOut ?? 0);
@@ -282,7 +288,7 @@ namespace PadelQ.Api.Controllers
                 .OrderBy(t => t.Date)
                 .ToListAsync();
 
-            var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn).ToList();
+            var incomeTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment).ToList();
             decimal rentalsTotal = 0;
             decimal consumptionsTotal = 0;
 
