@@ -358,6 +358,15 @@ const AdminSettings = () => {
                 prefix="$"
                 type="number"
               />
+              <SettingInput 
+                label="Descuento Empleado en Productos" 
+                value={getSettingValue('EmployeeDiscountPercentage', '0')} 
+                onChange={(val: string) => handleChange('EmployeeDiscountPercentage', val)}
+                onSave={() => handleSave('EmployeeDiscountPercentage')}
+                icon={<DollarSign className="w-4 h-4" />}
+                suffix="%"
+                type="number"
+              />
             </div>
           </div>
 

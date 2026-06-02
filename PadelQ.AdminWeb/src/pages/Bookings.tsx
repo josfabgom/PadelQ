@@ -380,12 +380,14 @@ const BookingsPage = () => {
 
     // Direct Sale States
     const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
+    const [employeeDiscountPercentage, setEmployeeDiscountPercentage] = useState<number>(0);
     const [directSaleData, setDirectSaleData] = useState({
         consumptions: [] as { productId: number, productName: string, quantity: number, price: number }[],
         clientId: '',
         clientName: '',
         paymentMethodId: null as number | null,
         isInternalConsumption: false,
+        isEmployeePurchase: false,
         isSplitPayment: false,
         splitPayments: [] as { paymentMethodId: number | null, amount: number }[]
     });
@@ -531,6 +533,7 @@ const BookingsPage = () => {
             clientName: consumidorFinal?.fullName || '',
             paymentMethodId: efectivoMethod?.id || paymentMethods[0]?.id || null,
             isInternalConsumption: false,
+            isEmployeePurchase: false,
             isSplitPayment: false,
             splitPayments: []
         });
@@ -600,22 +603,30 @@ const BookingsPage = () => {
 
     const getDirectSaleTotals = () => {
         let totalToPay = 0;
+        let totalOriginal = 0;
+        const discountFactor = directSaleData.isEmployeePurchase ? (1 - employeeDiscountPercentage / 100) : 1;
+
         const items = directSaleData.consumptions.map(c => {
             const fKey = `ds-${c.productId}`;
             const fractions = dsFractions[fKey] || 1;
             const selectedParts = dsSelectedParts[fKey] || [];
-            const subtotal = c.price * c.quantity;
             
+            const subtotalOriginal = c.price * c.quantity;
+            const subtotal = subtotalOriginal * discountFactor;
+            
+            let paidAmountOriginal = subtotalOriginal;
             let paidAmount = subtotal;
             if (fractions > 1) {
+                paidAmountOriginal = (subtotalOriginal / fractions) * selectedParts.length;
                 paidAmount = (subtotal / fractions) * selectedParts.length;
             }
             
+            totalOriginal += paidAmountOriginal;
             totalToPay += paidAmount;
             return { productId: c.productId, quantity: c.quantity, paidAmount };
         });
         
-        return { totalToPay, items };
+        return { totalToPay, totalOriginal, items, discountFactor };
     };
 
     const handleConfirmDirectSale = async (isPaid: boolean = true) => {
@@ -966,6 +977,9 @@ const BookingsPage = () => {
                         if (s.key === 'CompanyWebsite') info.website = s.value;
                     });
                     setCompanyInfo(info);
+
+                    const empDisc = resSett?.find((s: any) => s.key === 'EmployeeDiscountPercentage')?.value;
+                    if (empDisc) setEmployeeDiscountPercentage(parseFloat(empDisc));
 
                     const openH = parseInt(resSett?.find((s: any) => s.key === 'OpenHour')?.value || '8');
                     const closeH = parseInt(resSett?.find((s: any) => s.key === 'CloseHour')?.value || '23');
@@ -5233,7 +5247,8 @@ const BookingsPage = () => {
                                                         key={c.id}
                                                         onClick={() => {
                                                             const userRole = (c.role || '').toLowerCase();
-                                                            const isInternal = ['admin', 'administrador', 'staff', 'administracion'].includes(userRole);
+                                                            const isInternal = ['admin', 'administrador'].includes(userRole);
+                                                            const isEmployee = ['staff', 'empleado'].includes(userRole);
                                                             const isConsumidorFinal = c.fullName?.toLowerCase().includes("consumidor final");
                                                             const efectivoMethod = paymentMethods.find(m => m.name?.toLowerCase().includes("efectivo"));
                                                             
@@ -5242,6 +5257,7 @@ const BookingsPage = () => {
                                                                 clientId: c.id, 
                                                                 clientName: c.fullName,
                                                                 isInternalConsumption: isInternal,
+                                                                isEmployeePurchase: isEmployee,
                                                                 paymentMethodId: isConsumidorFinal ? (efectivoMethod?.id || directSaleData.paymentMethodId) : directSaleData.paymentMethodId
                                                             });
                                                             setDsClientSearch(c.fullName);
@@ -5269,8 +5285,8 @@ const BookingsPage = () => {
                                                 </div>
                                                 <p className="text-xs font-black uppercase italic text-emerald-900 tracking-tight">{directSaleData.clientName}</p>
                                             </div>
-                                            <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${directSaleData.isInternalConsumption ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-emerald-100 text-emerald-600 border border-emerald-200'}`}>
-                                                {directSaleData.isInternalConsumption ? 'Consumo Interno' : 'Venta al Público'}
+                                            <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${directSaleData.isInternalConsumption ? 'bg-amber-100 text-amber-600 border border-amber-200' : (directSaleData.isEmployeePurchase ? 'bg-indigo-100 text-indigo-600 border border-indigo-200' : 'bg-emerald-100 text-emerald-600 border border-emerald-200')}`}>
+                                                {directSaleData.isInternalConsumption ? 'Consumo Interno' : (directSaleData.isEmployeePurchase ? `Descuento Empleado (${employeeDiscountPercentage}%)` : 'Venta al Público')}
                                             </div>
                                         </div>
                                     )}
@@ -5402,9 +5418,16 @@ const BookingsPage = () => {
                                         </div>
                                         <div className="pt-2 text-right">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total a Cobrar</p>
-                                            <h3 className="text-5xl font-black text-emerald-500 italic tracking-tighter">
-                                                ${getDirectSaleTotals().totalToPay.toLocaleString()}
-                                            </h3>
+                                            <div className="flex flex-col items-end">
+                                                {getDirectSaleTotals().totalOriginal > getDirectSaleTotals().totalToPay && (
+                                                    <span className="text-xl font-bold text-slate-400 line-through decoration-rose-400 decoration-2 -mb-2">
+                                                        ${getDirectSaleTotals().totalOriginal.toLocaleString()}
+                                                    </span>
+                                                )}
+                                                <h3 className="text-5xl font-black text-emerald-500 italic tracking-tighter">
+                                                    ${getDirectSaleTotals().totalToPay.toLocaleString()}
+                                                </h3>
+                                            </div>
                                         </div>
                                     </div>
 

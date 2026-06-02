@@ -615,7 +615,7 @@ const UsersPage = () => {
                     <option value="User">Cliente (Solo App Móvil)</option>
                     {roles.includes('Admin') && (
                       <>
-                        <option value="Staff">Administración (Sin Borrar)</option>
+                        <option value="Staff">Empleado / Staff (Acceso Caja + Borrado + Descuento)</option>
                         <option value="Merchant">Comercio (Solo QR)</option>
                         <option value="Teacher">Profesores (Gestión Actividades)</option>
                         <option value="Admin">Administrador (Acceso Total)</option>
@@ -749,7 +749,7 @@ const UsersPage = () => {
                     <option value="User">Cliente (Solo App Móvil)</option>
                     {roles.includes('Admin') && (
                       <>
-                        <option value="Staff">Administración (Sin Borrar)</option>
+                        <option value="Staff">Empleado / Staff (Acceso Caja + Borrado + Descuento)</option>
                         <option value="Merchant">Comercio (Solo QR)</option>
                         <option value="Teacher">Profesores (Gestión Actividades)</option>
                         <option value="Admin">Administrador (Acceso Total)</option>

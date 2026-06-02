@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Identity;
 
 namespace PadelQ.Api.Controllers
 {
@@ -17,10 +18,12 @@ namespace PadelQ.Api.Controllers
     public class ConsumptionsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public ConsumptionsController(ApplicationDbContext context)
+        public ConsumptionsController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
         {
             _context = context;
+            _userManager = userManager;
         }
 
         [HttpGet("booking/{bookingId}")]
@@ -179,14 +182,31 @@ namespace PadelQ.Api.Controllers
                 var product = await _context.Products.FindAsync(item.ProductId);
                 if (product == null) continue;
 
+                decimal finalPrice = product.FinalPrice;
+                var discountAppliedStr = "";
+
+                if (!string.IsNullOrEmpty(request.UserId))
+                {
+                    var targetUser = await _userManager.FindByIdAsync(request.UserId);
+                    if (targetUser != null && (await _userManager.IsInRoleAsync(targetUser, "Staff")))
+                    {
+                        var setting = await _context.SystemSettings.FindAsync("EmployeeDiscountPercentage");
+                        if (setting != null && decimal.TryParse(setting.Value, out decimal discountPct) && discountPct > 0)
+                        {
+                            finalPrice = finalPrice * (1.0m - (discountPct / 100.0m));
+                            discountAppliedStr = $" (Descuento {discountPct:0.##}%)";
+                        }
+                    }
+                }
+
                 var consumption = new BookingConsumption
                 {
                     UserId = request.UserId,
                     ProductId = item.ProductId,
                     Quantity = item.Quantity,
-                    UnitPrice = product.FinalPrice,
+                    UnitPrice = finalPrice,
                     IsPaid = request.IsPaid || request.IsInternal,
-                    DepositPaid = (request.IsPaid || request.IsInternal) ? (item.PaidAmount ?? (product.FinalPrice * item.Quantity)) : 0,
+                    DepositPaid = (request.IsPaid || request.IsInternal) ? (item.PaidAmount ?? (finalPrice * item.Quantity)) : 0,
                     Notes = request.Notes ?? "Venta Directa unificada"
                 };
 
@@ -207,7 +227,7 @@ namespace PadelQ.Api.Controllers
                     ProductId = product.Id,
                     Type = MovementType.Sale,
                     Quantity = -item.Quantity,
-                    Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado)" : $"Venta Directa Bulk: {product.Name} (PENDIENTE)")
+                    Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa Bulk: {product.Name} (PENDIENTE){discountAppliedStr}")
                 });
             }
 
@@ -261,12 +281,29 @@ namespace PadelQ.Api.Controllers
             var product = await _context.Products.FindAsync(request.ProductId);
             if (product == null) return NotFound("Producto no encontrado");
 
+            decimal finalPrice = product.FinalPrice;
+            var discountAppliedStr = "";
+
+            if (!string.IsNullOrEmpty(request.UserId))
+            {
+                var targetUser = await _userManager.FindByIdAsync(request.UserId);
+                if (targetUser != null && (await _userManager.IsInRoleAsync(targetUser, "Staff")))
+                {
+                    var setting = await _context.SystemSettings.FindAsync("EmployeeDiscountPercentage");
+                    if (setting != null && decimal.TryParse(setting.Value, out decimal discountPct) && discountPct > 0)
+                    {
+                        finalPrice = finalPrice * (1.0m - (discountPct / 100.0m));
+                        discountAppliedStr = $" (Descuento {discountPct:0.##}%)";
+                    }
+                }
+            }
+
             var consumption = new BookingConsumption
             {
                 UserId = request.UserId,
                 ProductId = request.ProductId,
                 Quantity = request.Quantity,
-                UnitPrice = product.FinalPrice,
+                UnitPrice = finalPrice,
                 IsPaid = request.IsPaid || request.IsInternal,
                 Notes = request.Notes
             };
@@ -287,7 +324,7 @@ namespace PadelQ.Api.Controllers
                         Amount = consumption.TotalPrice,
                         Date = TimeZoneHelper.GetArgNow(),
                         Type = TransactionType.Payment,
-                        Description = $"Venta Directa: {product.Name} x{request.Quantity}",
+                        Description = $"Venta Directa: {product.Name} x{request.Quantity}{discountAppliedStr}",
                         PaymentMethodId = request.PaymentMethodId.Value,
                         ProcessedBy = User.Identity?.Name ?? "Admin"
                     };
@@ -302,7 +339,7 @@ namespace PadelQ.Api.Controllers
                 ProductId = product.Id,
                 Type = MovementType.Sale,
                 Quantity = -request.Quantity,
-                Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa: {product.Name} (Pagado)" : $"Venta Directa: {product.Name} (PENDIENTE)")
+                Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa: {product.Name} (PENDIENTE){discountAppliedStr}")
             });
 
             _context.BookingConsumptions.Add(consumption);

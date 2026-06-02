@@ -356,7 +356,7 @@ namespace PadelQ.Api.Controllers
             public int? PaymentMethodId { get; set; }
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTransaction(int id)
         {
