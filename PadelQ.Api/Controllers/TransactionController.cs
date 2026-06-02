@@ -363,27 +363,135 @@ namespace PadelQ.Api.Controllers
             var transaction = await _context.Transactions.FindAsync(id);
             if (transaction == null) return NotFound("Transacción no encontrada");
 
-            // SEGURIDAD DE INTEGRIDAD: 
-            // Solo permitir borrar si la reserva vinculada NO existe o está en estado Cancelado.
-            if (transaction.BookingId.HasValue)
+            if (transaction.Type == TransactionType.Payment)
             {
-                var booking = await _context.Bookings.FindAsync(transaction.BookingId.Value);
-                if (booking != null && booking.Status != BookingStatus.Cancelled)
+                if (transaction.BookingId.HasValue)
                 {
-                    return BadRequest("Seguridad: No se puede borrar este movimiento porque la reserva de cancha vinculada todavía existe y está activa. Debe anular la reserva primero para poder limpiar la caja.");
+                    var booking = await _context.Bookings.FindAsync(transaction.BookingId.Value);
+                    if (booking != null)
+                    {
+                        _context.Transactions.Remove(transaction);
+                        
+                        var remainingPayments = await _context.Transactions
+                            .Where(t => t.BookingId == booking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
+                            .SumAsync(t => t.Amount);
+
+                        booking.DepositPaid = remainingPayments;
+                        if (booking.DepositPaid < booking.Price)
+                        {
+                            if (booking.Status == BookingStatus.Paid) 
+                                booking.Status = BookingStatus.Confirmed;
+                        }
+
+                        var consumptions = await _context.BookingConsumptions.Where(c => c.BookingId == booking.Id).ToListAsync();
+                        decimal leftOver = remainingPayments - booking.Price;
+                        if (leftOver < 0) leftOver = 0;
+
+                        foreach (var c in consumptions)
+                        {
+                            if (leftOver >= c.TotalPrice)
+                            {
+                                c.DepositPaid = c.TotalPrice;
+                                c.IsPaid = true;
+                                leftOver -= c.TotalPrice;
+                            }
+                            else
+                            {
+                                c.DepositPaid = leftOver;
+                                c.IsPaid = false;
+                                leftOver = 0;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _context.Transactions.Remove(transaction);
+                    }
+                }
+                else if (transaction.SpaceBookingId.HasValue)
+                {
+                    var sbooking = await _context.SpaceBookings.FindAsync(transaction.SpaceBookingId.Value);
+                    if (sbooking != null)
+                    {
+                        _context.Transactions.Remove(transaction);
+                        
+                        var remainingPayments = await _context.Transactions
+                            .Where(t => t.SpaceBookingId == sbooking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
+                            .SumAsync(t => t.Amount);
+
+                        sbooking.DepositPaid = remainingPayments;
+                        if (sbooking.DepositPaid < sbooking.Price)
+                        {
+                            if (sbooking.Status == BookingStatus.Paid) 
+                                sbooking.Status = BookingStatus.Confirmed;
+                        }
+
+                        var consumptions = await _context.BookingConsumptions.Where(c => c.SpaceBookingId == sbooking.Id).ToListAsync();
+                        decimal leftOver = remainingPayments - sbooking.Price;
+                        if (leftOver < 0) leftOver = 0;
+
+                        foreach (var c in consumptions)
+                        {
+                            if (leftOver >= c.TotalPrice)
+                            {
+                                c.DepositPaid = c.TotalPrice;
+                                c.IsPaid = true;
+                                leftOver -= c.TotalPrice;
+                            }
+                            else
+                            {
+                                c.DepositPaid = leftOver;
+                                c.IsPaid = false;
+                                leftOver = 0;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _context.Transactions.Remove(transaction);
+                    }
+                }
+                else
+                {
+                    _context.Transactions.Remove(transaction);
+                    
+                    if (!string.IsNullOrEmpty(transaction.Description) && transaction.Description.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var timeWindowStart = transaction.Date.AddSeconds(-30);
+                        var timeWindowEnd = transaction.Date.AddSeconds(30);
+                        
+                        var consumptions = await _context.BookingConsumptions
+                            .Where(c => c.UserId == transaction.UserId 
+                                     && c.BookingId == null 
+                                     && c.SpaceBookingId == null 
+                                     && c.CreatedAt >= timeWindowStart 
+                                     && c.CreatedAt <= timeWindowEnd)
+                            .ToListAsync();
+
+                        foreach (var consumption in consumptions)
+                        {
+                            var product = await _context.Products.FindAsync(consumption.ProductId);
+                            if (product != null)
+                            {
+                                product.Stock += consumption.Quantity;
+                                _context.ProductStockMovements.Add(new ProductStockMovement
+                                {
+                                    ProductId = product.Id,
+                                    Type = MovementType.Adjustment,
+                                    Quantity = consumption.Quantity,
+                                    Note = $"Devolución por anulación de cobro (Venta Directa anulada)"
+                                });
+                            }
+                            _context.BookingConsumptions.Remove(consumption);
+                        }
+                    }
                 }
             }
-
-            if (transaction.SpaceBookingId.HasValue)
+            else
             {
-                var sbooking = await _context.SpaceBookings.FindAsync(transaction.SpaceBookingId.Value);
-                if (sbooking != null && sbooking.Status != BookingStatus.Cancelled)
-                {
-                    return BadRequest("Seguridad: No se puede borrar este movimiento porque el alquiler de espacio vinculado todavía existe y está activo. Debe anular el alquiler primero.");
-                }
+                _context.Transactions.Remove(transaction);
             }
 
-            _context.Transactions.Remove(transaction);
             await _context.SaveChangesAsync();
 
             return NoContent();
