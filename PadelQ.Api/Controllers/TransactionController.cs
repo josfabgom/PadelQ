@@ -141,7 +141,8 @@ namespace PadelQ.Api.Controllers
                 BookingId = request.BookingId,
                 SpaceBookingId = request.SpaceBookingId,
                 ActivityId = request.ActivityId,
-                ActivityDate = request.ActivityDate
+                ActivityDate = request.ActivityDate,
+                PaymentGroupId = request.PaymentGroupId
             };
 
             _context.Transactions.Add(transaction);
@@ -160,6 +161,7 @@ namespace PadelQ.Api.Controllers
             public Guid? SpaceBookingId { get; set; }
             public int? ActivityId { get; set; }
             public DateTime? ActivityDate { get; set; }
+            public Guid? PaymentGroupId { get; set; }
         }
 
         [HttpPost("charge")]
@@ -180,7 +182,8 @@ namespace PadelQ.Api.Controllers
                 BookingId = request.BookingId,
                 SpaceBookingId = request.SpaceBookingId,
                 ActivityId = request.ActivityId,
-                ActivityDate = request.ActivityDate
+                ActivityDate = request.ActivityDate,
+                PaymentGroupId = request.PaymentGroupId
             };
 
             _context.Transactions.Add(transaction);
@@ -198,6 +201,7 @@ namespace PadelQ.Api.Controllers
             public Guid? SpaceBookingId { get; set; }
             public int? ActivityId { get; set; }
             public DateTime? ActivityDate { get; set; }
+            public Guid? PaymentGroupId { get; set; }
         }
 
         [HttpPost("membership-payment")]
@@ -370,36 +374,77 @@ namespace PadelQ.Api.Controllers
                     var booking = await _context.Bookings.FindAsync(transaction.BookingId.Value);
                     if (booking != null)
                     {
+                        bool isRentTransaction = !string.IsNullOrEmpty(transaction.Description) && 
+                            (transaction.Description.Contains("Renta Cancha", StringComparison.OrdinalIgnoreCase) || 
+                             transaction.Description.Contains("Renta Espacio", StringComparison.OrdinalIgnoreCase));
+
+                        bool isConsumptionTransaction = !string.IsNullOrEmpty(transaction.Description) && 
+                            (transaction.Description.IndexOf("x ", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             transaction.Description.Contains("Consumo", StringComparison.OrdinalIgnoreCase));
+
                         _context.Transactions.Remove(transaction);
-                        
-                        var remainingPayments = await _context.Transactions
-                            .Where(t => t.BookingId == booking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
-                            .SumAsync(t => t.Amount);
 
-                        booking.DepositPaid = remainingPayments;
-                        if (booking.DepositPaid < booking.Price)
+                        if (isRentTransaction && !isConsumptionTransaction)
                         {
-                            if (booking.Status == BookingStatus.Paid) 
+                            booking.DepositPaid -= transaction.Amount;
+                            if (booking.DepositPaid < 0) booking.DepositPaid = 0;
+                            
+                            if (booking.DepositPaid < booking.Price && booking.Status == BookingStatus.Paid) 
+                            {
                                 booking.Status = BookingStatus.Confirmed;
-                        }
-
-                        var consumptions = await _context.BookingConsumptions.Where(c => c.BookingId == booking.Id).ToListAsync();
-                        decimal leftOver = remainingPayments - booking.Price;
-                        if (leftOver < 0) leftOver = 0;
-
-                        foreach (var c in consumptions)
-                        {
-                            if (leftOver >= c.TotalPrice)
-                            {
-                                c.DepositPaid = c.TotalPrice;
-                                c.IsPaid = true;
-                                leftOver -= c.TotalPrice;
                             }
-                            else
+                        }
+                        else if (isConsumptionTransaction && !isRentTransaction)
+                        {
+                            var consumptions = await _context.BookingConsumptions
+                                .Where(c => c.BookingId == booking.Id)
+                                .OrderByDescending(c => c.CreatedAt)
+                                .ToListAsync();
+                                
+                            decimal toDeduct = transaction.Amount;
+                            foreach (var c in consumptions)
                             {
-                                c.DepositPaid = leftOver;
-                                c.IsPaid = false;
-                                leftOver = 0;
+                                if (toDeduct <= 0) break;
+                                if (c.DepositPaid > 0)
+                                {
+                                    decimal deducted = Math.Min(c.DepositPaid, toDeduct);
+                                    c.DepositPaid -= deducted;
+                                    toDeduct -= deducted;
+                                    c.IsPaid = c.DepositPaid >= c.TotalPrice;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var remainingPayments = await _context.Transactions
+                                .Where(t => t.BookingId == booking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
+                                .SumAsync(t => t.Amount);
+
+                            booking.DepositPaid = remainingPayments;
+                            if (booking.DepositPaid < booking.Price)
+                            {
+                                if (booking.Status == BookingStatus.Paid) 
+                                    booking.Status = BookingStatus.Confirmed;
+                            }
+
+                            var consumptions = await _context.BookingConsumptions.Where(c => c.BookingId == booking.Id).ToListAsync();
+                            decimal leftOver = remainingPayments - booking.Price;
+                            if (leftOver < 0) leftOver = 0;
+
+                            foreach (var c in consumptions)
+                            {
+                                if (leftOver >= c.TotalPrice)
+                                {
+                                    c.DepositPaid = c.TotalPrice;
+                                    c.IsPaid = true;
+                                    leftOver -= c.TotalPrice;
+                                }
+                                else
+                                {
+                                    c.DepositPaid = leftOver;
+                                    c.IsPaid = false;
+                                    leftOver = 0;
+                                }
                             }
                         }
                     }
@@ -413,36 +458,77 @@ namespace PadelQ.Api.Controllers
                     var sbooking = await _context.SpaceBookings.FindAsync(transaction.SpaceBookingId.Value);
                     if (sbooking != null)
                     {
+                        bool isRentTransaction = !string.IsNullOrEmpty(transaction.Description) && 
+                            (transaction.Description.Contains("Renta Cancha", StringComparison.OrdinalIgnoreCase) || 
+                             transaction.Description.Contains("Renta Espacio", StringComparison.OrdinalIgnoreCase));
+
+                        bool isConsumptionTransaction = !string.IsNullOrEmpty(transaction.Description) && 
+                            (transaction.Description.IndexOf("x ", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             transaction.Description.Contains("Consumo", StringComparison.OrdinalIgnoreCase));
+
                         _context.Transactions.Remove(transaction);
-                        
-                        var remainingPayments = await _context.Transactions
-                            .Where(t => t.SpaceBookingId == sbooking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
-                            .SumAsync(t => t.Amount);
 
-                        sbooking.DepositPaid = remainingPayments;
-                        if (sbooking.DepositPaid < sbooking.Price)
+                        if (isRentTransaction && !isConsumptionTransaction)
                         {
-                            if (sbooking.Status == BookingStatus.Paid) 
+                            sbooking.DepositPaid -= transaction.Amount;
+                            if (sbooking.DepositPaid < 0) sbooking.DepositPaid = 0;
+                            
+                            if (sbooking.DepositPaid < sbooking.Price && sbooking.Status == BookingStatus.Paid) 
+                            {
                                 sbooking.Status = BookingStatus.Confirmed;
-                        }
-
-                        var consumptions = await _context.BookingConsumptions.Where(c => c.SpaceBookingId == sbooking.Id).ToListAsync();
-                        decimal leftOver = remainingPayments - sbooking.Price;
-                        if (leftOver < 0) leftOver = 0;
-
-                        foreach (var c in consumptions)
-                        {
-                            if (leftOver >= c.TotalPrice)
-                            {
-                                c.DepositPaid = c.TotalPrice;
-                                c.IsPaid = true;
-                                leftOver -= c.TotalPrice;
                             }
-                            else
+                        }
+                        else if (isConsumptionTransaction && !isRentTransaction)
+                        {
+                            var consumptions = await _context.BookingConsumptions
+                                .Where(c => c.SpaceBookingId == sbooking.Id)
+                                .OrderByDescending(c => c.CreatedAt)
+                                .ToListAsync();
+                                
+                            decimal toDeduct = transaction.Amount;
+                            foreach (var c in consumptions)
                             {
-                                c.DepositPaid = leftOver;
-                                c.IsPaid = false;
-                                leftOver = 0;
+                                if (toDeduct <= 0) break;
+                                if (c.DepositPaid > 0)
+                                {
+                                    decimal deducted = Math.Min(c.DepositPaid, toDeduct);
+                                    c.DepositPaid -= deducted;
+                                    toDeduct -= deducted;
+                                    c.IsPaid = c.DepositPaid >= c.TotalPrice;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var remainingPayments = await _context.Transactions
+                                .Where(t => t.SpaceBookingId == sbooking.Id && t.Id != transaction.Id && t.Type == TransactionType.Payment)
+                                .SumAsync(t => t.Amount);
+
+                            sbooking.DepositPaid = remainingPayments;
+                            if (sbooking.DepositPaid < sbooking.Price)
+                            {
+                                if (sbooking.Status == BookingStatus.Paid) 
+                                    sbooking.Status = BookingStatus.Confirmed;
+                            }
+
+                            var consumptions = await _context.BookingConsumptions.Where(c => c.SpaceBookingId == sbooking.Id).ToListAsync();
+                            decimal leftOver = remainingPayments - sbooking.Price;
+                            if (leftOver < 0) leftOver = 0;
+
+                            foreach (var c in consumptions)
+                            {
+                                if (leftOver >= c.TotalPrice)
+                                {
+                                    c.DepositPaid = c.TotalPrice;
+                                    c.IsPaid = true;
+                                    leftOver -= c.TotalPrice;
+                                }
+                                else
+                                {
+                                    c.DepositPaid = leftOver;
+                                    c.IsPaid = false;
+                                    leftOver = 0;
+                                }
                             }
                         }
                     }
@@ -493,6 +579,24 @@ namespace PadelQ.Api.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpDelete("group/{groupId}")]
+        public async Task<IActionResult> DeleteTransactionGroup(Guid groupId)
+        {
+            var transactions = await _context.Transactions.Where(t => t.PaymentGroupId == groupId).ToListAsync();
+            if (!transactions.Any()) return NotFound("Grupo de transacciones no encontrado");
+
+            // Para evitar problemas de concurrencia o modificaciones en cascada que afecten otros borrados del mismo grupo,
+            // podemos reutilizar la logica de DeleteTransaction en un loop (ya que maneja consumos y depósitos).
+            // Pero es más seguro hacerlo así:
+            foreach (var t in transactions)
+            {
+                await DeleteTransaction(t.Id);
+            }
 
             return NoContent();
         }

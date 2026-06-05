@@ -39,6 +39,7 @@ namespace PadelQ.Domain.Entities
         public Guid? SpaceBookingId { get; set; }
         public int? ActivityId { get; set; }
         public DateTime? ActivityDate { get; set; }
+        public Guid? PaymentGroupId { get; set; }
     }
 
     public enum TransactionType

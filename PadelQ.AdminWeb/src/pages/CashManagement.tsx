@@ -21,7 +21,8 @@ import {
     Printer,
     Trash2,
     Eye,
-    Edit3
+    Edit3,
+    Info
 } from 'lucide-react';
 import Header from '../components/Header';
 import { jsPDF } from 'jspdf';
@@ -149,10 +150,14 @@ const CashManagement = () => {
         }
     };
 
-    const handleDeleteTransaction = async (id: string) => {
+    const handleDeleteTransaction = async (id: string, isGroup?: boolean) => {
         if (!window.confirm("¿Estás seguro de que deseas anular este movimiento? Esta acción limpiará el registro de la caja.")) return;
         try {
-            await api.delete(`/api/transaction/${id}`, config);
+            if (isGroup) {
+                await api.delete(`/api/transaction/group/${id}`, config);
+            } else {
+                await api.delete(`/api/transaction/${id}`, config);
+            }
             fetchData();
         } catch (err: any) {
             alert("Error al anular movimiento: " + (err.response?.data || err.message));
@@ -230,14 +235,25 @@ const CashManagement = () => {
             doc.text("RESUMEN GENERAL DE COBROS (VENTAS)", 20, currentY);
             currentY += 5;
 
-            const totalCobrado = (closure.totalCashSales || 0) + (closure.totalTransferSales || 0) + (closure.totalCardSales || 0) + (closure.totalOtherSales || 0);
+            const realCashTotalPDF = closure.actualCash || 0;
+            
+            const transferMethodsPDF = [...new Set(transactions.map(t => t.method).filter(m => m.toLowerCase().includes('transferencia')))];
+            const realTransferSalesPDF = transferMethodsPDF.reduce((s, m) => s + ((actualTotalsParsed as any)[m] !== undefined ? (actualTotalsParsed as any)[m] : transactions.filter(t => t.method === m).reduce((ts, t) => ts + t.amount, 0)), 0);
+
+            const cardMethodsPDF = [...new Set(transactions.map(t => t.method).filter(m => m.toLowerCase().includes('tarjeta')))];
+            const realCardSalesPDF = cardMethodsPDF.reduce((s, m) => s + ((actualTotalsParsed as any)[m] !== undefined ? (actualTotalsParsed as any)[m] : transactions.filter(t => t.method === m).reduce((ts, t) => ts + t.amount, 0)), 0);
+
+            const otherMethodsPDF = [...new Set(transactions.map(t => t.method).filter(m => !m.toLowerCase().includes('efectivo') && !m.toLowerCase().includes('transferencia') && !m.toLowerCase().includes('tarjeta')))];
+            const realOtherSalesPDF = otherMethodsPDF.reduce((s, m) => s + ((actualTotalsParsed as any)[m] !== undefined ? (actualTotalsParsed as any)[m] : transactions.filter(t => t.method === m).reduce((ts, t) => ts + t.amount, 0)), 0);
+
+            const totalRealCaja = realCashTotalPDF + realTransferSalesPDF + realCardSalesPDF + realOtherSalesPDF;
 
             const cobradoRows = [
-                ["TOTAL COBRADO EN VENTAS", formatARS(totalCobrado)],
-                ["   - Efectivo", formatARS(closure.totalCashSales || 0)],
-                ["   - Transferencias", formatARS(closure.totalTransferSales || 0)],
-                ["   - Tarjetas", formatARS(closure.totalCardSales || 0)],
-                ["   - Otros Medios", formatARS(closure.totalOtherSales || 0)]
+                ["TOTAL GENERAL DECLARADO", formatARS(totalRealCaja)],
+                ["   - Efectivo (Físico en Caja)", formatARS(realCashTotalPDF)],
+                ["   - Transferencias", formatARS(realTransferSalesPDF)],
+                ["   - Tarjetas", formatARS(realCardSalesPDF)],
+                ["   - Otros Medios", formatARS(realOtherSalesPDF)]
             ];
 
             autoTable(doc, {
@@ -621,15 +637,56 @@ const CashManagement = () => {
 
                             <div className="space-y-4">
                                 {(() => {
-                                    const allTransactions = currentStatus.summary
+                                    const filtered = currentStatus.summary
                                         .flatMap((s: any) => s.transactions.map((t: any) => ({ ...t, method: s.method, methodId: s.methodId, color: s.color })))
                                         .filter((t: any) => {
                                             const isDirect = t.description?.toUpperCase().includes('VENTA DIRECTA');
                                             if (journalFilter === 'direct') return isDirect;
                                             if (journalFilter === 'others') return !isDirect;
                                             return true;
-                                        })
-                                        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                        });
+
+                                    // Agrupar por PaymentGroupId
+                                    const groupedMap = new Map();
+                                    const allTransactions: any[] = [];
+
+                                    filtered.forEach((t: any) => {
+                                        if (t.paymentGroupId) {
+                                            const key = `${t.paymentGroupId}_${t.methodId}`;
+                                            if (groupedMap.has(key)) {
+                                                groupedMap.get(key).push(t);
+                                            } else {
+                                                groupedMap.set(key, [t]);
+                                            }
+                                        } else {
+                                            allTransactions.push(t); // sin grupo, va directo
+                                        }
+                                    });
+
+                                    // Procesar los agrupados
+                                    groupedMap.forEach((group: any[], key) => {
+                                        if (group.length === 1) {
+                                            allTransactions.push(group[0]);
+                                        } else {
+                                            const t1 = group[0];
+                                            const totalAmount = group.reduce((sum, item) => sum + item.amount, 0);
+                                            
+                                            // Limpiar texto de "Parte x/y" si están todos unidos
+                                            const cleanDesc = t1.description?.replace(/\s*\(Parte\s*\d+\/\d+\)\s*/i, ' ');
+                                            const summaryDesc = `Cobro Múltiple: ${cleanDesc} ...y ${group.length - 1} partes más`;
+
+                                            allTransactions.push({
+                                                ...t1,
+                                                id: t1.paymentGroupId,
+                                                isGroup: true,
+                                                amount: totalAmount,
+                                                description: summaryDesc,
+                                                groupDetails: group
+                                            });
+                                        }
+                                    });
+
+                                    allTransactions.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                                     if (allTransactions.length === 0) {
                                         return <p className="text-center py-10 text-zinc-300 text-[10px] font-black uppercase tracking-widest italic">No hay movimientos registrados</p>;
@@ -689,6 +746,22 @@ const CashManagement = () => {
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-1">
                                                             <p className="text-[10px] font-black text-black uppercase">{t.description || 'Sin concepto'}</p>
+                                                            {t.isGroup && t.groupDetails && (
+                                                                <div className="relative group/tooltip flex items-center">
+                                                                    <Info className="w-3.5 h-3.5 text-zinc-400 cursor-help" />
+                                                                    <div className="absolute left-6 top-1/2 -translate-y-1/2 w-[340px] p-4 bg-zinc-900 text-white text-[9px] font-bold rounded-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-50 pointer-events-none shadow-2xl border border-zinc-800">
+                                                                        <p className="text-zinc-500 mb-3 font-black tracking-[0.2em] uppercase">Detalle del Cobro</p>
+                                                                        <div className="space-y-2">
+                                                                            {t.groupDetails.map((gd: any, idx: number) => (
+                                                                                <div key={idx} className="flex justify-between gap-4">
+                                                                                    <span className="truncate flex-1" title={gd.description}>{gd.description}</span>
+                                                                                    <span className="flex-shrink-0 text-emerald-400 font-black">{formatARS(gd.amount)}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             <span className="px-2 py-0.5 bg-zinc-100 border border-zinc-200 rounded-md text-[7px] font-black text-zinc-500 uppercase tracking-tighter">{t.method}</span>
@@ -716,7 +789,7 @@ const CashManagement = () => {
                                                                 <Edit3 className="w-4 h-4" />
                                                             </button>
                                                             <button
-                                                                onClick={() => handleDeleteTransaction(t.id)}
+                                                                onClick={() => handleDeleteTransaction(t.id, t.isGroup)}
                                                                 className="opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all ml-2"
                                                                 title="Anular Movimiento"
                                                             >
@@ -1150,32 +1223,62 @@ const CashManagement = () => {
                         
                         <div className="p-8 overflow-y-auto flex-1 space-y-8 bg-[#fafafa]">
                             {/* Resumen General de Cobros */}
-                            <div className="p-8 bg-black rounded-[32px] border border-black shadow-xl space-y-6">
-                                <div>
-                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total Cobrado en Ventas</p>
-                                    <h4 className="text-4xl font-black text-emerald-400 italic tracking-tighter">
-                                        {formatARS((closedClosureDetails.closure.totalCashSales || 0) + (closedClosureDetails.closure.totalTransferSales || 0) + (closedClosureDetails.closure.totalCardSales || 0) + (closedClosureDetails.closure.totalOtherSales || 0))}
-                                    </h4>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-white/10">
-                                    <div>
-                                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Efectivo</p>
-                                        <p className="text-lg font-black text-white italic">{formatARS(closedClosureDetails.closure.totalCashSales || 0)}</p>
+                            {(() => {
+                                let actualTotalsParsed: any = {};
+                                try {
+                                    actualTotalsParsed = closedClosureDetails.closure.actualTotals ? (typeof closedClosureDetails.closure.actualTotals === 'string' ? JSON.parse(closedClosureDetails.closure.actualTotals) : closedClosureDetails.closure.actualTotals) : {};
+                                } catch (e) {}
+                                
+                                const realCashTotal = closedClosureDetails.closure.actualCash || 0;
+                                
+                                const transferMethods = Array.from(new Set(closedClosureDetails.transactions.map((t: any) => String(t.method)).filter((m: string) => m.toLowerCase().includes('transferencia')))) as string[];
+                                const realTransferSales = transferMethods.reduce((s: number, m: string) => s + (actualTotalsParsed[m] !== undefined ? actualTotalsParsed[m] : closedClosureDetails.transactions.filter((t: any) => t.method === m).reduce((ts: number, t: any) => ts + t.amount, 0)), 0);
+
+                                const cardMethods = Array.from(new Set(closedClosureDetails.transactions.map((t: any) => String(t.method)).filter((m: string) => m.toLowerCase().includes('tarjeta')))) as string[];
+                                const realCardSales = cardMethods.reduce((s: number, m: string) => s + (actualTotalsParsed[m] !== undefined ? actualTotalsParsed[m] : closedClosureDetails.transactions.filter((t: any) => t.method === m).reduce((ts: number, t: any) => ts + t.amount, 0)), 0);
+
+                                const otherMethods = Array.from(new Set(closedClosureDetails.transactions.map((t: any) => String(t.method)).filter((m: string) => !m.toLowerCase().includes('efectivo') && !m.toLowerCase().includes('transferencia') && !m.toLowerCase().includes('tarjeta')))) as string[];
+                                const realOtherSales = otherMethods.reduce((s: number, m: string) => s + (actualTotalsParsed[m] !== undefined ? actualTotalsParsed[m] : closedClosureDetails.transactions.filter((t: any) => t.method === m).reduce((ts: number, t: any) => ts + t.amount, 0)), 0);
+
+                                const totalRealCaja = realCashTotal + realTransferSales + realCardSales + realOtherSales;
+                                
+                                return (
+                                    <div className="p-8 bg-black rounded-[32px] border border-black shadow-xl space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Declarado</p>
+                                            <h4 className="text-4xl font-black text-emerald-400 italic tracking-tighter">
+                                                {formatARS(totalRealCaja)}
+                                            </h4>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-white/10">
+                                            <div>
+                                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Efectivo</p>
+                                                <p className="text-lg font-black text-white italic">{formatARS(realCashTotal)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Transferencias</p>
+                                                <p className="text-lg font-black text-white italic">{formatARS(realTransferSales)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Tarjetas</p>
+                                                <p className="text-lg font-black text-white italic">{formatARS(realCardSales)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Otros Medios</p>
+                                                <p className="text-lg font-black text-white italic">{formatARS(realOtherSales)}</p>
+                                            </div>
+                                        </div>
+                                        {closedClosureDetails.closure.notes && (
+                                            <div className="pt-6 border-t border-white/10">
+                                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">Comentarios</p>
+                                                <p className="text-sm font-bold text-white/80 whitespace-pre-wrap italic">
+                                                    "{closedClosureDetails.closure.notes}"
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Transferencias</p>
-                                        <p className="text-lg font-black text-white italic">{formatARS(closedClosureDetails.closure.totalTransferSales || 0)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Tarjetas</p>
-                                        <p className="text-lg font-black text-white italic">{formatARS(closedClosureDetails.closure.totalCardSales || 0)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Otros Medios</p>
-                                        <p className="text-lg font-black text-white italic">{formatARS(closedClosureDetails.closure.totalOtherSales || 0)}</p>
-                                    </div>
-                                </div>
-                            </div>
+                                );
+                            })()}
 
                             {/* Resumen de Efectivo */}
                             <div className="bg-white p-6 rounded-[32px] border border-black/5 shadow-sm">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import api, { getAuthConfig } from '../api/api';
 import {
     format,
@@ -1145,9 +1146,23 @@ const BookingsPage = () => {
                 setSelectedSpaceBooking(null);
                 setIsDetailsModalOpen(true);
                 fetchBookingTransactions(existing.id, false);
-                // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
-                setSelectedCourtParts({ [existing.id]: [0] });
-                setCourtFractions({ [existing.id]: 1 });
+                // No pre-seleccionar ninguna parte
+                setSelectedCourtParts({ [existing.id]: [] });
+                
+                const originalPrice = existing.price || 0;
+                const depositPaid = existing.depositPaid || 0;
+                const remainingDebt = Math.max(0, originalPrice - depositPaid);
+                const originalFractions = (existing as any).rentFractions || 1;
+                
+                let initialFractions = originalFractions;
+                if (originalFractions > 1 && depositPaid > 0 && remainingDebt > 0) {
+                    const partAmount = originalPrice / originalFractions;
+                    initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
+                } else if (remainingDebt <= 0) {
+                    initialFractions = 1;
+                }
+                
+                setCourtFractions({ [existing.id]: initialFractions });
                 setSelectedConsumptionParts({});
                 setConsumptionFractions({});
                 setSelectedRelatedBookingIds([]);
@@ -1199,8 +1214,23 @@ const BookingsPage = () => {
                 setRelatedBookings(allR);
                 if (allR.length > 0) {
                     setSelectedRelatedBookingIds(allR.map(x => x.id));
-                    setCourtFractions({ ...courtFractions, ['consolidated-rent']: 1 });
-                    setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [0] });
+                    
+                    const allRentalsForConsolidation = [existing, ...allR];
+                    const totalConsolidatedPrice = allRentalsForConsolidation.reduce((sum, r) => sum + (r.price || 0), 0);
+                    const totalConsolidatedDeposit = allRentalsForConsolidation.reduce((sum, r) => sum + (r.depositPaid || 0), 0);
+                    const remainingConsolidatedDebt = Math.max(0, totalConsolidatedPrice - totalConsolidatedDeposit);
+                    const originalConsolidatedFractions = (existing as any).rentFractions || 1;
+                    
+                    let initialConsolidatedFractions = originalConsolidatedFractions;
+                    if (originalConsolidatedFractions > 1 && totalConsolidatedDeposit > 0 && remainingConsolidatedDebt > 0) {
+                        const partAmount = totalConsolidatedPrice / originalConsolidatedFractions;
+                        initialConsolidatedFractions = Math.max(1, Math.round(remainingConsolidatedDebt / partAmount));
+                    } else if (remainingConsolidatedDebt <= 0) {
+                        initialConsolidatedFractions = 1;
+                    }
+                    
+                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: initialConsolidatedFractions }));
+                    setSelectedCourtParts(prev => ({ ...prev, ['consolidated-rent']: [] }));
                 }
 
                 // Fetch consumptions for all related bookings
@@ -1214,6 +1244,35 @@ const BookingsPage = () => {
                         const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (rb as any).court?.name || (rb as any).space?.name }));
                         allCons = [...allCons, ...rbCons];
                     }
+                    const groupedConsForFractions = allCons.reduce((acc: any, c: any) => {
+                        if (!acc[c.productId]) {
+                            acc[c.productId] = { totalPrice: 0, depositPaid: 0, fractions: c.fractions || 1 };
+                        }
+                        acc[c.productId].totalPrice += (c.totalPrice || (c.unitPrice * c.quantity));
+                        acc[c.productId].depositPaid += (c.depositPaid || 0);
+                        if (c.fractions > acc[c.productId].fractions) {
+                            acc[c.productId].fractions = c.fractions;
+                        }
+                        return acc;
+                    }, {});
+
+                    let consFractions: Record<string, number> = {};
+                    Object.keys(groupedConsForFractions).forEach((pidStr) => {
+                        const pid = Number(pidStr);
+                        const g = groupedConsForFractions[pid];
+                        if (g.fractions > 1) {
+                            const remainingDebt = Math.max(0, g.totalPrice - g.depositPaid);
+                            let initialFractions = g.fractions;
+                            if (g.depositPaid > 0 && remainingDebt > 0) {
+                                const partAmount = g.totalPrice / g.fractions;
+                                initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
+                            } else if (remainingDebt <= 0) {
+                                initialFractions = 1;
+                            }
+                            consFractions[`group-${pid}`] = initialFractions;
+                        }
+                    });
+                    setConsumptionFractions(consFractions);
                     setBookingConsumptions(allCons);
                 } catch (e) {
                     setBookingConsumptions([]);
@@ -1228,9 +1287,9 @@ const BookingsPage = () => {
                 setSelectedBooking(null);
                 setIsDetailsModalOpen(true);
                 fetchBookingTransactions(existing.id, true);
-                // Pre-seleccionar solo la parte 1 de la cancha principal por conveniencia
-                setSelectedCourtParts({ [existing.id]: [0] });
-                setCourtFractions({ [existing.id]: 1 });
+                // No pre-seleccionar ninguna parte
+                setSelectedCourtParts({ [existing.id]: [] });
+                setCourtFractions({ [existing.id]: (existing as any).rentFractions || 1 });
                 setSelectedConsumptionParts({});
                 setConsumptionFractions({});
                 setSelectedRelatedBookingIds([]);
@@ -1275,8 +1334,23 @@ const BookingsPage = () => {
                 setRelatedBookings(allR);
                 if (allR.length > 0) {
                     setSelectedRelatedBookingIds(allR.map(x => x.id));
-                    setCourtFractions({ ...courtFractions, ['consolidated-rent']: 1 });
-                    setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [0] });
+                    
+                    const allRentalsForConsolidation = [existing, ...allR];
+                    const totalConsolidatedPrice = allRentalsForConsolidation.reduce((sum, r) => sum + (r.price || 0), 0);
+                    const totalConsolidatedDeposit = allRentalsForConsolidation.reduce((sum, r) => sum + (r.depositPaid || 0), 0);
+                    const remainingConsolidatedDebt = Math.max(0, totalConsolidatedPrice - totalConsolidatedDeposit);
+                    const originalConsolidatedFractions = (existing as any).rentFractions || 1;
+                    
+                    let initialConsolidatedFractions = originalConsolidatedFractions;
+                    if (originalConsolidatedFractions > 1 && totalConsolidatedDeposit > 0 && remainingConsolidatedDebt > 0) {
+                        const partAmount = totalConsolidatedPrice / originalConsolidatedFractions;
+                        initialConsolidatedFractions = Math.max(1, Math.round(remainingConsolidatedDebt / partAmount));
+                    } else if (remainingConsolidatedDebt <= 0) {
+                        initialConsolidatedFractions = 1;
+                    }
+                    
+                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: initialConsolidatedFractions }));
+                    setSelectedCourtParts(prev => ({ ...prev, ['consolidated-rent']: [] }));
                 }
 
                 // Fetch consumptions for all related bookings
@@ -1290,6 +1364,35 @@ const BookingsPage = () => {
                         const rbCons = (rbConsRes.data || []).map((c: any) => ({ ...c, sourceName: (rb as any).court?.name || (rb as any).space?.name }));
                         allCons = [...allCons, ...rbCons];
                     }
+                    const groupedConsForFractions = allCons.reduce((acc: any, c: any) => {
+                        if (!acc[c.productId]) {
+                            acc[c.productId] = { totalPrice: 0, depositPaid: 0, fractions: c.fractions || 1 };
+                        }
+                        acc[c.productId].totalPrice += (c.totalPrice || (c.unitPrice * c.quantity));
+                        acc[c.productId].depositPaid += (c.depositPaid || 0);
+                        if (c.fractions > acc[c.productId].fractions) {
+                            acc[c.productId].fractions = c.fractions;
+                        }
+                        return acc;
+                    }, {});
+
+                    let consFractions: Record<string, number> = {};
+                    Object.keys(groupedConsForFractions).forEach((pidStr) => {
+                        const pid = Number(pidStr);
+                        const g = groupedConsForFractions[pid];
+                        if (g.fractions > 1) {
+                            const remainingDebt = Math.max(0, g.totalPrice - g.depositPaid);
+                            let initialFractions = g.fractions;
+                            if (g.depositPaid > 0 && remainingDebt > 0) {
+                                const partAmount = g.totalPrice / g.fractions;
+                                initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
+                            } else if (remainingDebt <= 0) {
+                                initialFractions = 1;
+                            }
+                            consFractions[`group-${pid}`] = initialFractions;
+                        }
+                    });
+                    setConsumptionFractions(consFractions);
                     setBookingConsumptions(allCons);
                 } catch (e) {
                     setBookingConsumptions([]);
@@ -1659,7 +1762,7 @@ const BookingsPage = () => {
                         relatedBookingsPayments.push({
                             id: r.id,
                             amount: rAmount,
-                            desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(r as any).court?.name || (r as any).space?.name} (${format(parseSafeDate(r.startTime), 'HH:mm')}-${format(parseSafeDate(r.endTime), 'HH:mm')})`
+                            desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(r as any).court?.name || (r as any).space?.name} (${format(parseSafeDate(r.startTime), 'HH:mm')}-${format(parseSafeDate(r.endTime), 'HH:mm')})${fractions > 1 ? ` (Parte ${selectedParts.length}/${fractions})` : ''}`
                         });
                     }
                 });
@@ -1674,7 +1777,7 @@ const BookingsPage = () => {
                 relatedBookingsPayments.push({
                     id: booking.id,
                     amount: totalRentPayment,
-                    desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(booking as any).court?.name || (booking as any).space?.name} (${format(parseSafeDate(booking.startTime), 'HH:mm')}-${format(parseSafeDate(booking.endTime), 'HH:mm')})`
+                    desc: `Renta ${isSpace ? 'Espacio' : 'Cancha'}: ${(booking as any).court?.name || (booking as any).space?.name} (${format(parseSafeDate(booking.startTime), 'HH:mm')}-${format(parseSafeDate(booking.endTime), 'HH:mm')})${mainFractions > 1 ? ` (Parte ${mainSelectedParts.length}/${mainFractions})` : ''}`
                 });
             }
         }
@@ -1711,10 +1814,13 @@ const BookingsPage = () => {
                 const amount = partPrice * selectedPartsCount;
                 totalConsumptionsPayment += amount;
                 
+                const courtName = (booking as any).court?.name || (booking as any).space?.name || 'Cancha';
+                const timeStr = format(parseSafeDate(booking.startTime), 'HH:mm');
+                
                 groupPayments.push({ 
                     productId: g.productId, 
                     amount, 
-                    desc: `${g.quantity}x ${g.productName}${partsCount > 1 ? ` (Parte ${selectedPartsCount}/${partsCount})` : ''}`,
+                    desc: `${g.quantity}x ${g.productName}${partsCount > 1 ? ` (Parte ${selectedPartsCount}/${partsCount})` : ''} - ${courtName} ${timeStr}`,
                     ids: g.records.map((r: any) => r.id)
                 });
             }
@@ -1755,6 +1861,8 @@ const BookingsPage = () => {
                 return;
             }
 
+            const paymentGroupId = uuidv4();
+
             // Función auxiliar para registrar pagos (puede ser uno o dos)
             const registerPayment = async (amount: number, methodId: string, descriptionPrefix: string, linkedId?: string, isSpace?: boolean) => {
                 const m = paymentMethods.find(p => p.id.toString() === methodId);
@@ -1778,7 +1886,8 @@ const BookingsPage = () => {
                         amount: amount,
                         description: desc,
                         bookingId: !isSpace ? linkedId : null,
-                        spaceBookingId: isSpace ? linkedId : null
+                        spaceBookingId: isSpace ? linkedId : null,
+                        paymentGroupId: paymentGroupId
                     };
                     url = `/api/transaction/charge`;
                     await api.post(url, payload, config);
@@ -1789,7 +1898,8 @@ const BookingsPage = () => {
                         description: desc,
                         paymentMethodId: parseInt(methodId),
                         bookingId: !isSpace ? linkedId : null,
-                        spaceBookingId: isSpace ? linkedId : null
+                        spaceBookingId: isSpace ? linkedId : null,
+                        paymentGroupId: paymentGroupId
                     };
                     await api.post(`/api/transaction/payment`, payload, config);
                 }
@@ -1829,22 +1939,6 @@ const BookingsPage = () => {
 
             // 3. Pagar Consumiciones Agrupadas
             for (const gp of groupPayments) {
-                // Vincular consumiciones a la reserva principal del grupo (si existe)
-                const firstRecord = grouped[gp.productId].records[0];
-                const linkedId = firstRecord?.bookingId || firstRecord?.spaceBookingId || booking.id;
-                const isSpaceConsumption = firstRecord?.spaceBookingId ? true : (firstRecord?.bookingId ? false : isSpace);
-
-                if (!isMixedPayment) {
-                    await registerPayment(gp.amount, selectedPaymentMethod, gp.desc, linkedId, isSpaceConsumption);
-                } else {
-                    const txRatio = gp.amount / currentTransactionTotal;
-                    const p1 = firstMethodAmount * txRatio;
-                    const p2 = gp.amount - p1;
-                    await registerPayment(p1, selectedPaymentMethod, gp.desc + " (Parte Mixta 1)", linkedId, isSpaceConsumption);
-                    await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)", linkedId, isSpaceConsumption);
-                }
-
-                // Distribuir el pago entre los registros individuales
                 let remainingPaymentToDistribute = gp.amount;
                 const records = grouped[gp.productId].records.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -1854,6 +1948,20 @@ const BookingsPage = () => {
                     if (recordRemaining <= 0) continue;
 
                     const paymentForThisRecord = Math.min(remainingPaymentToDistribute, recordRemaining);
+                    
+                    const linkedId = record.bookingId || record.spaceBookingId || booking.id;
+                    const isSpaceConsumption = record.spaceBookingId ? true : (record.bookingId ? false : isSpace);
+                    
+                    if (!isMixedPayment) {
+                        await registerPayment(paymentForThisRecord, selectedPaymentMethod, gp.desc, linkedId, isSpaceConsumption);
+                    } else {
+                        const txRatio = paymentForThisRecord / currentTransactionTotal;
+                        const p1 = firstMethodAmount * txRatio;
+                        const p2 = paymentForThisRecord - p1;
+                        await registerPayment(p1, selectedPaymentMethod, gp.desc + " (Parte Mixta 1)", linkedId, isSpaceConsumption);
+                        await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)", linkedId, isSpaceConsumption);
+                    }
+
                     if (paymentForThisRecord >= recordRemaining) {
                         await api.put(`/api/consumptions/${record.id}/pay`, {}, config);
                         
@@ -1868,6 +1976,7 @@ const BookingsPage = () => {
                     } else {
                         await api.post(`/api/consumptions/${record.id}/partial-pay?amount=${paymentForThisRecord}`, {}, config);
                     }
+                    
                     remainingPaymentToDistribute -= paymentForThisRecord;
                 }
             }
@@ -3433,19 +3542,19 @@ const BookingsPage = () => {
                                                                     <div className="absolute top-0 right-0 p-4 opacity-10">
                                                                         <Layers className="w-12 h-12 text-white" />
                                                                     </div>
-                                                                    <div className="flex items-center justify-between relative z-10">
-                                                                        <div className="flex items-center gap-4">
-                                                                            <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                                                                    <div className="flex items-center justify-between relative z-10 gap-4">
+                                                                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                                                                            <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
                                                                                 <Calendar className="w-6 h-6 text-white" />
                                                                             </div>
-                                                                            <div>
-                                                                                <p className="text-[11px] font-black text-white uppercase tracking-widest mb-1">Renta Consolidada</p>
-                                                                                <p className="text-[9px] font-bold text-zinc-500 italic max-w-[200px] truncate">
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <p className="text-[11px] font-black text-white uppercase tracking-widest mb-1 truncate">Renta Consolidada</p>
+                                                                                <p className="text-[9px] font-bold text-zinc-500 italic truncate">
                                                                                     {selectedRentals.map(r => (r as any).court?.name || (r as any).space?.name).join(' + ')}
                                                                                 </p>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex flex-col items-end gap-3">
+                                                                        <div className="flex flex-col items-end gap-3 shrink-0">
                                                                             <div className="text-right">
                                                                                 <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Total Saldo</p>
                                                                                 <p className="text-xl font-black text-white italic tracking-tighter">{formatARS(totalConsolidatedDebt)}</p>
@@ -3453,6 +3562,16 @@ const BookingsPage = () => {
                                                                             {renderFractionControl('consolidated-rent', courtFractions['consolidated-rent'] || 1, (n) => {
                                                                                 setCourtFractions({ ...courtFractions, ['consolidated-rent']: n });
                                                                                 setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: [] });
+                                                                                selectedRentals.forEach(r => {
+                                                                                    const isSpace = !!(r as any).spaceId;
+                                                                                    const endpoint = isSpace ? `/api/spacebookings/${r.id}/fractions` : `/api/bookings/${r.id}/fractions`;
+                                                                                    api.put(endpoint, { fractions: n }, config).catch(console.error);
+                                                                                    if (isSpace) {
+                                                                                        setSpaceBookings(prev => prev.map(sb => sb.id === r.id ? { ...sb, rentFractions: n } as any : sb));
+                                                                                    } else {
+                                                                                        setBookings(prev => prev.map(b => b.id === r.id ? { ...b, rentFractions: n } as any : b));
+                                                                                    }
+                                                                                });
                                                                             }, true)}
                                                                         </div>
                                                                     </div>
@@ -3480,6 +3599,35 @@ const BookingsPage = () => {
                                                                             );
                                                                         })}
                                                                     </div>
+                                                                    {relatedBookings.filter(rb => !selectedRelatedBookingIds.includes(rb.id) && getTotalDebt(rb) > 0).length > 0 && (
+                                                                        <div className="space-y-3 mt-4 pt-4 border-t border-zinc-800/50">
+                                                                            <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-4 mb-2">Más Sugerencias para Consolidar</p>
+                                                                            {relatedBookings.map(rb => {
+                                                                                const isIncluded = selectedRelatedBookingIds.includes(rb.id);
+                                                                                if (isIncluded) return null;
+                                                                                const rbDebt = getTotalDebt(rb);
+                                                                                if (rbDebt <= 0) return null;
+                                                                                return (
+                                                                                    <button 
+                                                                                        key={`sug-${rb.id}`}
+                                                                                        onClick={() => setSelectedRelatedBookingIds([...selectedRelatedBookingIds, rb.id])}
+                                                                                        className="w-full p-4 bg-white/5 border border-zinc-800 rounded-3xl flex items-center justify-between hover:border-indigo-500/50 hover:bg-indigo-500/10 transition-all group"
+                                                                                    >
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
+                                                                                                <Plus className="w-4 h-4 text-zinc-400 group-hover:text-indigo-400" />
+                                                                                            </div>
+                                                                                            <div className="text-left">
+                                                                                                <p className="text-[10px] font-black uppercase text-zinc-300">{(rb as any).court?.name || (rb as any).space?.name}</p>
+                                                                                                <p className="text-[8px] font-bold text-zinc-500 italic">{format(parseSafeDate(rb.startTime), 'HH:mm')} hs</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <p className="text-[10px] font-black italic text-zinc-400 group-hover:text-indigo-400">{formatARS(rbDebt)}</p>
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             );
                                                         } else {
@@ -3505,6 +3653,14 @@ const BookingsPage = () => {
                                                                                 {renderFractionControl(booking.id, courtFractions[booking.id] || 1, (n) => {
                                                                                     setCourtFractions({ ...courtFractions, [booking.id]: n });
                                                                                     setSelectedCourtParts({ ...selectedCourtParts, [booking.id]: [] });
+                                                                                    const isSpace = !!(booking as any).spaceId;
+                                                                                    const endpoint = isSpace ? `/api/spacebookings/${booking.id}/fractions` : `/api/bookings/${booking.id}/fractions`;
+                                                                                    api.put(endpoint, { fractions: n }, config).catch(console.error);
+                                                                                    if (isSpace) {
+                                                                                        setSpaceBookings(prev => prev.map(sb => sb.id === booking.id ? { ...sb, rentFractions: n } as any : sb));
+                                                                                    } else {
+                                                                                        setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, rentFractions: n } as any : b));
+                                                                                    }
                                                                                 })}
                                                                             </div>
                                                                         </div>
@@ -3572,6 +3728,10 @@ const BookingsPage = () => {
                                                                         {renderFractionControl(groupKey, consumptionFractions[groupKey] || 1, (n) => {
                                                                             setConsumptionFractions({ ...consumptionFractions, [groupKey]: n });
                                                                             setSelectedConsumptionParts({ ...selectedConsumptionParts, [groupKey]: [] });
+                                                                            const consToUpdate = bookingConsumptions.filter((c: any) => c.productId === g.productId);
+                                                                            consToUpdate.forEach((c: any) => {
+                                                                                api.put(`/api/consumptions/${c.id}/fractions`, { fractions: n }, config).catch(console.error);
+                                                                            });
                                                                         })}
                                                                     </div>
                                                                 </div>
@@ -3641,7 +3801,7 @@ const BookingsPage = () => {
                                         const totalConsumptionRemaining = unpaidConsumptions.reduce((acc, c) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
                                         const relatedBookingsTotalDebt = relatedBookings
                                             .filter(rb => selectedRelatedBookingIds.includes(rb.id))
-                                            .reduce((acc, rb) => acc + getTotalDebt(rb), 0);
+                                            .reduce((acc, rb) => acc + getRentDebt(rb), 0);
 
                                         const totalAccountDebt = totalRentRemaining + totalConsumptionRemaining + relatedBookingsTotalDebt;
 

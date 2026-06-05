@@ -31,6 +31,8 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal DepositPaid { get; set; } = 0;
 
+        public int RentFractions { get; set; } = 1;
+
         public BookingStatus Status { get; set; } = BookingStatus.Pending;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

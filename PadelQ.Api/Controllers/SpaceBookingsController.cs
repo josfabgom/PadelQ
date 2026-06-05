@@ -403,6 +403,18 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Última extensión deshecha con éxito" });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPut("{id}/fractions")]
+        public async Task<IActionResult> UpdateFractions(Guid id, [FromBody] UpdateFractionsRequest request)
+        {
+            var booking = await _context.SpaceBookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.RentFractions = request.Fractions;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Fracciones actualizadas" });
+        }
     }
 
     public class SpaceBookingRequest

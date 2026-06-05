@@ -35,6 +35,8 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal DepositPaid { get; set; } = 0;
 
+        public int Fractions { get; set; } = 1;
+
         public bool IsComboRedeemed { get; set; } = false;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

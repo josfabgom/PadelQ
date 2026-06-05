@@ -492,6 +492,18 @@ namespace PadelQ.Api.Controllers
 
             return Ok(new { isComboRedeemed = consumption.IsComboRedeemed });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPut("{id}/fractions")]
+        public async Task<IActionResult> UpdateFractions(Guid id, [FromBody] UpdateFractionsRequest request)
+        {
+            var consumption = await _context.BookingConsumptions.FindAsync(id);
+            if (consumption == null) return NotFound();
+            
+            consumption.Fractions = request.Fractions;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Fracciones actualizadas" });
+        }
     }
 
     public class AddConsumptionRequest

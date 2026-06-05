@@ -79,6 +79,7 @@ namespace PadelQ.Api.Controllers
                             t.Date,
                             t.Description,
                             t.ProcessedBy,
+                            PaymentGroupId = t.PaymentGroupId,
                             UserName = t.User != null ? t.User.FullName : "Particular"
                         }).ToList()
                     };
@@ -100,6 +101,7 @@ namespace PadelQ.Api.Controllers
                             t.Date,
                             t.Description,
                             t.ProcessedBy,
+                            PaymentGroupId = t.PaymentGroupId,
                             UserName = t.User != null ? t.User.FullName : "Particular"
                         }).ToList()
                     });
@@ -333,6 +335,7 @@ namespace PadelQ.Api.Controllers
                     t.Date,
                     t.Description,
                     t.ProcessedBy,
+                    PaymentGroupId = t.PaymentGroupId,
                     Method = t.PaymentMethod?.Name ?? "No Especificado",
                     UserName = t.User != null ? t.User.FullName : "Particular"
                 }),

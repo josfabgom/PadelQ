@@ -43,6 +43,8 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal DepositPaid { get; set; } = 0;
 
+        public int RentFractions { get; set; } = 1;
+
         public virtual ICollection<BookingConsumption> BookingConsumptions { get; set; } = new List<BookingConsumption>();
     }
 

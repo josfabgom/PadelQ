@@ -1723,17 +1723,9 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
     final transactions = _selectedClosureDetails!['transactions'] as List<dynamic>? ?? [];
 
     final int id = closure['id'];
-    final DateTime openingDate = DateTime.parse(closure['openingDate']).toLocal();
-    final DateTime? closingDate = closure['closingDate'] != null 
-        ? DateTime.parse(closure['closingDate']).toLocal() 
-        : null;
-    final double initialCash = (closure['initialCash'] ?? 0.0).toDouble();
     final double expectedCash = (closure['expectedCash'] ?? 0.0).toDouble();
     final double actualCash = (closure['actualCash'] ?? 0.0).toDouble();
-    final String openedBy = closure['openedBy'] ?? 'Admin';
-    final String? closedBy = closure['closedBy'];
     final bool isOpen = closure['isOpen'] ?? false;
-    final String? notes = closure['notes'];
 
     Map<String, double> declaredTotals = {};
     if (closure['actualTotals'] != null) {
@@ -1750,6 +1742,28 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
       }
     }
 
+    // Calcular montos
+    final Set<String> allMethods = transactions.map((t) => (t['method'] ?? '').toString()).toSet();
+    final List<String> transferMethods = allMethods.where((m) => m.toLowerCase().contains('transferencia')).toList();
+    final List<String> cardMethods = allMethods.where((m) => m.toLowerCase().contains('tarjeta')).toList();
+    final List<String> otherMethods = allMethods.where((m) => !m.toLowerCase().contains('efectivo') && !m.toLowerCase().contains('transferencia') && !m.toLowerCase().contains('tarjeta')).toList();
+
+    double getDeclaredOrExpected(String method) {
+      if (declaredTotals.containsKey(method)) return declaredTotals[method]!;
+      return transactions.where((t) => t['method'] == method).fold(0.0, (sum, t) => sum + (t['amount'] ?? 0.0).toDouble());
+    }
+
+    final double realTransfer = transferMethods.fold(0.0, (sum, m) => sum + getDeclaredOrExpected(m));
+    final double realCard = cardMethods.fold(0.0, (sum, m) => sum + getDeclaredOrExpected(m));
+    final double realOther = otherMethods.fold(0.0, (sum, m) => sum + getDeclaredOrExpected(m));
+
+    final double totalGeneralDeclarado = actualCash + realTransfer + realCard + realOther;
+
+    final String? notes = closure['notes']?.toString();
+    final double initialCash = (closure['initialCash'] ?? 0.0).toDouble();
+    final double totalCashSales = (closure['totalCashSales'] ?? 0.0).toDouble();
+    final double totalCashIn = (closure['totalCashIn'] ?? 0.0).toDouble();
+    final double totalCashOut = (closure['totalCashOut'] ?? 0.0).toDouble();
     final double diff = actualCash - expectedCash;
     final bool hasDiff = !isOpen && diff.abs() > 0.01;
 
@@ -1763,7 +1777,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
       groupedTransactions[method]!.add(tx as Map<String, dynamic>);
     }
 
-    // Convert grouped transactions to a summary list
     final List<Map<String, dynamic>> summaryList = [];
     groupedTransactions.forEach((method, txs) {
       final double total = txs.fold(0.0, (sum, tx) => sum + (tx['amount'] ?? 0.0).toDouble());
@@ -1775,21 +1788,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
         'transactions': txs,
       });
     });
-
-    // Sort summaryList by total descending
     summaryList.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
-
-    final totalAmount = transactions.fold(0.0, (sum, tx) => sum + (tx['amount'] ?? 0.0).toDouble());
-    final manualIncomeTxs = transactions.where((tx) => tx['type'] == 3).toList();
-    final manualExpenseTxs = transactions.where((tx) => tx['type'] == 4).toList();
-
-    String dateStr = DateFormat('EEEE, d MMMM yyyy', 'es_AR').format(openingDate);
-    dateStr = dateStr.split(' ').map((word) {
-      if (word.length > 2) {
-        return word[0].toUpperCase() + word.substring(1);
-      }
-      return word;
-    }).join(' ');
 
     return RefreshIndicator(
       onRefresh: () => _loadClosureDetails(id),
@@ -1810,19 +1809,65 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                 SizedBox(width: 8.w),
                 Text(
                   'VOLVER AL HISTORIAL',
-                  style: TextStyle(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black,
-                    letterSpacing: 1.w,
-                  ),
+                  style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
                 ),
               ],
             ),
           ),
           SizedBox(height: 16.h),
 
-          // Detail Card
+          // THE BLACK BANNER: TOTAL GENERAL DECLARADO
+          Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24.r),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TOTAL GENERAL DECLARADO',
+                  style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade600, letterSpacing: 1.w),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  '\$${NumberFormat('#,##0.00', 'es_AR').format(totalGeneralDeclarado)}',
+                  style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900, color: const Color(0xFF4ade80), fontStyle: FontStyle.italic),
+                ),
+                SizedBox(height: 24.h),
+                Container(height: 1, color: Colors.white.withOpacity(0.1)),
+                SizedBox(height: 24.h),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildBannerStat('EFECTIVO', actualCash)),
+                    Expanded(child: _buildBannerStat('TRANSFERENCIAS', realTransfer)),
+                    Expanded(child: _buildBannerStat('TARJETAS', realCard)),
+                    Expanded(child: _buildBannerStat('OTROS MEDIOS', realOther)),
+                  ],
+                ),
+                if (notes != null && notes.trim().isNotEmpty) ...[
+                  SizedBox(height: 24.h),
+                  Container(height: 1, color: Colors.white.withOpacity(0.1)),
+                  SizedBox(height: 24.h),
+                  Text(
+                    'COMENTARIOS',
+                    style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade600, letterSpacing: 1.w),
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    notes,
+                    style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w700, color: Colors.white.withOpacity(0.8), fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          SizedBox(height: 24.h),
+
+          // 1. CONTROL FISICO DE EFECTIVO
           Container(
             padding: EdgeInsets.all(24.w),
             decoration: BoxDecoration(
@@ -1833,496 +1878,264 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  '1. CONTROL FÍSICO DE EFECTIVO',
+                  style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
+                ),
+                SizedBox(height: 24.h),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Text(
-                        dateStr.toUpperCase(),
-                        style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.5.w),
-                      ),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                      decoration: BoxDecoration(
-                        color: isOpen ? Colors.green.shade50.withOpacity(0.9) : Colors.grey.shade50.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12.r),
-                        border: Border.all(color: isOpen ? Colors.green.shade200 : Colors.grey.shade200),
-                      ),
-                      child: Text(
-                        isOpen ? 'ABIERTA' : 'CERRADA',
-                        style: TextStyle(
-                          color: isOpen ? Colors.green.shade800 : Colors.grey.shade800,
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
+                    Expanded(child: _buildControlStat('FONDO INICIAL', initialCash, Colors.grey.shade50, Colors.black)),
+                    SizedBox(width: 8.w),
+                    Expanded(child: _buildControlStat('(+) VENTAS', totalCashSales, const Color(0xFFF0FDF4), const Color(0xFF166534))),
                   ],
                 ),
-                SizedBox(height: 20.h),
-                _buildClosureDetailRow('Cajero Responsable', openedBy, LucideIcons.user),
-                if (closedBy != null) ...[
-                  SizedBox(height: 12.h),
-                  _buildClosureDetailRow('Cerrado por', closedBy, LucideIcons.userCheck),
-                ],
-                SizedBox(height: 12.h),
-                _buildClosureDetailRow(
-                  'Fecha de Apertura',
-                  DateFormat('dd/MM/yyyy HH:mm').format(openingDate),
-                  LucideIcons.calendar,
+                SizedBox(height: 8.h),
+                Row(
+                  children: [
+                    Expanded(child: _buildControlStat('(+) INGRESOS', totalCashIn, Colors.blue.shade50, Colors.blue.shade800)),
+                    SizedBox(width: 8.w),
+                    Expanded(child: _buildControlStat('(-) EGRESOS', totalCashOut, Colors.red.shade50, Colors.red.shade800)),
+                  ],
                 ),
-                if (closingDate != null) ...[
-                  SizedBox(height: 12.h),
-                  _buildClosureDetailRow(
-                    'Fecha de Cierre',
-                    DateFormat('dd/MM/yyyy HH:mm').format(closingDate),
-                    LucideIcons.calendarCheck,
-                  ),
-                ],
-                SizedBox(height: 12.h),
-                _buildClosureDetailRow('Efectivo Inicial', '\$${NumberFormat('#,##0.00', 'es_AR').format(initialCash)}', LucideIcons.banknote, valueColor: Colors.blue.shade700),
-                ...manualIncomeTxs.map((tx) {
-                  return Padding(
-                    padding: EdgeInsets.only(top: 12.h),
-                    child: _buildClosureDetailRow('Ingreso: ${tx['description'] ?? 'Manual'}', '\$${NumberFormat('#,##0.00', 'es_AR').format(tx['amount'] ?? 0)}', LucideIcons.arrowDownCircle, valueColor: Colors.blue.shade700),
-                  );
-                }).toList(),
-                ...manualExpenseTxs.map((tx) {
-                  return Padding(
-                    padding: EdgeInsets.only(top: 12.h),
-                    child: _buildClosureDetailRow('Egreso: ${tx['description'] ?? 'Manual'}', '\$${NumberFormat('#,##0.00', 'es_AR').format((tx['amount'] ?? 0).abs())}', LucideIcons.arrowUpCircle, valueColor: Colors.red.shade700),
-                  );
-                }).toList(),
-                SizedBox(height: 12.h),
-                _buildClosureDetailRow('Efectivo Esperado (Incl. Inicial)', '\$${NumberFormat('#,##0.00', 'es_AR').format(expectedCash)}', LucideIcons.calculator),
-                if (!isOpen) ...[
-                  SizedBox(height: 12.h),
-                  _buildClosureDetailRow('Efectivo Declarado', '\$${NumberFormat('#,##0.00', 'es_AR').format(actualCash)}', LucideIcons.wallet),
-                ],
-                if (summaryList.isNotEmpty) ...[
-                  SizedBox(height: 12.h),
-                  Container(
-                    margin: EdgeInsets.only(left: 36.w), // Indent to align under the text
-                    padding: EdgeInsets.all(12.w),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(color: Colors.black.withOpacity(0.05)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('DESGLOSE POR MEDIO DE PAGO:', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.w)),
-                        SizedBox(height: 10.h),
-                        ...summaryList.map((s) {
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: 6.h),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 6.w,
-                                      height: 6.w,
-                                      decoration: BoxDecoration(
-                                        color: _getMethodColor(s['method'].toString()),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8.w),
-                                    Text(
-                                      s['method'],
-                                      style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  '\$${NumberFormat('#,##0.00', 'es_AR').format(s['total'])}',
-                                  style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                  ),
-                ],
-                
                 SizedBox(height: 16.h),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50.withOpacity(0.5),
+                    color: Colors.black,
                     borderRadius: BorderRadius.circular(16.r),
-                    border: Border.all(color: Colors.blue.shade200),
                   ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: EdgeInsets.all(8.w),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(LucideIcons.coins, size: 16.sp, color: Colors.blue.shade800),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ESPERADO (SISTEMA)', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade600, letterSpacing: 1.w)),
+                          SizedBox(height: 4.h),
+                          Text('\$${NumberFormat('#,##0.00', 'es_AR').format(expectedCash)}', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.white, fontStyle: FontStyle.italic)),
+                        ],
                       ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        child: Text(
-                          'Monto Total Cobrado',
-                          style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.blue.shade900),
-                        ),
-                      ),
-                      Text(
-                        '\$${NumberFormat('#,##0.00', 'es_AR').format(totalAmount)}',
-                        style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.blue.shade900),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('REAL DECLARADO', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade600, letterSpacing: 1.w)),
+                          SizedBox(height: 4.h),
+                          Text('\$${NumberFormat('#,##0.00', 'es_AR').format(actualCash)}', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.white, fontStyle: FontStyle.italic)),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                
                 if (hasDiff) ...[
                   SizedBox(height: 16.h),
                   Container(
-                    padding: EdgeInsets.all(12.w),
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(vertical: 16.h),
                     decoration: BoxDecoration(
-                      color: diff < 0 ? Colors.red.shade50 : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(color: diff < 0 ? Colors.red.shade100 : Colors.green.shade100),
+                      color: diff < 0 ? const Color(0xFFFEF2F2) : const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(16.r),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Icon(
-                          diff < 0 ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
-                          size: 16.sp,
-                          color: diff < 0 ? Colors.red.shade700 : Colors.green.shade700,
+                        Text(
+                          diff < 0 ? 'DIFERENCIA: FALTANTE' : 'DIFERENCIA: SOBRANTE',
+                          style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: diff < 0 ? const Color(0xFF991B1B) : const Color(0xFF166534), letterSpacing: 1.w),
                         ),
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: Text(
-                            diff < 0
-                                ? "Faltante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff.abs())}"
-                                : "Sobrante en caja: \$${NumberFormat('#,##0.00', 'es_AR').format(diff)}",
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w900,
-                              color: diff < 0 ? Colors.red.shade800 : Colors.green.shade800,
-                            ),
-                          ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          '\$${NumberFormat('#,##0.00', 'es_AR').format(diff.abs())}',
+                          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: diff < 0 ? const Color(0xFF991B1B) : const Color(0xFF166534), fontStyle: FontStyle.italic),
                         ),
                       ],
-                    ),
-                  ),
-                ],
-                if (notes != null && notes.trim().isNotEmpty) ...[
-                  SizedBox(height: 16.h),
-                  Text(
-                    'OBSERVACIONES / NOTAS:',
-                    style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.w),
-                  ),
-                  SizedBox(height: 6.h),
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(12.w),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Text(
-                      notes,
-                      style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade700, height: 1.4),
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          SizedBox(height: 24.h),
-
-          // Sales summary details header
-          Text(
-            'RESUMEN DE INGRESOS',
-            style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
-          ),
-          SizedBox(height: 16.h),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(16.w),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20.r),
-                    border: Border.all(color: Colors.black.withOpacity(0.04)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(LucideIcons.calendar, size: 14.sp, color: Colors.blue.shade500),
-                          SizedBox(width: 8.w),
-                          Text('ALQUILERES', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
-                        ],
-                      ),
-                      SizedBox(height: 12.h),
-                      Text(
-                        '\$${NumberFormat('#,##0', 'es_AR').format(_selectedClosureDetails?['rentalsTotal'] ?? 0)}',
-                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(16.w),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20.r),
-                    border: Border.all(color: Colors.black.withOpacity(0.04)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(LucideIcons.shoppingCart, size: 14.sp, color: Colors.orange.shade500),
-                          SizedBox(width: 8.w),
-                          Text('CONSUMOS', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.black)),
-                        ],
-                      ),
-                      SizedBox(height: 12.h),
-                      Text(
-                        '\$${NumberFormat('#,##0', 'es_AR').format(_selectedClosureDetails?['consumptionsTotal'] ?? 0)}',
-                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 24.h),
-
-          // Payment methods details header
-          Text(
-            'COBROS POR MEDIO DE PAGO',
-            style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
-          ),
-          SizedBox(height: 16.h),
-
-          ...summaryList.map((category) {
-            final String method = category['method'] ?? '';
-            final double total = (category['total'] ?? 0.0).toDouble();
-            final int count = category['count'] ?? 0;
-            final String hexColor = category['color'] ?? '#888888';
-            final Color color = _parseHexColor(hexColor);
-
-            final double declared = declaredTotals[method] ?? total;
-            final double methodDiff = declared - total;
-
-            return Container(
-              margin: EdgeInsets.only(bottom: 12.h),
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20.r),
-                border: Border.all(color: Colors.black.withOpacity(0.04)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 12.w,
-                        height: 32.h,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(6.r),
-                        ),
-                      ),
-                      SizedBox(width: 16.w),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              method.toUpperCase(),
-                              style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                            ),
-                            SizedBox(height: 2.h),
-                            Text(
-                              '$count transacciones',
-                              style: TextStyle(fontSize: 10.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isOpen)
-                        Text(
-                          '\$${NumberFormat('#,##0.00', 'es_AR').format(total)}',
-                          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                        ),
-                    ],
-                  ),
-                  if (!isOpen) ...[
-                    SizedBox(height: 12.h),
-                    const Divider(height: 1, thickness: 0.5),
-                    SizedBox(height: 12.h),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildMethodMetricColumn('Sistema (Esperado)', total),
-                        _buildMethodMetricColumn('Rendido (Real)', declared),
-                        _buildMethodDiffColumn('Diferencia', methodDiff),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }),
 
           SizedBox(height: 24.h),
 
-          // Transactions list header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'TRANSACCIONES DE LA SESIÓN',
-                style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 2.w),
-              ),
-              Text(
-                '${transactions.length} registros',
-                style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.h),
-
-          if (transactions.isEmpty)
-            Container(
-              padding: EdgeInsets.all(32.w),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24.r),
-                border: Border.all(color: Colors.black.withOpacity(0.05)),
-              ),
-              child: Center(
-                child: Text(
-                  'No hay transacciones registradas en esta caja.',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13.sp),
+          // 2. OTROS MEDIOS DE PAGO
+          Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24.r),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '2. OTROS MEDIOS DE PAGO',
+                  style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
                 ),
-              ),
-            )
-          else
-            ...transactions.map((tx) {
-              final double amount = (tx['amount'] ?? 0.0).toDouble();
-              final String description = tx['description'] ?? 'Sin descripción';
-              final String userName = tx['userName'] ?? 'Particular';
-              final String method = tx['method'] ?? 'Efectivo';
-              final String time = tx['date'] != null
-                  ? DateFormat('HH:mm').format(DateTime.parse(tx['date']).toLocal())
-                  : '--:--';
-              final String processedBy = tx['processedBy'] ?? 'Admin';
-              final Color methodColor = _getMethodColor(method);
+                SizedBox(height: 24.h),
+                if (otherMethods.isEmpty && transferMethods.isEmpty && cardMethods.isEmpty)
+                  Text('No hay movimientos en otros medios.', style: TextStyle(fontSize: 10.sp, fontStyle: FontStyle.italic, color: Colors.grey.shade500, fontWeight: FontWeight.bold))
+                else
+                  ...summaryList.where((s) => !s['method'].toString().toLowerCase().contains('efectivo')).map((s) {
+                    final String method = s['method'] ?? '';
+                    final double expected = (s['total'] ?? 0.0).toDouble();
+                    final double actual = getDeclaredOrExpected(method);
+                    final double mDiff = actual - expected;
 
-              final bool isPositive = amount >= 0;
-
-              return Container(
-                margin: EdgeInsets.only(bottom: 12.h),
-                padding: EdgeInsets.all(16.w),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20.r),
-                  border: Border.all(color: Colors.black.withOpacity(0.04)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 8.r,
-                      height: 48.r,
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 12.h),
+                      padding: EdgeInsets.all(16.w),
                       decoration: BoxDecoration(
-                        color: methodColor,
-                        borderRadius: BorderRadius.circular(4.r),
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16.r),
+                        border: Border.all(color: Colors.black.withOpacity(0.05)),
                       ),
-                    ),
-                    SizedBox(width: 16.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                userName,
-                                style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, color: Colors.black),
-                              ),
-                              const Spacer(),
-                              Text(
-                                time,
-                                style: TextStyle(fontSize: 10.sp, color: Colors.grey.shade400, fontWeight: FontWeight.bold),
-                              ),
+                              Text(method.toUpperCase(), style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, color: Colors.black)),
+                              SizedBox(height: 4.h),
+                              Text('ESPERADO: \$${NumberFormat('#,##0.00', 'es_AR').format(expected)}', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 0.5.w)),
                             ],
                           ),
-                          SizedBox(height: 4.h),
-                          Text(
-                            description,
-                            style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade600),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: 4.h),
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4.r),
+                              Text('\$${NumberFormat('#,##0.00', 'es_AR').format(actual)}', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic)),
+                              if (mDiff.abs() > 0.01)
+                                Text(
+                                  'DIF: ${mDiff > 0 ? '+' : ''}\$${NumberFormat('#,##0.00', 'es_AR').format(mDiff)}',
+                                  style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: mDiff > 0 ? Colors.green.shade700 : Colors.red.shade700),
                                 ),
-                                child: Text(
-                                  method.toUpperCase(),
-                                  style: TextStyle(fontSize: 8.sp, color: Colors.grey.shade500, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              SizedBox(width: 8.w),
-                              Text(
-                                'por: $processedBy',
-                                style: TextStyle(fontSize: 8.sp, color: Colors.grey.shade400),
-                              ),
                             ],
                           ),
                         ],
                       ),
-                    ),
-                    SizedBox(width: 16.w),
-                    Text(
-                      '${isPositive ? '+' : ''}\$${NumberFormat('#,##0.00', 'es_AR').format(amount)}',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w900,
-                        color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
-                      ),
-                    ),
-                  ],
+                    );
+                  }).toList(),
+              ],
+            ),
+          ),
+
+          SizedBox(height: 24.h),
+
+          // 3. DESGLOSE DE MOVIMIENTOS
+          Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24.r),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '3. DESGLOSE DE MOVIMIENTOS',
+                  style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
                 ),
-              );
-            }),
+                SizedBox(height: 24.h),
+                if (transactions.isEmpty)
+                  Text('No hay transacciones registradas en esta caja.', style: TextStyle(fontSize: 10.sp, fontStyle: FontStyle.italic, color: Colors.grey.shade500, fontWeight: FontWeight.bold))
+                else
+                  ...transactions.map((tx) {
+                    final double amount = (tx['amount'] ?? 0.0).toDouble();
+                    final String description = tx['description'] ?? 'Sin concepto';
+                    final String userName = tx['userName'] ?? 'Particular';
+                    final String method = tx['method'] ?? 'Efectivo';
+                    final String time = tx['date'] != null ? DateFormat('HH:mm').format(DateTime.parse(tx['date']).toLocal()) : '--:--';
+                    final bool isEgreso = amount < 0;
+
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 12.h),
+                      padding: EdgeInsets.all(16.w),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16.r),
+                        border: Border.all(color: Colors.black.withOpacity(0.05)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                      decoration: BoxDecoration(
+                                        color: isEgreso ? Colors.red.shade50 : Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(4.r),
+                                      ),
+                                      child: Text(
+                                        isEgreso ? 'EGRESO' : 'INGRESO',
+                                        style: TextStyle(fontSize: 7.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade700 : Colors.green.shade700, letterSpacing: 0.5.w),
+                                      ),
+                                    ),
+                                    SizedBox(width: 6.w),
+                                    Text(method.toUpperCase(), style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5.w)),
+                                  ],
+                                ),
+                                SizedBox(height: 6.h),
+                                Text(description, style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w700, color: Colors.grey.shade700), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                SizedBox(height: 4.h),
+                                Text('$time hs • $userName', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 0.5.w)),
+                              ],
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                          Text(
+                            '\$${NumberFormat('#,##0.00', 'es_AR').format(amount)}',
+                            style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade600 : Colors.black, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+              ],
+            ),
+          ),
+          
+          SizedBox(height: 32.h),
         ],
       ),
     );
   }
 
+  Widget _buildBannerStat(String label, double value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 7.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade500, letterSpacing: 0.5.w)),
+        SizedBox(height: 4.h),
+        Text('\$${NumberFormat('#,##0.00', 'es_AR').format(value)}', style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.white, fontStyle: FontStyle.italic)),
+      ],
+    );
+  }
+
+  Widget _buildControlStat(String label, double value, Color bgColor, Color textColor) {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: textColor.withOpacity(0.5), letterSpacing: 0.5.w)),
+          SizedBox(height: 4.h),
+          Text('\$${NumberFormat('#,##0.00', 'es_AR').format(value)}', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, color: textColor, fontStyle: FontStyle.italic)),
+        ],
+      ),
+    );
+  }
   Widget _buildMethodMetricColumn(String label, double value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

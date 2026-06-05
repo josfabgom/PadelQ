@@ -238,6 +238,23 @@ namespace PadelQ.Api.Controllers
             if (!success) return BadRequest(message);
             return Ok(new { Message = message });
         }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpPut("{id}/fractions")]
+        public async Task<IActionResult> UpdateFractions(Guid id, [FromBody] UpdateFractionsRequest request)
+        {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null) return NotFound();
+            
+            booking.RentFractions = request.Fractions;
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Fracciones actualizadas" });
+        }
+    }
+
+    public class UpdateFractionsRequest
+    {
+        public int Fractions { get; set; }
     }
 
     public class CreateBookingRequest
