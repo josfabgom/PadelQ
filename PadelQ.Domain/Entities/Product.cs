@@ -28,6 +28,15 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal CostPrice { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal MarginPercentage { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal IvaPercentage { get; set; } = 21;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal InternalTaxAmount { get; set; } = 0;
+
         public int Stock { get; set; }
         public int MinimumStock { get; set; }
 

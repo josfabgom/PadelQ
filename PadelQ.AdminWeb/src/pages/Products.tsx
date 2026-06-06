@@ -19,6 +19,9 @@ interface Product {
   description?: string;
   finalPrice: number;
   costPrice: number;
+  marginPercentage: number;
+  ivaPercentage: number;
+  internalTaxAmount: number;
   stock: number;
   imageUrl?: string;
   category: string;
@@ -33,6 +36,12 @@ const formatARS = (amount: number) => {
         currency: 'ARS',
         minimumFractionDigits: 0
     }).format(amount);
+};
+
+const calculateSuggestedPrice = (cost: number, margin: number, iva: number, tax: number) => {
+    const costWithIva = cost * (1 + iva / 100);
+    const baseForMargin = costWithIva + tax;
+    return Math.round((baseForMargin * (1 + margin / 100)) * 100) / 100;
 };
 
 const ProductsPage = () => {
@@ -92,6 +101,9 @@ const ProductsPage = () => {
     description: '',
     finalPrice: 0,
     costPrice: 0,
+    marginPercentage: 0,
+    ivaPercentage: 21,
+    internalTaxAmount: 0,
     stock: 0,
     imageUrl: '',
     category: 'Bebidas',
@@ -156,6 +168,9 @@ const ProductsPage = () => {
         description: '', 
         finalPrice: 0, 
         costPrice: 0,
+        marginPercentage: 0,
+        ivaPercentage: 21,
+        internalTaxAmount: 0,
         stock: 0,
         imageUrl: '',
         category: 'Bebidas', 
@@ -391,6 +406,45 @@ const ProductsPage = () => {
       doc.save(`Sugerencia_Compra_${format(new Date(), 'yyyyMMdd')}.pdf`);
     } catch (error) {
       console.error("Error al generar PDF de stock:", error);
+      alert("Hubo un error al generar el PDF. Revisa la consola.");
+    }
+  };
+
+  const generateKardexPDF = () => {
+    if (!historyProduct || stockMovements.length === 0) return;
+    try {
+      const doc = new jsPDF();
+      doc.text(`Ficha de Stock (Kardex) - ${historyProduct.name}`, 14, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generado: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 28);
+      
+      const tableData = stockMovements.map(mov => {
+        const typeLabel = mov.type === 0 ? 'COMPRA' : mov.type === 1 ? 'AJUSTE' : 'VENTA';
+        const date = format(new Date(mov.createdAt), "dd/MM/yyyy HH:mm");
+        const inQ = mov.inQuantity > 0 ? `+${mov.inQuantity}` : '-';
+        const outQ = mov.outQuantity > 0 ? `-${mov.outQuantity}` : '-';
+        const concept = `${typeLabel}: ${mov.note || 'Sin obs'}`;
+        return [date, concept, inQ, outQ, mov.balance.toString()];
+      });
+
+      autoTable(doc, {
+        startY: 35,
+        head: [['Fecha', 'Concepto', 'Entrada', 'Salida', 'Saldo']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 4 },
+        columnStyles: {
+          2: { halign: 'center', textColor: [22, 163, 74] }, // Emerald
+          3: { halign: 'center', textColor: [225, 29, 72] }, // Rose
+          4: { halign: 'center', fontStyle: 'bold' }
+        }
+      });
+      
+      doc.save(`Kardex_${historyProduct.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    } catch (error) {
+      console.error("Error al generar PDF de Kardex:", error);
       alert("Hubo un error al generar el PDF. Revisa la consola.");
     }
   };
@@ -676,131 +730,132 @@ const ProductsPage = () => {
       {/* Main Product Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-50 p-6 overflow-y-auto">
-          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl my-auto animate-in fade-in zoom-in duration-300 border border-black/5">
-            <div className="p-10 bg-gradient-to-br from-zinc-800 to-black text-white relative overflow-hidden">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl my-auto animate-in fade-in zoom-in duration-300 border border-black/5">
+            <div className="p-8 bg-gradient-to-br from-zinc-800 to-black text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
-              <button onClick={() => setIsModalOpen(false)} className="absolute right-8 top-8 p-3 hover:bg-white/10 rounded-2xl transition-colors z-10">
+              <button onClick={() => setIsModalOpen(false)} className="absolute right-6 top-6 p-3 hover:bg-white/10 rounded-2xl transition-colors z-10">
                 <X className="w-5 h-5" />
               </button>
-              <div className="relative z-10">
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 border border-white/10">
+              <div className="relative z-10 flex items-center gap-6">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
                   <Package className="w-6 h-6 text-white" />
                 </div>
-                <h2 className="text-3xl font-black italic uppercase tracking-tight leading-none mb-2">{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}</h2>
-                <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">FICHA TÉCNICA Y PRECIOS</p>
+                <div>
+                  <h2 className="text-2xl font-black italic uppercase tracking-tight leading-none mb-1">{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}</h2>
+                  <p className="text-white/40 text-[9px] font-black uppercase tracking-[0.3em]">FICHA TÉCNICA Y PRECIOS</p>
+                </div>
               </div>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-10">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Basic Info */}
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Información Principal</label>
-                    <input 
-                      type="text" 
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm"
-                      placeholder="Nombre del Producto (ej: Coca Cola)"
-                      required
-                    />
-                    <textarea 
-                      value={formData.description}
-                      onChange={(e) => setFormData({...formData, description: e.target.value})}
-                      className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm min-h-[100px] resize-none"
-                      placeholder="Descripción detallada..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Imagen del Producto (URL)</label>
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <input 
-                          type="text" 
-                          value={formData.imageUrl}
-                          onChange={(e) => setFormData({...formData, imageUrl: e.target.value})}
-                          className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm"
-                          placeholder="https://link-a-la-imagen.jpg"
-                        />
-                      </div>
-                      <div className="w-14 h-14 rounded-2xl bg-zinc-50 border-2 border-dashed border-zinc-200 flex items-center justify-center overflow-hidden shrink-0">
-                        {formData.imageUrl ? (
-                          <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                        ) : (
-                          <Camera className="w-5 h-5 text-zinc-300" />
-                        )}
-                      </div>
-                    </div>
+            <form onSubmit={handleSubmit} className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-2 col-span-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nombre del Producto</label>
+                        <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm" placeholder="Ej: Coca Cola" required />
+                     </div>
+                     <div className="space-y-2 col-span-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Descripción</label>
+                        <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm min-h-[60px] resize-none" placeholder="Descripción detallada..." />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Cód. Interno</label>
+                        <input type="text" value={formData.internalCode} onChange={(e) => setFormData({...formData, internalCode: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-bold text-sm" placeholder="BEB-01" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Barras</label>
+                        <input type="text" value={formData.barcode} onChange={(e) => setFormData({...formData, barcode: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-bold text-sm" placeholder="779..." />
+                     </div>
+                     <div className="space-y-2 col-span-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categoría</label>
+                        <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-black text-sm italic appearance-none">
+                            <option value="Bebidas">Bebidas</option>
+                            <option value="Comida">Comida</option>
+                            <option value="Snacks">Snacks</option>
+                            <option value="Indumentaria">Indumentaria</option>
+                            <option value="Pelotas/Padel">Pelotas/Padel</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                     </div>
+                     <div className="space-y-2 col-span-2">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Imagen (URL)</label>
+                        <div className="flex gap-4">
+                            <input type="text" value={formData.imageUrl} onChange={(e) => setFormData({...formData, imageUrl: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl focus:ring-4 focus:ring-black/5 outline-none font-bold text-sm" placeholder="https://..." />
+                            <div className="w-11 h-11 rounded-xl bg-zinc-50 border-2 border-dashed border-zinc-200 flex items-center justify-center overflow-hidden shrink-0">
+                                {formData.imageUrl ? <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" /> : <Camera className="w-4 h-4 text-zinc-300" />}
+                            </div>
+                        </div>
+                     </div>
                   </div>
                 </div>
 
-                {/* Logistics & Pricing */}
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Cód. Interno</label>
-                      <input 
-                        type="text" 
-                        value={formData.internalCode}
-                        onChange={(e) => setFormData({...formData, internalCode: e.target.value})}
-                        className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-bold text-sm"
-                        placeholder="BEB-01"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Barras</label>
-                      <input 
-                        type="text" 
-                        value={formData.barcode}
-                        onChange={(e) => setFormData({...formData, barcode: e.target.value})}
-                        className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-bold text-sm"
-                        placeholder="779..."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categoría</label>
-                    <select 
-                      value={formData.category}
-                      onChange={(e) => setFormData({...formData, category: e.target.value})}
-                      className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-black text-sm italic appearance-none"
-                    >
-                      <option value="Bebidas">Bebidas</option>
-                      <option value="Comida">Comida</option>
-                      <option value="Snacks">Snacks</option>
-                      <option value="Indumentaria">Indumentaria</option>
-                      <option value="Pelotas/Padel">Pelotas/Padel</option>
-                      <option value="Otros">Otros</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Costo</label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 w-3 h-3" />
-                        <input 
-                          type="number" 
-                          value={formData.costPrice}
-                          onChange={(e) => setFormData({...formData, costPrice: Number(e.target.value)})}
-                          className="w-full pl-10 pr-4 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-black text-base italic"
-                          step="0.01"
-                          required
-                        />
+                {/* Right Column: Pricing & Logistics */}
+                <div className="space-y-4">
+                  <div className="p-5 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-3">
+                    {isAdmin && (
+                      <>
+                        <div className="flex items-center justify-between gap-4">
+                          <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2"><DollarSign className="w-3 h-3" /> Estructura de Precio</label>
+                          <button type="button" onClick={() => {
+                              const suggested = calculateSuggestedPrice(formData.costPrice || 0, formData.marginPercentage || 0, formData.ivaPercentage || 0, formData.internalTaxAmount || 0);
+                              setFormData({...formData, finalPrice: suggested});
+                          }} className="text-[9px] font-black text-emerald-600 uppercase tracking-widest border-b border-emerald-600 hover:text-emerald-500 transition-colors whitespace-nowrap">
+                            Calcular Sugerido
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-bold text-zinc-500 uppercase">Costo ($)</label>
+                            <input type="number" value={formData.costPrice === 0 ? '' : formData.costPrice} onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const finalP = calculateSuggestedPrice(val, formData.marginPercentage || 0, formData.ivaPercentage || 0, formData.internalTaxAmount || 0);
+                                setFormData({...formData, costPrice: val, finalPrice: finalP});
+                            }} className="w-full px-2 py-2 bg-white border border-zinc-200 rounded-lg outline-none font-black text-xs" step="0.01" required />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-bold text-zinc-500 uppercase">IVA (%)</label>
+                            <select value={formData.ivaPercentage || 0} onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const finalP = calculateSuggestedPrice(formData.costPrice || 0, formData.marginPercentage || 0, val, formData.internalTaxAmount || 0);
+                                setFormData({...formData, ivaPercentage: val, finalPrice: finalP});
+                            }} className="w-full px-1 py-2 bg-white border border-zinc-200 rounded-lg outline-none font-black text-xs appearance-none">
+                                <option value={0}>0%</option>
+                                <option value={10.5}>10.5</option>
+                                <option value={21}>21%</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-bold text-zinc-500 uppercase">Imp. Int</label>
+                            <input type="number" value={formData.internalTaxAmount === 0 ? '' : formData.internalTaxAmount} onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const finalP = calculateSuggestedPrice(formData.costPrice || 0, formData.marginPercentage || 0, formData.ivaPercentage || 0, val);
+                                setFormData({...formData, internalTaxAmount: val, finalPrice: finalP});
+                            }} className="w-full px-2 py-2 bg-white border border-zinc-200 rounded-lg outline-none font-black text-xs" step="0.01" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-bold text-zinc-500 uppercase">Margen (%)</label>
+                            <input type="number" value={formData.marginPercentage === 0 ? '' : formData.marginPercentage} onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const finalP = calculateSuggestedPrice(formData.costPrice || 0, val, formData.ivaPercentage || 0, formData.internalTaxAmount || 0);
+                                setFormData({...formData, marginPercentage: val, finalPrice: finalP});
+                            }} className="w-full px-2 py-2 bg-white border border-zinc-200 rounded-lg outline-none font-black text-xs" step="0.01" />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <div className={`pt-3 flex flex-row items-center justify-between gap-4 ${isAdmin ? 'mt-3 border-t border-zinc-200' : ''}`}>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Precio Final</p>
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Precio Venta</label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 w-4 h-4" />
+                      <div className="relative w-1/2">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 w-3 h-3" />
                         <input 
                           type="number" 
-                          value={formData.finalPrice}
+                          value={formData.finalPrice === 0 ? '' : formData.finalPrice}
                           onChange={(e) => setFormData({...formData, finalPrice: Number(e.target.value)})}
-                          className="w-full pl-10 pr-4 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl outline-none font-black text-xl italic text-emerald-600"
+                          className="w-full pl-8 pr-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg outline-none font-black text-sm italic text-emerald-600"
                           step="0.01"
                           required
                         />
@@ -811,71 +866,34 @@ const ProductsPage = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Stock Actual</label>
-                      <input 
-                        type="number" 
-                        value={formData.stock}
-                        onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})}
-                        className="w-full px-6 py-4 bg-zinc-50 border border-zinc-100 rounded-2xl outline-none font-bold text-sm"
-                        placeholder="0"
-                        disabled={!!editingProduct}
-                      />
+                      <input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-bold text-sm" placeholder="0" disabled={!!editingProduct} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Stock Mínimo</label>
-                      <input 
-                        type="number" 
-                        value={formData.minimumStock}
-                        onChange={(e) => setFormData({...formData, minimumStock: Number(e.target.value)})}
-                        className="w-full px-6 py-4 bg-rose-50/30 border border-rose-100 rounded-2xl outline-none font-bold text-sm text-rose-600"
-                        placeholder="5"
-                      />
+                      <input type="number" value={formData.minimumStock} onChange={(e) => setFormData({...formData, minimumStock: Number(e.target.value)})} className="w-full px-5 py-3 bg-rose-50/30 border border-rose-100 rounded-xl outline-none font-bold text-sm text-rose-600" placeholder="5" />
                     </div>
                   </div>
 
-                  <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${formData.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Estado Activo</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Activo</span>
+                      <button type="button" onClick={() => setFormData({...formData, isActive: !formData.isActive})} className={`w-10 h-5 rounded-full relative transition-all ${formData.isActive ? 'bg-emerald-500' : 'bg-zinc-300'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.isActive ? 'right-0.5' : 'left-0.5'}`}></div>
+                      </button>
                     </div>
-                    <button 
-                      type="button"
-                      onClick={() => setFormData({...formData, isActive: !formData.isActive})}
-                      className={`w-12 h-6 rounded-full relative transition-all ${formData.isActive ? 'bg-emerald-500' : 'bg-zinc-300'}`}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isActive ? 'right-1' : 'left-1'}`}></div>
-                    </button>
-                  </div>
-
-                  <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${formData.isDoubleUnitCombo ? 'bg-emerald-500' : 'bg-zinc-400'}`}></div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Combo x 2 Unidades (Ticket de Retiro)</span>
+                    <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Combo x2</span>
+                      <button type="button" onClick={() => setFormData({...formData, isDoubleUnitCombo: !formData.isDoubleUnitCombo})} className={`w-10 h-5 rounded-full relative transition-all ${formData.isDoubleUnitCombo ? 'bg-emerald-500' : 'bg-zinc-300'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.isDoubleUnitCombo ? 'right-0.5' : 'left-0.5'}`}></div>
+                      </button>
                     </div>
-                    <button 
-                      type="button"
-                      onClick={() => setFormData({...formData, isDoubleUnitCombo: !formData.isDoubleUnitCombo})}
-                      className={`w-12 h-6 rounded-full relative transition-all ${formData.isDoubleUnitCombo ? 'bg-emerald-500' : 'bg-zinc-300'}`}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isDoubleUnitCombo ? 'right-1' : 'left-1'}`}></div>
-                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="flex gap-4 pt-10">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-5 bg-zinc-100 text-zinc-400 rounded-[24px] font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-[2] py-5 bg-black text-white rounded-[24px] font-black uppercase tracking-[0.2em] text-[10px] shadow-2xl shadow-black/30 hover:bg-zinc-800 transition-all active:scale-95"
-                >
-                  {editingProduct ? 'Actualizar Ficha Técnica' : 'Registrar Producto'}
-                </button>
+              <div className="flex gap-4 pt-6">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-400 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-200 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-[2] py-4 bg-black text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all active:scale-95">{editingProduct ? 'Actualizar Producto' : 'Registrar Producto'}</button>
               </div>
             </form>
           </div>
@@ -1242,14 +1260,26 @@ const ProductsPage = () => {
               <button onClick={() => setIsHistoryModalOpen(false)} className="absolute right-8 top-8 p-3 hover:bg-white/10 rounded-2xl transition-colors">
                 <X className="w-6 h-6" />
               </button>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl">
-                  <History className="w-8 h-8" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl">
+                    <History className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tight">Historial de Stock</h2>
+                    <p className="text-white/60 font-bold uppercase tracking-widest text-xs mt-1">{historyProduct.name}</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-3xl font-black italic uppercase tracking-tight">Historial de Stock</h2>
-                  <p className="text-white/60 font-bold uppercase tracking-widest text-xs mt-1">{historyProduct.name}</p>
-                </div>
+                {stockMovements.length > 0 && (
+                  <div className="mr-16">
+                    <button 
+                      onClick={generateKardexPDF}
+                      className="py-3 px-6 bg-white text-black rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-colors shadow-lg flex items-center gap-2"
+                    >
+                      Descargar PDF
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -1265,28 +1295,52 @@ const ProductsPage = () => {
                   <p className="text-zinc-400 font-bold uppercase tracking-widest text-xs">No hay movimientos registrados</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {stockMovements.map((mov) => {
-                    const typeLabel = mov.type === 0 ? 'COMPRA' : mov.type === 1 ? 'AJUSTE' : 'VENTA';
-                    const typeColor = mov.type === 0 ? 'bg-blue-50 text-blue-600' : mov.type === 1 ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-purple-600';
-                    const isPositive = mov.quantity > 0;
-                    return (
-                      <div key={mov.id} className="flex items-center justify-between p-6 bg-zinc-50 rounded-3xl border border-zinc-100 hover:border-zinc-300 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-6">
-                          <div className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest ${typeColor}`}>
-                            {typeLabel}
-                          </div>
-                          <div>
-                            <p className="text-sm font-black italic uppercase text-black">{mov.note || 'Sin observación'}</p>
-                            <p className="text-xs font-bold text-zinc-400 mt-1">{format(new Date(mov.createdAt), "dd/MM/yyyy HH:mm'hs'")}</p>
-                          </div>
-                        </div>
-                        <div className={`text-2xl font-black italic tracking-tighter ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {isPositive ? '+' : ''}{mov.quantity}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="overflow-x-auto rounded-3xl border border-zinc-100 bg-white">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-zinc-50">
+                      <tr>
+                        <th className="p-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5 whitespace-nowrap">Fecha</th>
+                        <th className="p-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5">Concepto</th>
+                        <th className="p-5 text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-black/5 text-center">Entrada</th>
+                        <th className="p-5 text-[10px] font-black text-rose-500 uppercase tracking-widest border-b border-black/5 text-center">Salida</th>
+                        <th className="p-5 text-[10px] font-black text-black uppercase tracking-widest border-b border-black/5 text-center">Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5">
+                      {stockMovements.map((mov) => {
+                        const typeLabel = mov.type === 0 ? 'COMPRA' : mov.type === 1 ? 'AJUSTE' : 'VENTA';
+                        const typeColor = mov.type === 0 ? 'bg-blue-50 text-blue-600' : mov.type === 1 ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-purple-600';
+                        return (
+                          <tr key={mov.id} className="hover:bg-zinc-50/50 transition-colors">
+                            <td className="p-5 align-middle whitespace-nowrap">
+                              <p className="text-xs font-bold text-zinc-500">{format(new Date(mov.createdAt), "dd/MM/yyyy HH:mm'hs'")}</p>
+                            </td>
+                            <td className="p-5 align-middle">
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-1 rounded-lg font-black uppercase text-[9px] tracking-widest shrink-0 ${typeColor}`}>
+                                  {typeLabel}
+                                </span>
+                                <span className="text-xs font-black italic uppercase text-zinc-700 truncate max-w-[200px]" title={mov.note || 'Sin observación'}>{mov.note || 'Sin observación'}</span>
+                              </div>
+                            </td>
+                            <td className="p-5 align-middle text-center">
+                              {mov.inQuantity > 0 ? (
+                                <span className="text-sm font-black italic text-emerald-500">+{mov.inQuantity}</span>
+                              ) : <span className="text-zinc-300">-</span>}
+                            </td>
+                            <td className="p-5 align-middle text-center">
+                              {mov.outQuantity > 0 ? (
+                                <span className="text-sm font-black italic text-rose-500">-{mov.outQuantity}</span>
+                              ) : <span className="text-zinc-300">-</span>}
+                            </td>
+                            <td className="p-5 align-middle text-center bg-zinc-50/50 border-l border-black/5">
+                              <span className="text-base font-black italic text-black">{mov.balance}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

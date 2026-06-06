@@ -73,15 +73,51 @@ namespace PadelQ.Api.Controllers
             return Ok(product);
         }
 
-        [HttpGet("{id}/movements")]
-        public async Task<ActionResult<IEnumerable<ProductStockMovement>>> GetStockMovements(int id)
+        public class KardexMovementDto
         {
+            public int Id { get; set; }
+            public MovementType Type { get; set; }
+            public int Quantity { get; set; }
+            public int InQuantity { get; set; }
+            public int OutQuantity { get; set; }
+            public int Balance { get; set; }
+            public string? Note { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        [HttpGet("{id}/movements")]
+        public async Task<ActionResult<IEnumerable<KardexMovementDto>>> GetStockMovements(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null) return NotFound("Producto no encontrado");
+
             var movements = await _context.ProductStockMovements
                 .Where(m => m.ProductId == id)
                 .OrderByDescending(m => m.CreatedAt)
                 .ToListAsync();
 
-            return Ok(movements);
+            var kardexList = new List<KardexMovementDto>();
+            int currentBalance = product.Stock;
+
+            foreach (var m in movements)
+            {
+                kardexList.Add(new KardexMovementDto
+                {
+                    Id = m.Id,
+                    Type = m.Type,
+                    Quantity = m.Quantity,
+                    InQuantity = m.Quantity > 0 ? m.Quantity : 0,
+                    OutQuantity = m.Quantity < 0 ? -m.Quantity : 0,
+                    Balance = currentBalance,
+                    Note = m.Note,
+                    CreatedAt = m.CreatedAt
+                });
+
+                // Calculate balance BEFORE this movement for the next iteration (older movements)
+                currentBalance -= m.Quantity;
+            }
+
+            return Ok(kardexList);
         }
 
         [HttpDelete("{id}")]

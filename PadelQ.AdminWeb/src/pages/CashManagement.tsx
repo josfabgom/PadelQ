@@ -1292,13 +1292,53 @@ const CashManagement = () => {
                                         <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">(+) Ventas</p>
                                         <p className="text-lg font-black italic text-emerald-700">{formatARS(closedClosureDetails.closure.totalCashSales || 0)}</p>
                                     </div>
-                                    <div className="p-4 bg-blue-50 rounded-2xl">
-                                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">(+) Ingresos</p>
+                                    <div className="p-4 bg-blue-50 rounded-2xl relative group cursor-help">
+                                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1">
+                                            (+) Ingresos <Info className="w-3 h-3" />
+                                        </p>
                                         <p className="text-lg font-black italic text-blue-700">{formatARS(closedClosureDetails.closure.totalCashIn || 0)}</p>
+                                        
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-[280px] p-4 bg-zinc-900 text-white text-[9px] font-bold rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-2xl border border-zinc-800">
+                                            <p className="text-zinc-500 mb-3 font-black tracking-[0.2em] uppercase">Detalle de Ingresos</p>
+                                            <div className="space-y-2 max-h-40 overflow-y-auto">
+                                                {closedClosureDetails.transactions.filter((t: any) => t.type === 2).length > 0 ? (
+                                                    closedClosureDetails.transactions.filter((t: any) => t.type === 2).map((t: any) => (
+                                                        <div key={t.id} className="flex flex-col gap-1 border-b border-white/10 pb-2 last:border-0 last:pb-0">
+                                                            <div className="flex justify-between items-center gap-2">
+                                                                <span className="truncate flex-1 text-zinc-300" title={t.description || 'Sin concepto'}>{t.description || 'Sin concepto'}</span>
+                                                                <span className="flex-shrink-0 text-blue-400 font-black">{formatARS(t.amount)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-zinc-500 italic">No hay ingresos manuales registrados.</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="p-4 bg-rose-50 rounded-2xl">
-                                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest">(-) Egresos</p>
+                                    <div className="p-4 bg-rose-50 rounded-2xl relative group cursor-help">
+                                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1">
+                                            (-) Egresos <Info className="w-3 h-3" />
+                                        </p>
                                         <p className="text-lg font-black italic text-rose-700">{formatARS(closedClosureDetails.closure.totalCashOut || 0)}</p>
+
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-[280px] p-4 bg-zinc-900 text-white text-[9px] font-bold rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-2xl border border-zinc-800">
+                                            <p className="text-zinc-500 mb-3 font-black tracking-[0.2em] uppercase">Detalle de Egresos</p>
+                                            <div className="space-y-2 max-h-40 overflow-y-auto">
+                                                {closedClosureDetails.transactions.filter((t: any) => t.type === 3).length > 0 ? (
+                                                    closedClosureDetails.transactions.filter((t: any) => t.type === 3).map((t: any) => (
+                                                        <div key={t.id} className="flex flex-col gap-1 border-b border-white/10 pb-2 last:border-0 last:pb-0">
+                                                            <div className="flex justify-between items-center gap-2">
+                                                                <span className="truncate flex-1 text-zinc-300" title={t.description || 'Sin concepto'}>{t.description || 'Sin concepto'}</span>
+                                                                <span className="flex-shrink-0 text-rose-400 font-black">{formatARS(Math.abs(t.amount))}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-zinc-500 italic">No hay egresos manuales registrados.</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex justify-between items-center p-4 bg-black text-white rounded-2xl">

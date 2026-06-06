@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import { 
     ShoppingCart, ArrowLeft, Plus, Trash2, Save, Calendar, Tag, FileText, 
-    User, Search, X, Package, DollarSign, ChevronRight, AlertCircle, RefreshCcw
+    User, Search, X, Package, DollarSign, ChevronRight, AlertCircle, RefreshCcw, History, Eye
 } from 'lucide-react';
 import Header from '../components/Header';
 import { format } from 'date-fns';
@@ -47,6 +47,12 @@ const PurchaseReceptionPage = () => {
     const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
     const [newSupplierName, setNewSupplierName] = useState('');
 
+    // History Modal
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [pastPurchases, setPastPurchases] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [selectedPurchaseDetails, setSelectedPurchaseDetails] = useState<any>(null);
+
     const config = getAuthConfig();
 
     useEffect(() => {
@@ -66,6 +72,18 @@ const PurchaseReceptionPage = () => {
             console.error("Error loading data", err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchHistory = async () => {
+        setLoadingHistory(true);
+        try {
+            const res = await api.get('/api/supplier-purchases', config);
+            setPastPurchases(res.data);
+        } catch (err) {
+            console.error("Error loading history", err);
+        } finally {
+            setLoadingHistory(false);
         }
     };
 
@@ -182,14 +200,26 @@ const PurchaseReceptionPage = () => {
                     </div>
                 </div>
 
-                <button 
-                    onClick={handleSubmit}
-                    disabled={saving || items.length === 0}
-                    className="flex items-center gap-3 px-10 py-5 bg-black text-white rounded-[24px] text-xs font-black uppercase tracking-widest shadow-2xl shadow-black/30 hover:bg-zinc-800 transition-all active:scale-95 disabled:opacity-50"
-                >
-                    {saving ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                    Confirmar e Ingresar Stock
-                </button>
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => {
+                            fetchHistory();
+                            setIsHistoryModalOpen(true);
+                        }}
+                        className="flex items-center gap-3 px-6 py-5 bg-white text-black border border-black/10 rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-zinc-50 transition-all active:scale-95 shadow-sm"
+                    >
+                        <History className="w-5 h-5" />
+                        Historial
+                    </button>
+                    <button 
+                        onClick={handleSubmit}
+                        disabled={saving || items.length === 0}
+                        className="flex items-center gap-3 px-10 py-5 bg-black text-white rounded-[24px] text-xs font-black uppercase tracking-widest shadow-2xl shadow-black/30 hover:bg-zinc-800 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        {saving ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                        Confirmar e Ingresar Stock
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -397,6 +427,122 @@ const PurchaseReceptionPage = () => {
                             >
                                 Guardar Proveedor
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* History Modal */}
+            {isHistoryModalOpen && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[70] p-6">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5 flex flex-col max-h-[90vh]">
+                        <div className="p-8 bg-zinc-900 text-white relative flex-shrink-0">
+                            <button onClick={() => { setIsHistoryModalOpen(false); setSelectedPurchaseDetails(null); }} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
+                                    <History className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black italic uppercase tracking-tight">Historial de Compras</h2>
+                                    <p className="text-white/40 text-[9px] font-bold uppercase tracking-[0.2em] mt-1">Registro de stock ingresado</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-8 overflow-y-auto flex-1 bg-zinc-50/50">
+                            {selectedPurchaseDetails ? (
+                                <div className="space-y-6">
+                                    <button 
+                                        onClick={() => setSelectedPurchaseDetails(null)}
+                                        className="text-[10px] font-black uppercase text-zinc-500 hover:text-black flex items-center gap-2"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" /> Volver al listado
+                                    </button>
+                                    <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm flex justify-between items-start">
+                                        <div>
+                                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Proveedor</p>
+                                            <p className="text-xl font-black uppercase">{selectedPurchaseDetails.supplier?.name || 'Desconocido'}</p>
+                                            <p className="text-xs font-bold text-zinc-500 mt-1">Factura: {selectedPurchaseDetails.invoiceNumber || 'N/A'}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Total</p>
+                                            <p className="text-2xl font-black italic text-emerald-600">{formatARS(selectedPurchaseDetails.totalAmount)}</p>
+                                            <p className="text-xs font-bold text-zinc-500 mt-1">{new Date(selectedPurchaseDetails.purchaseDate).toLocaleDateString()}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden">
+                                        <div className="grid grid-cols-12 p-4 text-[9px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-50 border-b border-zinc-100">
+                                            <div className="col-span-6">Producto</div>
+                                            <div className="col-span-2 text-center">Cantidad</div>
+                                            <div className="col-span-2 text-right">Costo Unit.</div>
+                                            <div className="col-span-2 text-right">Subtotal</div>
+                                        </div>
+                                        <div className="divide-y divide-zinc-100">
+                                            {selectedPurchaseDetails.items?.map((item: any) => (
+                                                <div key={item.id} className="grid grid-cols-12 p-4 items-center hover:bg-zinc-50 transition-colors">
+                                                    <div className="col-span-6 font-bold text-sm">{item.product?.name || 'Producto Eliminado'}</div>
+                                                    <div className="col-span-2 text-center font-black text-zinc-600">{item.quantity}</div>
+                                                    <div className="col-span-2 text-right font-bold text-zinc-500">{formatARS(item.unitCost)}</div>
+                                                    <div className="col-span-2 text-right font-black italic">{formatARS(item.lineTotal)}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {selectedPurchaseDetails.notes && (
+                                        <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm">
+                                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Observaciones</p>
+                                            <p className="text-sm font-bold text-zinc-600 italic">"{selectedPurchaseDetails.notes}"</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {loadingHistory ? (
+                                        <div className="flex justify-center py-20">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+                                        </div>
+                                    ) : pastPurchases.length > 0 ? (
+                                        pastPurchases.map((purchase) => (
+                                            <div key={purchase.id} className="bg-white p-5 rounded-[24px] border border-zinc-100 shadow-sm flex items-center justify-between hover:border-black/20 transition-all group">
+                                                <div className="flex items-center gap-6">
+                                                    <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center">
+                                                        <Calendar className="w-6 h-6 text-zinc-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-black text-lg uppercase">{purchase.supplier?.name || 'Proveedor Desconocido'}</p>
+                                                        <div className="flex items-center gap-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">
+                                                            <span>{new Date(purchase.purchaseDate).toLocaleDateString()}</span>
+                                                            <span className="text-zinc-300">•</span>
+                                                            <span>Factura: {purchase.invoiceNumber || 'S/N'}</span>
+                                                            <span className="text-zinc-300">•</span>
+                                                            <span>{purchase.items?.reduce((s: number, i: any) => s + i.quantity, 0) || 0} UDS</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="text-right">
+                                                        <p className="text-xl font-black italic text-emerald-600">{formatARS(purchase.totalAmount)}</p>
+                                                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mt-1">{purchase.createdBy}</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setSelectedPurchaseDetails(purchase)}
+                                                        className="p-3 bg-zinc-50 text-black rounded-xl hover:bg-black hover:text-white transition-all"
+                                                        title="Ver Detalle"
+                                                    >
+                                                        <Eye className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-20">
+                                            <Package className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
+                                            <p className="text-[11px] font-black text-zinc-400 uppercase tracking-widest italic">No hay compras registradas</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
