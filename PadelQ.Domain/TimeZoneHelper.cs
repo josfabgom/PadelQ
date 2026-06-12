@@ -6,21 +6,26 @@ namespace PadelQ.Domain
     {
         public static DateTime GetArgNow()
         {
+            return ToArgTime(DateTime.UtcNow);
+        }
+
+        public static DateTime ToArgTime(DateTime utcTime)
+        {
             try
             {
                 var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
-                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                return TimeZoneInfo.ConvertTimeFromUtc(utcTime, tz);
             }
             catch
             {
                 try
                 {
                     var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                    return TimeZoneInfo.ConvertTimeFromUtc(utcTime, tz);
                 }
                 catch
                 {
-                    return DateTime.UtcNow.AddHours(-3);
+                    return utcTime.AddHours(-3);
                 }
             }
         }

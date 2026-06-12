@@ -543,15 +543,17 @@ namespace PadelQ.Api.Controllers
                     
                     if (!string.IsNullOrEmpty(transaction.Description) && transaction.Description.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase))
                     {
-                        var timeWindowStart = transaction.Date.AddSeconds(-30);
-                        var timeWindowEnd = transaction.Date.AddSeconds(30);
+                        // transaction.Date is in ARG time (UTC-3), while c.CreatedAt is in UTC.
+                        // We must add 3 hours to transaction.Date to compare correctly.
+                        var timeWindowStartUtc = transaction.Date.AddHours(3).AddSeconds(-60);
+                        var timeWindowEndUtc = transaction.Date.AddHours(3).AddSeconds(60);
                         
                         var consumptions = await _context.BookingConsumptions
                             .Where(c => c.UserId == transaction.UserId 
                                      && c.BookingId == null 
                                      && c.SpaceBookingId == null 
-                                     && c.CreatedAt >= timeWindowStart 
-                                     && c.CreatedAt <= timeWindowEnd)
+                                     && c.CreatedAt >= timeWindowStartUtc 
+                                     && c.CreatedAt <= timeWindowEndUtc)
                             .ToListAsync();
 
                         foreach (var consumption in consumptions)

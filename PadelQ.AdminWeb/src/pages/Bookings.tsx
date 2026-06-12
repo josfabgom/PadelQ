@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import { v4 as uuidv4 } from 'uuid';
 import api, { getAuthConfig } from '../api/api';
 import {
@@ -47,6 +48,7 @@ import {
     Printer,
     Minus,
     Layers,
+    Download,
     CreditCard,
     History,
     RotateCcw,
@@ -266,6 +268,7 @@ const BookingsPage = () => {
     };
 
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [isPrintChoiceModalOpen, setIsPrintChoiceModalOpen] = useState(false);
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ resource: { type: 'court' | 'space', data: Court | Space }, hour: number } | null>(null);
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     const [selectedSpaceBooking, setSelectedSpaceBooking] = useState<SpaceBooking | null>(null);
@@ -582,8 +585,9 @@ const BookingsPage = () => {
 
             // Find exact match in allProducts by barcode or internalCode
             const product = allProducts.find(p => 
+                p.isSellable !== false && (
                 (p.barcode && p.barcode.trim().toLowerCase() === query) ||
-                (p.internalCode && p.internalCode.trim().toLowerCase() === query)
+                (p.internalCode && p.internalCode.trim().toLowerCase() === query))
             );
 
             if (product) {
@@ -795,8 +799,9 @@ const BookingsPage = () => {
     useEffect(() => {
         if (dsProductSearch.length > 2) {
             setDsFilteredProducts(allProducts.filter(p => 
+                p.isSellable !== false && (
                 p.name.toLowerCase().includes(dsProductSearch.toLowerCase()) || 
-                (p.internalCode && p.internalCode.toLowerCase().includes(dsProductSearch.toLowerCase()))
+                (p.internalCode && p.internalCode.toLowerCase().includes(dsProductSearch.toLowerCase())))
             ).slice(0, 5));
         } else {
             setDsFilteredProducts([]);
@@ -2175,7 +2180,86 @@ const BookingsPage = () => {
         printWindow.document.close();
     };
 
+    const handleDownloadPDF = () => {
+        const booking = selectedBooking || selectedSpaceBooking;
+        if (!booking) return;
+
+        const rentDetail = selectedBooking
+            ? `${selectedBooking.court.name} (${format(parseISO(selectedBooking.startTime), 'HH:mm')} a ${format(parseISO(selectedBooking.endTime), 'HH:mm')} hs)`
+            : `${selectedSpaceBooking?.space.name} (${format(parseISO(selectedSpaceBooking!.startTime), 'HH:mm')} a ${format(parseISO(selectedSpaceBooking!.endTime), 'HH:mm')} hs)`;
+
+        const doc = new jsPDF({
+            unit: 'mm',
+            format: [80, 200]
+        });
+
+        let y = 10;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('DOCUMENTO NO VALIDO COMO FACTURA', 40, y, { align: 'center' });
+        y += 6;
+        doc.setFontSize(14);
+        doc.text(companyInfo.name.toUpperCase(), 40, y, { align: 'center' });
+        y += 5;
+        
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        if (companyInfo.address) { y += 4; doc.text(companyInfo.address, 40, y, { align: 'center' }); }
+        if (companyInfo.phone) { y += 4; doc.text(`Tel: ${companyInfo.phone}`, 40, y, { align: 'center' }); }
+        
+        y += 6;
+        doc.text(`${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`, 40, y, { align: 'center' });
+        
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.text(`CLIENTE: ${(booking.user?.fullName || booking.guestName || 'Particular').toUpperCase()}`, 5, y);
+        
+        y += 6;
+        doc.text('ALQUILER:', 5, y);
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.text(rentDetail, 5, y);
+        y += 5;
+        doc.text(`Precio: $${booking.price.toLocaleString('es-AR')}`, 5, y);
+        
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.text('CONSUMICIONES:', 5, y);
+        y += 5;
+        
+        doc.setFont('helvetica', 'normal');
+        const consumptions = bookingConsumptions.filter(c => c.isPaid || (selectedBooking || selectedSpaceBooking)?.status === 4);
+        if (consumptions.length > 0) {
+            consumptions.forEach(c => {
+                doc.text(`${c.quantity}x ${c.product?.name}`, 5, y);
+                doc.text(`$${c.totalPrice.toLocaleString('es-AR')}`, 75, y, { align: 'right' });
+                y += 5;
+            });
+        } else {
+            doc.text('Sin consumiciones', 5, y);
+            y += 5;
+        }
+        
+        y += 6;
+        const totalConsumptions = consumptions.reduce((acc, curr) => acc + curr.totalPrice, 0);
+        const totalGeneral = booking.price + totalConsumptions;
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('TOTAL:', 5, y);
+        doc.text(`$${totalGeneral.toLocaleString('es-AR')}`, 75, y, { align: 'right' });
+        
+        y += 10;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Presente este ticket en barra/mostrador', 40, y, { align: 'center' });
+        
+        doc.save(`Ticket_${booking.id}.pdf`);
+        setIsPrintChoiceModalOpen(false);
+    };
+
     const handlePrintTicket = () => {
+        setIsPrintChoiceModalOpen(false);
         const booking = selectedBooking || selectedSpaceBooking;
         if (!booking) return;
 
@@ -3281,6 +3365,48 @@ const BookingsPage = () => {
                 </div>
             )}
 
+            {/* Print Choice Modal */}
+            {isPrintChoiceModalOpen && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[70] p-6">
+                    <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/5">
+                        <div className="p-6 bg-black text-white relative">
+                            <button onClick={() => setIsPrintChoiceModalOpen(false)} className="absolute right-6 top-6 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                            <h3 className="text-xl font-black italic uppercase tracking-tight text-white">OPCIONES DE IMPRESIÓN</h3>
+                            <p className="text-[10px] text-white/60 uppercase tracking-widest mt-1">¿Cómo desea obtener el ticket?</p>
+                        </div>
+                        <div className="p-6 space-y-4 bg-zinc-50">
+                            <button
+                                onClick={handlePrintTicket}
+                                className="w-full flex items-center gap-4 p-5 bg-white rounded-[24px] border border-zinc-200 hover:border-black hover:ring-4 hover:ring-black/5 transition-all group shadow-sm hover:shadow-md"
+                            >
+                                <div className="p-3 bg-black text-white rounded-xl group-hover:scale-110 transition-transform">
+                                    <Printer className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="font-black text-sm uppercase tracking-tight text-black">Imprimir Directo</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Impresora térmica</p>
+                                </div>
+                            </button>
+                            
+                            <button
+                                onClick={handleDownloadPDF}
+                                className="w-full flex items-center gap-4 p-5 bg-white rounded-[24px] border border-zinc-200 hover:border-emerald-500 hover:ring-4 hover:ring-emerald-500/10 transition-all group shadow-sm hover:shadow-md"
+                            >
+                                <div className="p-3 bg-emerald-500 text-black rounded-xl group-hover:scale-110 transition-transform">
+                                    <Download className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="font-black text-sm uppercase tracking-tight text-black">Descargar PDF</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Guardar archivo PDF</p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Checkout Modal */}
             {isDetailsModalOpen && (selectedBooking || selectedSpaceBooking) && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-50 p-6">
@@ -3288,14 +3414,14 @@ const BookingsPage = () => {
                         <div className="p-7 bg-gradient-to-br from-zinc-800 to-black text-white relative">
                             <div className="absolute right-6 top-6 flex items-center gap-3">
                                 <button
-                                    onClick={handlePrintTicket}
+                                    onClick={() => setIsPrintChoiceModalOpen(true)}
                                     className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all flex items-center gap-2 group"
                                     title="Imprimir Ticket"
                                 >
                                     <Printer className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                                     <span className="text-[9px] font-black uppercase tracking-widest hidden md:inline">Imprimir</span>
                                 </button>
-                                <button onClick={() => { setIsDetailsModalOpen(false); resetForm(); fetchData(); }} className="p-2.5 hover:bg-white/10 rounded-2xl transition-colors">
+                                <button onClick={() => { setIsDetailsModalOpen(false); setIsPrintChoiceModalOpen(false); resetForm(); fetchData(); }} className="p-2.5 hover:bg-white/10 rounded-2xl transition-colors">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
@@ -3343,14 +3469,14 @@ const BookingsPage = () => {
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 relative overflow-hidden">
                             {/* Left Column: Add Consumptions */}
-                            <div className="p-8 border-r border-zinc-100 max-h-[70vh] overflow-y-auto bg-white custom-scrollbar flex flex-col relative min-h-[500px]">
-                                <div className="space-y-6">
-                                    <div className="space-y-4">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="border-r border-zinc-100 bg-white flex flex-col relative h-full max-h-[70vh]">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-5 pb-2 space-y-4 flex flex-col">
+                                    <div className="space-y-4 flex-1">
+                                        <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3">
                                             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block italic">Consumiciones</label>
 
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative group">
+                                            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full 2xl:w-auto">
+                                                <div className="relative group flex-1">
                                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                                                         <Search className="w-3.5 h-3.5 text-zinc-400" />
                                                         <div className="w-[1px] h-3 bg-zinc-200"></div>
@@ -3361,7 +3487,7 @@ const BookingsPage = () => {
                                                         onChange={(e) => setBarcodeInput(e.target.value)}
                                                         onKeyDown={handleAddByBarcode}
                                                         placeholder="CÓDIGO DE BARRAS..."
-                                                        className="pl-11 pr-4 py-2.5 bg-white border border-zinc-200 rounded-2xl text-[9px] font-black tracking-widest focus:ring-4 focus:ring-black/5 outline-none w-44 transition-all hover:border-zinc-300 focus:border-black placeholder:text-zinc-300"
+                                                        className="pl-11 pr-4 py-2.5 bg-white border border-zinc-200 rounded-2xl text-[9px] font-black tracking-widest focus:ring-4 focus:ring-black/5 outline-none w-full transition-all hover:border-zinc-300 focus:border-black placeholder:text-zinc-300"
                                                     />
                                                 </div>
 
@@ -3371,7 +3497,7 @@ const BookingsPage = () => {
                                                         setAllProducts(res.data);
                                                         setIsConsumptionModalOpen(true);
                                                     }}
-                                                    className="px-5 py-2.5 bg-black text-white rounded-2xl font-black uppercase text-[9px] tracking-[0.1em] transition-all flex items-center gap-2 hover:bg-zinc-800 shadow-lg shadow-black/10 active:scale-95"
+                                                    className="px-5 py-2.5 bg-black text-white rounded-2xl font-black uppercase text-[9px] tracking-[0.1em] transition-all flex items-center justify-center gap-2 hover:bg-zinc-800 shadow-lg shadow-black/10 active:scale-95 shrink-0 whitespace-nowrap"
                                                 >
                                                     <Plus className="w-3.5 h-3.5" /> Agregar
                                                 </button>
@@ -3379,15 +3505,12 @@ const BookingsPage = () => {
                                         </div>
 
                                         {bookingConsumptions.length > 0 ? (
-                                            <div className="bg-white rounded-[28px] border border-zinc-100 overflow-hidden shadow-sm">
+                                            <div className="bg-white rounded-[24px] border border-zinc-100 overflow-hidden shadow-sm">
                                                 {bookingConsumptions.sort((a: any, b: any) =>
                                                     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
                                                 ).map((c: any, idx) => (
-                                                    <div key={idx} className="p-6 flex justify-between items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50/50 transition-colors">
-                                                        <div className="flex items-start gap-5 min-w-0 flex-1">
-                                                            <div className="w-14 h-14 bg-white rounded-2xl border border-zinc-100 flex items-center justify-center shadow-sm">
-                                                                <Package className="w-6 h-6 text-black" />
-                                                            </div>
+                                                    <div key={idx} className="py-2.5 px-4 flex flex-col border-b border-zinc-100 last:border-0 hover:bg-zinc-50/50 transition-colors">
+                                                        <div className="flex justify-between items-start">
                                                             <div className="min-w-0 flex-1">
                                                                 <p className="text-sm font-black uppercase italic tracking-tight text-black">{c.product?.name}</p>
                                                                 <p className="text-[10px] font-bold text-zinc-400 mt-0.5">
@@ -3399,73 +3522,77 @@ const BookingsPage = () => {
                                                                         {c.notes ? `Obs: ${c.notes}` : ''}
                                                                     </p>
                                                                 ) : null}
-                                                                {c.product?.isDoubleUnitCombo && (
-                                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-2xl w-fit">
-                                                                        <div className="flex items-center gap-1.5">
-                                                                            <Gift className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                                                                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
-                                                                                2da Unidad: {c.isComboRedeemed ? 'Entregada' : 'Pendiente'}
-                                                                            </span>
-                                                                            <span className="text-[8px] font-mono bg-amber-500/20 text-amber-800 px-1.5 py-0.5 rounded font-black uppercase">
-                                                                                #{c.id.substring(0, 8).toUpperCase()}
-                                                                            </span>
-                                                                        </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-6 shrink-0 ml-4">
+                                                                <span className="text-xl font-black italic tracking-tighter text-black">${c.totalPrice.toLocaleString()}</span>
+                                                                
+                                                                {c.isPaid ? (
+                                                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black tracking-widest uppercase rounded-full whitespace-nowrap">
+                                                                        Pagado
+                                                                    </span>
+                                                                ) : (
+                                                                    (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
                                                                         <button
-                                                                            onClick={async () => {
-                                                                                try {
-                                                                                    await api.put(`/api/consumptions/${c.id}/toggle-combo-redeem`, {}, getAuthConfig());
-                                                                                    const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
-                                                                                    if (bookingId) {
-                                                                                        const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
-                                                                                        setBookingConsumptions(consRes.data || []);
-                                                                                    }
-                                                                                } catch (err: any) {
-                                                                                    console.error("Error al entregar combo:", err);
-                                                                                    alert("Error: " + (err.response?.data?.message || err.message));
-                                                                                }
-                                                                            }}
-                                                                            className={`ml-2 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                                                                                c.isComboRedeemed 
-                                                                                    ? 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300' 
-                                                                                    : 'bg-amber-500 text-white hover:bg-amber-600 shadow-md shadow-amber-500/10'
-                                                                            }`}
+                                                                            onClick={() => setConsumptionToDelete(c)}
+                                                                            className="p-2 hover:bg-rose-50 text-rose-400 rounded-xl transition-all hover:scale-110 active:scale-90 -mr-2"
                                                                         >
-                                                                            {c.isComboRedeemed ? 'Revertir' : 'Entregar'}
+                                                                            <Trash2 className="w-4 h-4" />
                                                                         </button>
-                                                                    </div>
+                                                                    )
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-6 shrink-0 ml-4">
-                                                            <span className="text-xl font-black italic tracking-tighter text-black">${c.totalPrice.toLocaleString()}</span>
-                                                            
-                                                            {c.isPaid ? (
-                                                                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black tracking-widest uppercase rounded-full whitespace-nowrap">
-                                                                    Pagado
-                                                                </span>
-                                                            ) : (
-                                                                (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
-                                                                    <button
-                                                                        onClick={() => setConsumptionToDelete(c)}
-                                                                        className="p-3 hover:bg-rose-50 text-rose-400 rounded-xl transition-all hover:scale-110 active:scale-90"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                )
-                                                            )}
-                                                        </div>
+
+                                                        {c.product?.isDoubleUnitCombo && (
+                                                            <div className="flex flex-wrap items-center gap-3 mt-3 w-full border-t border-zinc-100 pt-3">
+                                                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border shrink-0 ${c.isComboRedeemed ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                                                                    <div className={`w-2 h-2 shrink-0 rounded-full ${c.isComboRedeemed ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></div>
+                                                                    <span className={`text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${c.isComboRedeemed ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                                                        2DA UNIDAD: {c.isComboRedeemed ? 'ENTREGADA' : 'PENDIENTE'}
+                                                                        <span className="ml-2 px-1.5 py-0.5 rounded font-mono text-[8px] tracking-tight bg-black/5 opacity-70">
+                                                                            #{c.id.substring(0, 8).toUpperCase()}
+                                                                        </span>
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await api.put(`/api/consumptions/${c.id}/toggle-combo-redeem`, {}, getAuthConfig());
+                                                                            const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                                                            if (bookingId) {
+                                                                                const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
+                                                                                setBookingConsumptions(consRes.data || []);
+                                                                            }
+                                                                        } catch (err: any) {
+                                                                            console.error("Error al entregar combo:", err);
+                                                                            alert("Error: " + (err.response?.data?.message || err.message));
+                                                                        }
+                                                                    }}
+                                                                    className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap shrink-0 transition-all ${
+                                                                        c.isComboRedeemed 
+                                                                            ? 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200' 
+                                                                            : 'bg-black text-white hover:bg-zinc-800 shadow-md shadow-black/10'
+                                                                    }`}
+                                                                >
+                                                                    {c.isComboRedeemed ? 'Deshacer' : 'Entregar'}
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <div className="py-12 border-2 border-dashed border-zinc-100 rounded-[32px] flex flex-col items-center justify-center text-zinc-300">
+                                            <div className="py-8 border-2 border-dashed border-zinc-100 rounded-[24px] flex flex-col items-center justify-center text-zinc-300">
                                                 <Package className="w-8 h-8 mb-2 opacity-20" />
                                                 <p className="text-[10px] font-black uppercase tracking-widest">Sin consumos cargados</p>
                                             </div>
                                         )}
 
-                                        <div className="pt-8 border-t border-zinc-100">
-                                            <div className="flex items-center justify-between mb-4">
+                                    </div>
+                                </div>
+
+                                <div className="shrink-0 border-t border-zinc-100 bg-white p-5 pt-4">
+                                            <div className="flex items-center justify-between mb-3">
                                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block italic">Extender Tiempo</label>
                                                 <button 
                                                     onClick={() => setUndoExtensionConfirm(true)}
@@ -3489,12 +3616,10 @@ const BookingsPage = () => {
                                                 ))}
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
                             </div>
                             
                             {/* Middle Column: Selections */}
-                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white border-r border-zinc-100 space-y-8">
+                            <div className="p-8 h-full max-h-[70vh] overflow-y-auto bg-white border-r border-zinc-100 space-y-8">
                                 <div>
                                     <div className="flex items-center justify-between mb-4">
                                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic">Items en esta cuenta</span>
@@ -3749,8 +3874,8 @@ const BookingsPage = () => {
                             </div>
 
                             {/* Right Column: Summary & Payment */}
-                            <div className="p-8 max-h-[70vh] overflow-y-auto bg-white flex flex-col">
-                                <div className="space-y-6 mt-auto">
+                            <div className="p-8 h-full max-h-[70vh] overflow-y-auto bg-white flex flex-col">
+                                <div className="space-y-6 flex-1 flex flex-col">
                                     {(() => {
                                         const booking = selectedBooking || selectedSpaceBooking;
                                         if (!booking) return null;
@@ -4012,7 +4137,8 @@ const BookingsPage = () => {
                                                     </div>
                                                 )}
 
-                                                <div className="flex gap-3 pt-3">
+                                                <div className="mt-auto pt-6 flex flex-col gap-3">
+                                                    <div className="flex gap-3">
                                                     {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
                                                         <button
                                                             onClick={() => handleCancelBooking(selectedBooking || selectedSpaceBooking!)}
@@ -4044,6 +4170,7 @@ const BookingsPage = () => {
                                                         {isConfirmingSeriesCancel ? '¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
                                                     </button>
                                                 )}
+                                                </div>
                                             </div>
                                         );
                                     })()}
@@ -4084,11 +4211,11 @@ const BookingsPage = () => {
                         <div className="p-8 max-h-[60vh] overflow-y-auto">
                             {Object.entries(
                                 allProducts
-                                    .filter(p =>
+                                    .filter(p => p.isSellable !== false && (
                                         p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
                                         (p.barcode && p.barcode.toLowerCase().includes(productSearch.toLowerCase())) ||
                                         (p.internalCode && p.internalCode.toLowerCase().includes(productSearch.toLowerCase()))
-                                    )
+                                    ))
                                     .reduce((acc, p) => {
                                         const cat = p.category || 'Otros';
                                         if (!acc[cat]) acc[cat] = [];
@@ -5789,12 +5916,12 @@ const BookingsPage = () => {
                             ) : (
                                 Object.entries(
                                     allProducts
-                                        .filter(p =>
+                                        .filter(p => p.isSellable !== false && (
                                             p.name.toLowerCase().includes(dsProductSearch.toLowerCase()) ||
                                             (p.barcode && p.barcode.toLowerCase().includes(dsProductSearch.toLowerCase())) ||
                                             (p.internalCode && p.internalCode.toLowerCase().includes(dsProductSearch.toLowerCase())) ||
                                             (p.category && p.category.toLowerCase().includes(dsProductSearch.toLowerCase()))
-                                        )
+                                        ))
                                         .reduce((acc, p) => {
                                             const cat = p.category || 'Otros';
                                             if (!acc[cat]) acc[cat] = [];

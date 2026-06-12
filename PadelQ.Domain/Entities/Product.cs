@@ -40,14 +40,23 @@ namespace PadelQ.Domain.Entities
         public int Stock { get; set; }
         public int MinimumStock { get; set; }
 
+        public int PurchaseYield { get; set; } = 1;
+
 
         public string? ImageUrl { get; set; }
 
         public string? Category { get; set; }
 
         public bool IsActive { get; set; } = true;
+        
+        public bool IsSellable { get; set; } = true;
 
         public bool IsDoubleUnitCombo { get; set; } = false;
+        
+        public bool IsRecipe { get; set; } = false;
+        
+        public virtual ICollection<ProductRecipeItem> RecipeItems { get; set; } = new List<ProductRecipeItem>();
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

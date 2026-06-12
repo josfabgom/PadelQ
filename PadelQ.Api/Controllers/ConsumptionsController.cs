@@ -98,14 +98,7 @@ namespace PadelQ.Api.Controllers
             };
 
             // Stock Control
-            product.Stock -= request.Quantity;
-            _context.ProductStockMovements.Add(new ProductStockMovement
-            {
-                ProductId = product.Id,
-                Type = MovementType.Sale,
-                Quantity = -request.Quantity,
-                Note = $"Venta en {(isNormalBooking ? "Reserva" : "Espacio")} {request.BookingId}"
-            });
+            await ApplyStockDeductionAsync(product, request.Quantity, $"Venta en {(isNormalBooking ? "Reserva" : "Espacio")} {request.BookingId}");
 
             _context.BookingConsumptions.Add(consumption);
 
@@ -152,14 +145,11 @@ namespace PadelQ.Api.Controllers
             var product = await _context.Products.FindAsync(consumption.ProductId);
             if (product != null)
             {
-                product.Stock += consumption.Quantity;
-                _context.ProductStockMovements.Add(new ProductStockMovement
+                await ApplyStockDeductionAsync(product, -consumption.Quantity, $"Devolución/Borrado en Reserva {consumption.BookingId}");
+                if (product.IsDoubleUnitCombo && consumption.IsComboRedeemed)
                 {
-                    ProductId = product.Id,
-                    Type = MovementType.Adjustment,
-                    Quantity = consumption.Quantity,
-                    Note = $"Devolución/Borrado en Reserva {consumption.BookingId}"
-                });
+                    await ApplyStockDeductionAsync(product, -consumption.Quantity, $"Devolución de 2da Unidad Combo {consumption.BookingId}");
+                }
             }
 
             _context.BookingConsumptions.Remove(consumption);
@@ -221,14 +211,8 @@ namespace PadelQ.Api.Controllers
                 itemDescriptions.Add($"{product.Name} x{item.Quantity}");
 
                 // Stock Control
-                product.Stock -= item.Quantity;
-                _context.ProductStockMovements.Add(new ProductStockMovement
-                {
-                    ProductId = product.Id,
-                    Type = MovementType.Sale,
-                    Quantity = -item.Quantity,
-                    Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa Bulk: {product.Name} (PENDIENTE){discountAppliedStr}")
-                });
+                string note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa Bulk: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa Bulk: {product.Name} (PENDIENTE){discountAppliedStr}");
+                await ApplyStockDeductionAsync(product, item.Quantity, note);
             }
 
             var itemsSummary = itemDescriptions.Any() ? string.Join(", ", itemDescriptions) : "Bulk";
@@ -333,14 +317,8 @@ namespace PadelQ.Api.Controllers
             }
 
             // Stock Control
-            product.Stock -= request.Quantity;
-            _context.ProductStockMovements.Add(new ProductStockMovement
-            {
-                ProductId = product.Id,
-                Type = MovementType.Sale,
-                Quantity = -request.Quantity,
-                Note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa: {product.Name} (PENDIENTE){discountAppliedStr}")
-            });
+            string note = request.IsInternal ? $"Consumo Interno: {product.Name}" : (request.IsPaid ? $"Venta Directa: {product.Name} (Pagado){discountAppliedStr}" : $"Venta Directa: {product.Name} (PENDIENTE){discountAppliedStr}");
+            await ApplyStockDeductionAsync(product, request.Quantity, note);
 
             _context.BookingConsumptions.Add(consumption);
             await _context.SaveChangesAsync();
@@ -488,6 +466,11 @@ namespace PadelQ.Api.Controllers
             }
 
             consumption.IsComboRedeemed = !consumption.IsComboRedeemed;
+            
+            int modifier = consumption.IsComboRedeemed ? 1 : -1;
+            string note = modifier > 0 ? $"Canje de 2da Unidad Combo {consumption.BookingId}" : $"Deshacer canje Combo {consumption.BookingId}";
+            await ApplyStockDeductionAsync(consumption.Product, consumption.Quantity * modifier, note);
+            
             await _context.SaveChangesAsync();
 
             return Ok(new { isComboRedeemed = consumption.IsComboRedeemed });
@@ -503,6 +486,40 @@ namespace PadelQ.Api.Controllers
             consumption.Fractions = request.Fractions;
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Fracciones actualizadas" });
+        }
+        private async Task ApplyStockDeductionAsync(Product product, int quantity, string note)
+        {
+            if (product.IsRecipe)
+            {
+                var recipeItems = await _context.ProductRecipeItems.Where(r => r.RecipeProductId == product.Id).ToListAsync();
+                foreach (var item in recipeItems)
+                {
+                    var baseProduct = await _context.Products.FindAsync(item.BaseProductId);
+                    if (baseProduct != null)
+                    {
+                        int deductQuantity = quantity * item.QuantityToDeduct;
+                        baseProduct.Stock -= deductQuantity;
+                        _context.ProductStockMovements.Add(new ProductStockMovement
+                        {
+                            ProductId = baseProduct.Id,
+                            Type = quantity >= 0 ? MovementType.Sale : MovementType.Adjustment,
+                            Quantity = -deductQuantity,
+                            Note = $"{note} (Receta: {product.Name})"
+                        });
+                    }
+                }
+            }
+            else
+            {
+                product.Stock -= quantity;
+                _context.ProductStockMovements.Add(new ProductStockMovement
+                {
+                    ProductId = product.Id,
+                    Type = quantity >= 0 ? MovementType.Sale : MovementType.Adjustment,
+                    Quantity = -quantity,
+                    Note = note
+                });
+            }
         }
     }
 

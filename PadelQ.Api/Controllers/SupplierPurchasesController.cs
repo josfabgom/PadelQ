@@ -65,8 +65,16 @@ namespace PadelQ.Api.Controllers
                     var product = await _context.Products.FindAsync(item.ProductId);
                     if (product != null)
                     {
+                        int finalQuantity = item.Quantity;
+                        string yieldNote = "";
+                        if (product.PurchaseYield > 1)
+                        {
+                            finalQuantity = item.Quantity * product.PurchaseYield;
+                            yieldNote = $" (Rinde: x{product.PurchaseYield})";
+                        }
+
                         // Update stock
-                        product.Stock += item.Quantity;
+                        product.Stock += finalQuantity;
                         
                         // Update cost price (optional, but good practice)
                         if (item.UnitCost > 0)
@@ -79,8 +87,8 @@ namespace PadelQ.Api.Controllers
                         {
                             ProductId = item.ProductId,
                             Type = MovementType.Purchase,
-                            Quantity = item.Quantity,
-                            Note = $"Compra #{purchase.InvoiceNumber ?? purchase.Id.ToString()} - Prov: {purchase.SupplierId}",
+                            Quantity = finalQuantity,
+                            Note = $"Compra #{purchase.InvoiceNumber ?? purchase.Id.ToString()} - Prov: {purchase.SupplierId}{yieldNote}",
                             CreatedAt = DateTime.UtcNow
                         });
                     }
@@ -116,7 +124,12 @@ namespace PadelQ.Api.Controllers
                     if (product != null)
                     {
                         // Revert stock
-                        product.Stock -= item.Quantity;
+                        int revertQuantity = item.Quantity;
+                        if (product.PurchaseYield > 1)
+                        {
+                            revertQuantity = item.Quantity * product.PurchaseYield;
+                        }
+                        product.Stock -= revertQuantity;
                     }
                 }
 

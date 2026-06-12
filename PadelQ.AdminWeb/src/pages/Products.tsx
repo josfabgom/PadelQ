@@ -28,6 +28,10 @@ interface Product {
   isActive: boolean;
   minimumStock: number;
   isDoubleUnitCombo?: boolean;
+  isRecipe?: boolean;
+  isSellable?: boolean;
+  purchaseYield?: number;
+  recipeItems?: { baseProductId: number; quantityToDeduct: number; baseProductName?: string }[];
 }
 
 const formatARS = (amount: number) => {
@@ -109,7 +113,11 @@ const ProductsPage = () => {
     category: 'Bebidas',
     isActive: true,
     minimumStock: 0,
-    isDoubleUnitCombo: false
+    isDoubleUnitCombo: false,
+    isRecipe: false,
+    isSellable: true,
+    purchaseYield: 1,
+    recipeItems: []
   });
 
   const [stockFormData, setStockFormData] = useState({
@@ -176,7 +184,11 @@ const ProductsPage = () => {
         category: 'Bebidas', 
         isActive: true,
         minimumStock: 0,
-        isDoubleUnitCombo: false
+        isDoubleUnitCombo: false,
+        isRecipe: false,
+        isSellable: true,
+        purchaseYield: 1,
+        recipeItems: []
       });
     }
     setIsModalOpen(true);
@@ -770,14 +782,19 @@ const ProductsPage = () => {
                      </div>
                      <div className="space-y-2 col-span-2">
                         <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categoría</label>
-                        <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-black text-sm italic appearance-none">
-                            <option value="Bebidas">Bebidas</option>
-                            <option value="Comida">Comida</option>
-                            <option value="Snacks">Snacks</option>
-                            <option value="Indumentaria">Indumentaria</option>
-                            <option value="Pelotas/Padel">Pelotas/Padel</option>
-                            <option value="Otros">Otros</option>
-                        </select>
+                        <input 
+                            type="text" 
+                            list="category-options"
+                            value={formData.category} 
+                            onChange={(e) => setFormData({...formData, category: e.target.value})} 
+                            className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-black text-sm italic"
+                            placeholder="Ej: Bebidas, Insumos, etc."
+                        />
+                        <datalist id="category-options">
+                            {categories.filter(c => c !== 'Todas').map(cat => (
+                                <option key={cat} value={cat} />
+                            ))}
+                        </datalist>
                      </div>
                      <div className="space-y-2 col-span-2">
                         <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Imagen (URL)</label>
@@ -864,14 +881,25 @@ const ProductsPage = () => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Stock Actual</label>
-                      <input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-bold text-sm" placeholder="0" disabled={!!editingProduct} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Stock Mínimo</label>
-                      <input type="number" value={formData.minimumStock} onChange={(e) => setFormData({...formData, minimumStock: Number(e.target.value)})} className="w-full px-5 py-3 bg-rose-50/30 border border-rose-100 rounded-xl outline-none font-bold text-sm text-rose-600" placeholder="5" />
-                    </div>
+                     {!formData.isRecipe && (
+                         <>
+                             <div className="space-y-2">
+                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Stock Actual</label>
+                                <input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="w-full px-5 py-3 bg-zinc-50 border border-zinc-100 rounded-xl outline-none font-black text-sm" disabled={!!editingProduct} placeholder="0" />
+                             </div>
+                             <div className="space-y-2">
+                                <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Stock Mínimo</label>
+                                <input type="number" value={formData.minimumStock} onChange={(e) => setFormData({...formData, minimumStock: Number(e.target.value)})} className="w-full px-5 py-3 bg-rose-50/30 border border-rose-100 rounded-xl outline-none font-bold text-sm text-rose-600" placeholder="5" />
+                             </div>
+                             <div className="space-y-2 col-span-2">
+                                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                                    <Package className="w-3 h-3" /> Rinde por unidad comprada
+                                </label>
+                                <input type="number" min="1" value={formData.purchaseYield || 1} onChange={(e) => setFormData({...formData, purchaseYield: Number(e.target.value)})} className="w-full px-5 py-3 bg-emerald-50/30 border border-emerald-100 rounded-xl outline-none font-bold text-sm text-emerald-700" placeholder="Ej: 100 vasos" />
+                                <p className="text-[9px] text-emerald-600/70 font-medium italic mt-1">Al ingresar una compra, la cantidad se multiplicará por este valor automáticamente.</p>
+                             </div>
+                         </>
+                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -887,6 +915,74 @@ const ProductsPage = () => {
                         <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.isDoubleUnitCombo ? 'right-0.5' : 'left-0.5'}`}></div>
                       </button>
                     </div>
+                    <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between col-span-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Visible en Ventas / Se Puede Vender</span>
+                      <button type="button" onClick={() => setFormData({...formData, isSellable: !formData.isSellable})} className={`w-10 h-5 rounded-full relative transition-all ${formData.isSellable ? 'bg-blue-500' : 'bg-zinc-300'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.isSellable ? 'right-0.5' : 'left-0.5'}`}></div>
+                      </button>
+                    </div>
+                    <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between col-span-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Es Receta / Descuenta de Insumo</span>
+                      <button type="button" onClick={() => setFormData({...formData, isRecipe: !formData.isRecipe})} className={`w-10 h-5 rounded-full relative transition-all ${formData.isRecipe ? 'bg-indigo-500' : 'bg-zinc-300'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${formData.isRecipe ? 'right-0.5' : 'left-0.5'}`}></div>
+                      </button>
+                    </div>
+                    {formData.isRecipe && (
+                      <div className="col-span-2 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-4">
+                        <label className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Insumo Base</label>
+                        <div className="flex items-center gap-2">
+                          <select 
+                            className="flex-1 px-4 py-3 bg-white border border-indigo-100 rounded-xl outline-none font-bold text-sm"
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (val) {
+                                const current = formData.recipeItems || [];
+                                if (!current.some(r => r.baseProductId === val)) {
+                                  setFormData({...formData, recipeItems: [...current, { baseProductId: val, quantityToDeduct: 1 }]});
+                                }
+                              }
+                            }}
+                            value=""
+                          >
+                            <option value="">-- Seleccionar Insumo --</option>
+                            {products.filter(p => p.id !== formData.id).map(p => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.stock} uds)</option>
+                            ))}
+                          </select>
+                        </div>
+                        {formData.recipeItems && formData.recipeItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-indigo-100">
+                            <span className="flex-1 text-sm font-bold text-indigo-900 px-2">
+                              {products.find(p => p.id === item.baseProductId)?.name || 'Producto Base'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase">Resta:</span>
+                              <input 
+                                type="number" 
+                                value={item.quantityToDeduct}
+                                onChange={(e) => {
+                                  const newItems = [...formData.recipeItems!];
+                                  newItems[idx].quantityToDeduct = Number(e.target.value);
+                                  setFormData({...formData, recipeItems: newItems});
+                                }}
+                                className="w-16 px-2 py-1.5 bg-indigo-50 border border-indigo-100 rounded outline-none font-black text-center text-sm"
+                                min="1"
+                              />
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const newItems = formData.recipeItems!.filter((_, i) => i !== idx);
+                                setFormData({...formData, recipeItems: newItems});
+                              }}
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -972,7 +1068,9 @@ const ProductsPage = () => {
                 </div>
                 <p className="text-[9px] font-bold text-zinc-400 italic text-center">
                   {stockFormData.type === 0 
-                    ? "Registra un ingreso por compra (suma al stock)" 
+                    ? (stockProduct.purchaseYield && stockProduct.purchaseYield > 1 
+                        ? `Registra compra (Suma ${stockFormData.quantity * stockProduct.purchaseYield} al stock gracias al rinde de x${stockProduct.purchaseYield})`
+                        : "Registra un ingreso por compra (suma al stock)") 
                     : "Ajuste manual (puedes usar números negativos para restar)"}
                 </p>
               </div>

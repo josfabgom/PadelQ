@@ -24,6 +24,7 @@ namespace PadelQ.Api.Controllers
         public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
         {
             return await _context.Products
+                .Include(p => p.RecipeItems)
                 .Where(p => p.IsActive)
                 .OrderBy(p => p.Category)
                 .ThenBy(p => p.Name)
@@ -33,7 +34,9 @@ namespace PadelQ.Api.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Product>> GetProduct(int id)
         {
-            var product = await _context.Products.FindAsync(id);
+            var product = await _context.Products
+                .Include(p => p.RecipeItems)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (product == null) return NotFound();
             return product;
         }
@@ -51,8 +54,31 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> UpdateProduct(int id, [FromBody] Product product)
         {
             if (id != product.Id) return BadRequest();
-            _context.Entry(product).State = EntityState.Modified;
-            _context.Entry(product).Property(x => x.CreatedAt).IsModified = false;
+            
+            var existingProduct = await _context.Products
+                .Include(p => p.RecipeItems)
+                .FirstOrDefaultAsync(p => p.Id == id);
+                
+            if (existingProduct == null) return NotFound();
+
+            // Update main properties
+            _context.Entry(existingProduct).CurrentValues.SetValues(product);
+            _context.Entry(existingProduct).Property(x => x.CreatedAt).IsModified = false;
+
+            // Update RecipeItems
+            existingProduct.RecipeItems.Clear();
+            if (product.IsRecipe && product.RecipeItems != null)
+            {
+                foreach(var item in product.RecipeItems)
+                {
+                    existingProduct.RecipeItems.Add(new ProductRecipeItem 
+                    {
+                        BaseProductId = item.BaseProductId,
+                        QuantityToDeduct = item.QuantityToDeduct
+                    });
+                }
+            }
+
             await _context.SaveChangesAsync();
             return NoContent();
         }
@@ -62,6 +88,12 @@ namespace PadelQ.Api.Controllers
         {
             var product = await _context.Products.FindAsync(movement.ProductId);
             if (product == null) return NotFound("Producto no encontrado");
+
+            if (movement.Type == MovementType.Purchase && product.PurchaseYield > 1)
+            {
+                movement.Quantity = movement.Quantity * product.PurchaseYield;
+                movement.Note += $" (Rinde: x{product.PurchaseYield})";
+            }
 
             movement.CreatedAt = DateTime.UtcNow;
             _context.ProductStockMovements.Add(movement);
@@ -82,7 +114,7 @@ namespace PadelQ.Api.Controllers
             public int OutQuantity { get; set; }
             public int Balance { get; set; }
             public string? Note { get; set; }
-            public DateTime CreatedAt { get; set; }
+            public DateTimeOffset CreatedAt { get; set; }
         }
 
         [HttpGet("{id}/movements")]
@@ -110,7 +142,7 @@ namespace PadelQ.Api.Controllers
                     OutQuantity = m.Quantity < 0 ? -m.Quantity : 0,
                     Balance = currentBalance,
                     Note = m.Note,
-                    CreatedAt = m.CreatedAt
+                    CreatedAt = new DateTimeOffset(PadelQ.Domain.TimeZoneHelper.ToArgTime(m.CreatedAt), TimeSpan.FromHours(-3))
                 });
 
                 // Calculate balance BEFORE this movement for the next iteration (older movements)

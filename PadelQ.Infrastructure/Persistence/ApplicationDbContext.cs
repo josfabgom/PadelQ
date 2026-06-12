@@ -25,6 +25,7 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<BookingConsumption> BookingConsumptions { get; set; } = null!;
         public DbSet<ProductStockMovement> ProductStockMovements { get; set; } = null!;
+        public DbSet<ProductRecipeItem> ProductRecipeItems { get; set; } = null!;
         public DbSet<CashClosure> CashClosures { get; set; } = null!;
         public DbSet<Supplier> Suppliers { get; set; } = null!;
         public DbSet<SupplierPurchase> SupplierPurchases { get; set; } = null!;
@@ -65,6 +66,19 @@ namespace PadelQ.Infrastructure.Persistence
                 entity.Property(p => p.TotalCardSales).HasPrecision(18, 2);
                 entity.Property(p => p.TotalOtherSales).HasPrecision(18, 2);
             });
+
+            builder.Entity<ProductRecipeItem>()
+                .HasOne(p => p.RecipeProduct)
+                .WithMany(p => p.RecipeItems)
+                .HasForeignKey(p => p.RecipeProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<ProductRecipeItem>()
+                .HasOne(p => p.BaseProduct)
+                .WithMany()
+                .HasForeignKey(p => p.BaseProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
 
             // No forzamos UTC de forma global para permitir que las reservas se guarden y lean como 'Wall Clock Time' (Hora Local)
         }
