@@ -3,6 +3,7 @@ import api, { getAuthConfig } from '../api/api';
 import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X } from 'lucide-react';
 import Header from '../components/Header';
 import { UPDATE_HISTORY, SYSTEM_VERSION } from '../constants/versions';
+import PointTerminals from './PointTerminals';
 
 interface Setting {
   key: string;
@@ -441,6 +442,10 @@ const AdminSettings = () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2">
+            <PointTerminals />
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8 lg:col-span-2">

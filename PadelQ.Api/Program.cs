@@ -73,6 +73,7 @@ builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IQrService, QrService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IChatbotService, ChatbotService>();
+builder.Services.AddHttpClient<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddHostedService<BillingBackgroundService>();
 builder.Services.AddMemoryCache();
 

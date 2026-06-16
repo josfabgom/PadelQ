@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { v4 as uuidv4 } from 'uuid';
 import api, { getAuthConfig } from '../api/api';
+import { createMercadoPagoIntent, getPointTerminals, PointTerminal } from '../api/mercadoPagoApi';
 import {
     format,
     addDays,
@@ -278,6 +279,9 @@ const BookingsPage = () => {
     const [isMixedPayment, setIsMixedPayment] = useState(false);
     const [isMixedPaymentModalOpen, setIsMixedPaymentModalOpen] = useState(false);
     const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>('');
+    const [mpTerminals, setMpTerminals] = useState<PointTerminal[]>([]);
+    const [selectedMpTerminal, setSelectedMpTerminal] = useState<number | null>(null);
+    const [isWaitingMp, setIsWaitingMp] = useState(false);
     const [firstMethodAmount, setFirstMethodAmount] = useState<number>(0);
     const [bookingConsumptions, setBookingConsumptions] = useState<any[]>([]);
     const [relatedBookings, setRelatedBookings] = useState<any[]>([]);
@@ -1729,6 +1733,10 @@ const BookingsPage = () => {
         setSelectedGlobalFractions([0]);
     };
 
+    useEffect(() => {
+        getPointTerminals().then(setMpTerminals).catch(console.error);
+    }, []);
+
     const handleConfirmPayment = async () => {
         setIsConfirmPaymentModalOpen(false);
         const booking = selectedBooking || selectedSpaceBooking;
@@ -2270,6 +2278,12 @@ const BookingsPage = () => {
             ? `${selectedBooking.court.name} (${format(parseISO(selectedBooking.startTime), 'HH:mm')} a ${format(parseISO(selectedBooking.endTime), 'HH:mm')} hs)`
             : `${selectedSpaceBooking?.space.name} (${format(parseISO(selectedSpaceBooking!.startTime), 'HH:mm')} a ${format(parseISO(selectedSpaceBooking!.endTime), 'HH:mm')} hs)`;
 
+        const totalConsumptions = bookingConsumptions.reduce((sum, c) => sum + c.totalPrice, 0);
+        const totalGeneral = booking.price + totalConsumptions;
+        const paidConsumptions = bookingConsumptions.reduce((sum, c) => sum + (c.isPaid ? c.totalPrice : (c.depositPaid || 0)), 0);
+        const totalPaid = booking.depositPaid + paidConsumptions;
+        const totalPending = Math.max(0, totalGeneral - totalPaid);
+
         const ticketHtml = `
             <html>
             <head>
@@ -2363,16 +2377,16 @@ const BookingsPage = () => {
                 
                 <div class="flex" style="font-size: 13px;">
                     <span>TOTAL:</span>
-                    <span class="bold">$${(booking.price + bookingConsumptions.reduce((sum, c) => sum + c.totalPrice, 0)).toLocaleString('es-AR')}</span>
+                    <span class="bold">$${totalGeneral.toLocaleString('es-AR')}</span>
                 </div>
                 <div class="flex">
                     <span>PAGADO:</span>
-                    <span>-$${booking.depositPaid.toLocaleString('es-AR')}</span>
+                    <span>-$${totalPaid.toLocaleString('es-AR')}</span>
                 </div>
                 
                 <div class="flex bold" style="font-size: 16px; margin-top: 5px;">
                     <span>PENDIENTE:</span>
-                    <span>$${Math.max(0, (booking.price + bookingConsumptions.reduce((sum, c) => sum + c.totalPrice, 0)) - booking.depositPaid).toLocaleString('es-AR')}</span>
+                    <span>$${totalPending.toLocaleString('es-AR')}</span>
                 </div>
 
                 <div class="line"></div>
@@ -4036,7 +4050,7 @@ const BookingsPage = () => {
                                                                     : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
                                                             >
                                                                 {includePreviousDebt ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                                                                {includePreviousDebt ? 'Quitar de este Pago' : 'Cobrar Saldo Pendiente'}
+                                                                {isWaitingMp ? 'Enviando a Terminal...' : (includePreviousDebt ? 'Quitar de este Pago' : 'Cobrar Saldo Pendiente')}
                                                             </button>
                                                         </div>
                                                     )}
