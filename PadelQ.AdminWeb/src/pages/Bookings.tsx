@@ -282,6 +282,9 @@ const BookingsPage = () => {
     const [mpTerminals, setMpTerminals] = useState<PointTerminal[]>([]);
     const [selectedMpTerminal, setSelectedMpTerminal] = useState<number | null>(null);
     const [isWaitingMp, setIsWaitingMp] = useState(false);
+    const [isMpQrModalOpen, setIsMpQrModalOpen] = useState(false);
+    const [mpQrData, setMpQrData] = useState('');
+    const mpQrPollingTimerRef = useRef<any>(null);
     const [firstMethodAmount, setFirstMethodAmount] = useState<number>(0);
     const [bookingConsumptions, setBookingConsumptions] = useState<any[]>([]);
     const [relatedBookings, setRelatedBookings] = useState<any[]>([]);
@@ -1733,8 +1736,40 @@ const BookingsPage = () => {
         setSelectedGlobalFractions([0]);
     };
 
+    const startMpQrPolling = (bookingId: string, isSpace: boolean) => {
+        if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+        
+        const intervalId = setInterval(async () => {
+            try {
+                const url = isSpace ? `/api/spacebookings/${bookingId}` : `/api/bookings/${bookingId}`;
+                const res = await api.get(url, config);
+                const updatedBooking = res.data;
+
+                if (updatedBooking.status === 4 || updatedBooking.Status === 4) {
+                    clearInterval(intervalId);
+                    mpQrPollingTimerRef.current = null;
+                    setIsMpQrModalOpen(false);
+                    
+                    alert("¡Pago aprobado por Mercado Pago!");
+                    
+                    if (isSpace) setSelectedSpaceBooking(updatedBooking);
+                    else setSelectedBooking(updatedBooking);
+                    await fetchBookingTransactions(bookingId, isSpace);
+                    fetchData();
+                }
+            } catch (err) {
+                console.error("Error polling payment status", err);
+            }
+        }, 3000);
+
+        mpQrPollingTimerRef.current = intervalId;
+    };
+
     useEffect(() => {
         getPointTerminals().then(setMpTerminals).catch(console.error);
+        return () => {
+            if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+        };
     }, []);
 
     const handleConfirmPayment = async () => {
@@ -1867,6 +1902,38 @@ const BookingsPage = () => {
 
             const method = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
             const method2 = isMixedPayment ? paymentMethods.find(m => m.id.toString() === secondPaymentMethod) : null;
+
+            const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP");
+            if (isMp) {
+                if (!selectedMpTerminal) {
+                    alert("Por favor, seleccione una terminal Mercado Pago.");
+                    setLoading(false);
+                    return;
+                }
+                try {
+                    const intentRes = await createMercadoPagoIntent({
+                        terminalId: selectedMpTerminal,
+                        amount: currentTransactionTotal,
+                        description: `Pago Reserva PadelQ - ${booking.id.substring(0, 8)}`,
+                        referenceId: isSpace ? `S-${booking.id}` : `B-${booking.id}`
+                    });
+
+                    const qrData = intentRes.Result || intentRes.result || "";
+                    if (qrData) {
+                        setMpQrData(qrData);
+                        setIsMpQrModalOpen(true);
+                        startMpQrPolling(booking.id, isSpace);
+                    } else {
+                        alert("Se envió el cobro a la terminal física Mercado Pago.");
+                    }
+                } catch (error: any) {
+                    console.error("Error al crear intent de Mercado Pago", error);
+                    alert("Error al conectar con Mercado Pago: " + (error.response?.data?.Message || error.message || error));
+                } finally {
+                    setLoading(false);
+                }
+                return;
+            }
 
             if (isMixedPayment && (!method2 || firstMethodAmount <= 0 || firstMethodAmount >= currentTransactionTotal)) {
                 alert("Por favor configure correctamente el pago mixto (monto y segundo medio de pago)");
@@ -4151,6 +4218,30 @@ const BookingsPage = () => {
                                                     </div>
                                                 )}
 
+                                                {/* Selector de Terminal MP */}
+                                                {(() => {
+                                                    const selectedMethodObj = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
+                                                    const isMp = selectedMethodObj?.name?.toUpperCase().includes("MERCADO PAGO") || selectedMethodObj?.name?.toUpperCase().includes("MP");
+                                                    if (isMp) {
+                                                        return (
+                                                            <div className="mt-3 p-3 bg-zinc-50 border border-zinc-100 rounded-2xl animate-in fade-in slide-in-from-top-1">
+                                                                <label className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1.5 block">Seleccione Terminal QR / Point</label>
+                                                                <select
+                                                                    className="w-full bg-white border border-zinc-200 rounded-xl p-2 text-[10px] font-black uppercase text-zinc-800 outline-none focus:ring-2 focus:ring-black/5"
+                                                                    value={selectedMpTerminal || ''}
+                                                                    onChange={(e) => setSelectedMpTerminal(e.target.value ? Number(e.target.value) : null)}
+                                                                >
+                                                                    <option value="">-- SELECCIONAR --</option>
+                                                                    {mpTerminals.map(t => (
+                                                                        <option key={t.id} value={t.id}>{t.name} ({t.externalPosId})</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+
                                                 <div className="mt-auto pt-6 flex flex-col gap-3">
                                                     <div className="flex gap-3">
                                                     {isAdmin && (selectedBooking || selectedSpaceBooking)!.status !== 4 && (
@@ -4903,6 +4994,104 @@ const BookingsPage = () => {
                     </div>
                 </div>
             )}
+
+            {/* MODAL DE PAGO QR MERCADO PAGO */}
+            {isMpQrModalOpen && (
+                <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-[130] p-6 font-outfit animate-in fade-in duration-300">
+                    <div className="bg-zinc-950 text-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300 border border-zinc-800/80 flex flex-col relative">
+                        {/* Glowing Background Accent */}
+                        <div className="absolute -top-40 -left-40 w-80 h-80 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+                        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+                        {/* Cabecera */}
+                        <div className="p-8 pb-4 relative flex flex-col items-center text-center z-10">
+                            <button 
+                                onClick={() => {
+                                    if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+                                    mpQrPollingTimerRef.current = null;
+                                    setIsMpQrModalOpen(false);
+                                }} 
+                                className="absolute right-6 top-6 p-2 hover:bg-white/5 rounded-xl text-zinc-400 hover:text-white transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                            <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center mb-4 relative animate-pulse">
+                                <QrCode className="w-6 h-6 text-emerald-400" />
+                            </div>
+                            <h3 className="text-xl font-black italic uppercase tracking-tight mb-1 text-zinc-100">Pago QR Mercado Pago</h3>
+                            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Escanee el código QR desde la App de Mercado Pago para pagar</p>
+                        </div>
+
+                        {/* Contenido Principal */}
+                        <div className="p-8 pt-4 flex flex-col items-center z-10">
+                            {/* QR Code Container */}
+                            <div className="bg-white p-6 rounded-[32px] shadow-inner border border-zinc-800 flex items-center justify-center relative group">
+                                <img 
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mpQrData)}`} 
+                                    alt="Mercado Pago QR" 
+                                    className="w-48 h-48 rounded-lg"
+                                />
+                            </div>
+
+                            {/* Status Loader */}
+                            <div className="mt-6 flex flex-col items-center gap-2.5">
+                                <div className="flex items-center gap-2 text-zinc-400 text-[10px] font-black uppercase tracking-wider bg-zinc-900 border border-zinc-800 px-4 py-1.5 rounded-full">
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                                    <span>Esperando Confirmación...</span>
+                                </div>
+                                <p className="text-[10px] text-zinc-500 font-medium max-w-[250px] text-center">
+                                    Una vez completado el pago en el celular, el sistema se actualizará automáticamente.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Acciones */}
+                        <div className="p-8 bg-zinc-900/60 border-t border-zinc-800/60 flex gap-4 shrink-0 z-10">
+                            <button
+                                onClick={() => {
+                                    if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+                                    mpQrPollingTimerRef.current = null;
+                                    setIsMpQrModalOpen(false);
+                                }}
+                                className="flex-1 py-4 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-[20px] font-black uppercase text-[10px] tracking-widest hover:bg-zinc-800/80 active:scale-95 transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    const booking = selectedBooking || selectedSpaceBooking;
+                                    if (booking) {
+                                        const isSpace = !!selectedSpaceBooking;
+                                        const url = isSpace ? `/api/spacebookings/${booking.id}` : `/api/bookings/${booking.id}`;
+                                        try {
+                                            const res = await api.get(url, config);
+                                            const updatedBooking = res.data;
+                                            if (updatedBooking.status === 4 || updatedBooking.Status === 4) {
+                                                if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+                                                mpQrPollingTimerRef.current = null;
+                                                setIsMpQrModalOpen(false);
+                                                alert("¡Pago aprobado por Mercado Pago!");
+                                                if (isSpace) setSelectedSpaceBooking(updatedBooking);
+                                                else setSelectedBooking(updatedBooking);
+                                                await fetchBookingTransactions(booking.id, isSpace);
+                                                fetchData();
+                                            } else {
+                                                alert("Aún no se ha registrado el pago. Por favor complete el proceso.");
+                                            }
+                                        } catch (err) {
+                                            console.error("Error checking payment status manually", err);
+                                        }
+                                    }
+                                }}
+                                className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[20px] font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+                            >
+                                Verificar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Multi-Court Suggestion Modal */}
             {multiCourtSuggestion?.isOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-[120] p-6">

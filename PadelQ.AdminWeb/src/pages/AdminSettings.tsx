@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X } from 'lucide-react';
+import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X, Link, Unlink, QrCode } from 'lucide-react';
 import Header from '../components/Header';
 import { UPDATE_HISTORY, SYSTEM_VERSION } from '../constants/versions';
 import PointTerminals from './PointTerminals';
@@ -33,6 +33,8 @@ const AdminSettings = () => {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isWiping, setIsWiping] = useState(false);
+  const [mpStatus, setMpStatus] = useState<{ isConnected: boolean, sellerId: string | null } | null>(null);
+  const [connectingMp, setConnectingMp] = useState(false);
 
   const fetchSettings = async () => {
     try {
@@ -54,6 +56,48 @@ const AdminSettings = () => {
     }
   };
 
+  const fetchMpStatus = async () => {
+    try {
+      const res = await api.get('/api/mercadopago/status', getAuthConfig());
+      setMpStatus(res.data);
+    } catch (err) {
+      console.error("Error fetching Mercado Pago status", err);
+    }
+  };
+
+  const handleConnectMp = async () => {
+    try {
+      setConnectingMp(true);
+      const currentUrl = window.location.origin + window.location.pathname;
+      const res = await api.get(`/api/mercadopago/oauth-url?frontendRedirectUri=${encodeURIComponent(currentUrl)}`, getAuthConfig());
+      if (res.data && res.data.url) {
+        window.location.href = res.data.url;
+      } else {
+        alert("No se pudo obtener la URL de conexión de Mercado Pago.");
+      }
+    } catch (err) {
+      console.error("Error al conectar con Mercado Pago", err);
+      alert("Error al conectar con Mercado Pago.");
+    } finally {
+      setConnectingMp(false);
+    }
+  };
+
+  const handleDisconnectMp = async () => {
+    if (!window.confirm("¿Está seguro que desea desconectar la cuenta de Mercado Pago? Esto inhabilitará los cobros con QR temporalmente.")) return;
+    try {
+      setConnectingMp(true);
+      await api.post('/api/mercadopago/disconnect', {}, getAuthConfig());
+      alert("Cuenta de Mercado Pago desconectada exitosamente.");
+      fetchMpStatus();
+    } catch (err) {
+      console.error("Error al desconectar Mercado Pago", err);
+      alert("Error al desconectar la cuenta.");
+    } finally {
+      setConnectingMp(false);
+    }
+  };
+
   useEffect(() => {
     const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]').map((r: string) => r.toLowerCase());
     if (!roles.includes('admin')) {
@@ -63,6 +107,21 @@ const AdminSettings = () => {
     setIsAdmin(true);
     fetchSettings();
     fetchUsers();
+
+    // Manejar el retorno de la vinculación de Mercado Pago
+    const urlParams = new URLSearchParams(window.location.search);
+    const mpConnect = urlParams.get('mp_connect');
+    const mpError = urlParams.get('error');
+
+    if (mpConnect === 'success') {
+      alert('¡Cuenta de Mercado Pago vinculada correctamente!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (mpConnect === 'error') {
+      alert(`Error al vincular con Mercado Pago: ${mpError || 'Desconocido'}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    fetchMpStatus();
   }, []);
 
   useEffect(() => {
@@ -441,6 +500,50 @@ const AdminSettings = () => {
                   Auto-Ajustar Stocks Mínimos
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-[#009EE3]/10 text-[#009EE3] rounded-2xl">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Conexión con Mercado Pago</h2>
+                <p className="text-sm text-slate-500">Vincula tu cuenta para recibir pagos automáticos mediante código QR</p>
+              </div>
+            </div>
+            
+            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                {mpStatus?.isConnected ? (
+                  <>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-2">
+                      Conectado
+                    </span>
+                    <p className="text-sm text-slate-700 font-semibold">ID de Vendedor: <span className="font-mono">{mpStatus.sellerId}</span></p>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-200 text-slate-700 mb-2">
+                      Desconectado
+                    </span>
+                    <p className="text-sm text-slate-500 font-medium">Vincula la cuenta oficial de Mercado Pago del club con un solo clic.</p>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={mpStatus?.isConnected ? handleDisconnectMp : handleConnectMp}
+                disabled={connectingMp}
+                className={`px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center gap-2 ${
+                  mpStatus?.isConnected 
+                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200' 
+                    : 'bg-[#009EE3] hover:bg-[#0087c2] text-white'
+                }`}
+              >
+                {mpStatus?.isConnected ? <Unlink className="w-4 h-4" /> : <Link className="w-4 h-4" />}
+                {connectingMp ? 'Procesando...' : (mpStatus?.isConnected ? 'Desconectar Cuenta' : 'Conectar Mercado Pago')}
+              </button>
             </div>
           </div>
 
