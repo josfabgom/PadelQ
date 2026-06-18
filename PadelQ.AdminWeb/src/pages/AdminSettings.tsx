@@ -547,6 +547,36 @@ const AdminSettings = () => {
             </div>
           </div>
 
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2 space-y-8">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 bg-[#009EE3]/10 text-[#009EE3] rounded-2xl">
+                <Settings className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Credenciales de Aplicación (Mercado Pago)</h2>
+                <p className="text-sm text-slate-500">Configuración avanzada para el App ID y Client Secret de tu aplicación integradora</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <SettingInput 
+                label="App ID / Client ID" 
+                value={getSettingValue('MercadoPago_ClientId', '')} 
+                onChange={(val: string) => handleChange('MercadoPago_ClientId', val)}
+                onSave={() => handleSave('MercadoPago_ClientId')}
+                icon={<QrCode className="w-4 h-4 text-[#009EE3]" />}
+                type="text"
+              />
+              <SettingInput 
+                label="Client Secret" 
+                value={getSettingValue('MercadoPago_ClientSecret', '')} 
+                onChange={(val: string) => handleChange('MercadoPago_ClientSecret', val)}
+                onSave={() => handleSave('MercadoPago_ClientSecret')}
+                icon={<Save className="w-4 h-4 text-[#009EE3]" />}
+                type="password"
+              />
+            </div>
+          </div>
+
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2">
             <PointTerminals />
           </div>
