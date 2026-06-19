@@ -182,7 +182,7 @@ const AdminSettings = () => {
       setSelectedUserForWipe(null);
       setUserSearch('');
     } catch (err: any) {
-      const errorMsg = err.response?.data?.Message || err.response?.data || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.Message || err.response?.data || err.message;
       setMessage({ text: 'Error: ' + errorMsg, type: 'error' });
       alert('Error detallado: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
     }
@@ -225,7 +225,7 @@ const AdminSettings = () => {
       if (err.response?.status === 401) {
         setAuthError('Contraseña incorrecta.');
       } else {
-        const errorMsg = err.response?.data?.Message || err.response?.data || err.message;
+        const errorMsg = err.response?.data?.message || err.response?.data?.Message || err.response?.data || err.message;
         setAuthError('Error: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
       }
     } finally {
@@ -572,7 +572,7 @@ const AdminSettings = () => {
                 onChange={(val: string) => handleChange('MercadoPago_ClientSecret', val)}
                 onSave={() => handleSave('MercadoPago_ClientSecret')}
                 icon={<Save className="w-4 h-4 text-[#009EE3]" />}
-                type="password"
+                type="text"
               />
             </div>
           </div>
@@ -684,7 +684,7 @@ const AdminSettings = () => {
                                             setFoundBookings(null);
                                         } catch (err: any) {
                                             console.error("Error resetting payment:", err);
-                                            alert("Error al resetear: " + (err.response?.data?.Message || err.message));
+                                            alert("Error al resetear: " + (err.response?.data?.message || err.response?.data?.Message || err.message));
                                         }
                                     }}
                                     className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[9px] font-black uppercase hover:bg-rose-600 hover:text-white transition-all active:scale-95"
@@ -711,7 +711,7 @@ const AdminSettings = () => {
                         alert(`¡Éxito! Actualizados: ${res.data.updated}, Creados: ${res.data.created}`);
                         window.location.reload();
                       } catch (err: any) {
-                        alert("Error al importar: " + (err.response?.data?.Message || err.message));
+                        alert("Error al importar: " + (err.response?.data?.message || err.response?.data?.Message || err.message));
                       }
                     }}
                     className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-95"

@@ -93,8 +93,147 @@ namespace PadelQ.Infrastructure.Services
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    // 1. Auto-recuperación: Buscar si ya existe una caja en Mercado Pago con el mismo nombre y asociarle el external_id
+                    try
+                    {
+                        var listRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.mercadopago.com/pos");
+                        listRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                        var listResponse = await _httpClient.SendAsync(listRequest);
+                        if (listResponse.IsSuccessStatusCode)
+                        {
+                            var listContent = await listResponse.Content.ReadAsStringAsync();
+                            using var listDoc = JsonDocument.Parse(listContent);
+                            if (listDoc.RootElement.TryGetProperty("results", out var resultsProp) && resultsProp.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var posElem in resultsProp.EnumerateArray())
+                                {
+                                    var posName = posElem.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+                                    if (string.Equals(posName, terminal.Name, StringComparison.OrdinalIgnoreCase) || 
+                                        string.Equals(posName, terminal.ExternalPosId, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var posId = posElem.GetProperty("id").GetInt64();
+                                        // Encontró una caja con el mismo nombre, le actualizamos el external_id
+                                        var updateUrl = $"https://api.mercadopago.com/pos/{posId}";
+                                        var updatePayload = new
+                                        {
+                                            name = posName,
+                                            external_id = terminal.ExternalPosId
+                                        };
+                                        var updateRequest = new HttpRequestMessage(HttpMethod.Put, updateUrl);
+                                        updateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                                        updateRequest.Content = new StringContent(JsonSerializer.Serialize(updatePayload), Encoding.UTF8, "application/json");
+                                        
+                                        var updateResponse = await _httpClient.SendAsync(updateRequest);
+                                        if (updateResponse.IsSuccessStatusCode)
+                                        {
+                                            // Reintentar la creación del QR
+                                            var retryRequest = new HttpRequestMessage(HttpMethod.Put, url);
+                                            retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                                            retryRequest.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                                            
+                                            var retryResponse = await _httpClient.SendAsync(retryRequest);
+                                            if (retryResponse.IsSuccessStatusCode)
+                                            {
+                                                var retryContent = await retryResponse.Content.ReadAsStringAsync();
+                                                try
+                                                {
+                                                    using var doc = JsonDocument.Parse(retryContent);
+                                                    if (doc.RootElement.TryGetProperty("qr_data", out var qrDataProp))
+                                                    {
+                                                        return qrDataProp.GetString() ?? "OK";
+                                                    }
+                                                }
+                                                catch { }
+                                                return "OK";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error al intentar auto-recuperar caja de Mercado Pago: {ex.Message}");
+                    }
+
+                    // 2. Si no se auto-recuperó, intenta crear el Store por defecto si no existe
+                    var storeExternalId = "padelq_store";
+                    var storeUrl = $"https://api.mercadopago.com/users/{userId}/stores";
+                    var storePayload = new
+                    {
+                        name = "Sucursal PadelQ",
+                        external_id = storeExternalId,
+                        location = new
+                        {
+                            street_number = "123",
+                            street_name = "Calle PadelQ",
+                            city_name = "CABA",
+                            state_name = "Capital Federal",
+                            latitude = -34.603722,
+                            longitude = -58.381592
+                        }
+                    };
+                    
+                    try
+                    {
+                        var storeRequest = new HttpRequestMessage(HttpMethod.Post, storeUrl);
+                        storeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                        storeRequest.Content = new StringContent(JsonSerializer.Serialize(storePayload), Encoding.UTF8, "application/json");
+                        await _httpClient.SendAsync(storeRequest);
+                    }
+                    catch { } // Ignorar errores de creación de tienda (ej. ya existe)
+                    
+                    // Intenta crear el POS
+                    var posUrl = "https://api.mercadopago.com/pos";
+                    var posPayload = new
+                    {
+                        name = terminal.Name,
+                        external_id = terminal.ExternalPosId,
+                        external_store_id = storeExternalId,
+                        fixed_amount = false
+                    };
+                    
+                    var posRequest = new HttpRequestMessage(HttpMethod.Post, posUrl);
+                    posRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                    posRequest.Content = new StringContent(JsonSerializer.Serialize(posPayload), Encoding.UTF8, "application/json");
+                    
+                    var posResponse = await _httpClient.SendAsync(posRequest);
+                    if (posResponse.IsSuccessStatusCode || posResponse.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        // Si el POS se creó con éxito (o falló con BadRequest porque ya existe), reintentamos la creación del QR
+                        var retryRequest = new HttpRequestMessage(HttpMethod.Put, url);
+                        retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                        retryRequest.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                        
+                        var retryResponse = await _httpClient.SendAsync(retryRequest);
+                        if (retryResponse.IsSuccessStatusCode)
+                        {
+                            var retryContent = await retryResponse.Content.ReadAsStringAsync();
+                            try
+                            {
+                                using var doc = JsonDocument.Parse(retryContent);
+                                if (doc.RootElement.TryGetProperty("qr_data", out var qrDataProp))
+                                {
+                                    return qrDataProp.GetString() ?? "OK";
+                                }
+                            }
+                            catch { }
+                            return "OK";
+                        }
+                        
+                        var retryError = await retryResponse.Content.ReadAsStringAsync();
+                        throw new Exception($"Error al crear la orden QR de Mercado Pago tras configurar la caja: {retryError}");
+                    }
+                    
+                    var posError = await posResponse.Content.ReadAsStringAsync();
+                    throw new Exception($"Error al configurar automáticamente la caja en Mercado Pago: {posError}");
+                }
+                
                 var error = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Error creating MP QR order: {error}");
+                throw new Exception($"Error al crear la orden QR de Mercado Pago: {error}");
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -127,6 +266,19 @@ namespace PadelQ.Infrastructure.Services
 
             var content = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<dynamic>(content);
+        }
+
+        public async Task<bool> RefundPaymentAsync(string paymentId)
+        {
+            var accessToken = await GetAccessTokenAsync();
+            var url = $"https://api.mercadopago.com/v1/payments/{paymentId}/refunds";
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.SendAsync(request);
+            return response.IsSuccessStatusCode;
         }
 
         public async Task<string> GetOAuthUrlAsync(string state, string redirectUri)

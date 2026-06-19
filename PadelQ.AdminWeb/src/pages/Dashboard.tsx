@@ -102,6 +102,15 @@ const Dashboard = () => {
       show: isAdmin
     },
     {
+      href: '/mp-audit',
+      icon: <CreditCard className="w-5 h-5" />,
+      label: 'Auditoría Mercado Pago',
+      desc: 'Conciliación de pagos con QR, revisión de comisiones en tiempo real y reembolsos.',
+      color: 'text-emerald-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-emerald-600',
+      show: isAdmin
+    },
+    {
       href: '/validate',
       icon: <QrCode className="w-5 h-5" />,
       label: 'Validar Acceso QR',

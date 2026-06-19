@@ -1903,7 +1903,7 @@ const BookingsPage = () => {
             const method = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
             const method2 = isMixedPayment ? paymentMethods.find(m => m.id.toString() === secondPaymentMethod) : null;
 
-            const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP");
+            const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
             if (isMp) {
                 if (!selectedMpTerminal) {
                     alert("Por favor, seleccione una terminal Mercado Pago.");
@@ -1928,7 +1928,7 @@ const BookingsPage = () => {
                     }
                 } catch (error: any) {
                     console.error("Error al crear intent de Mercado Pago", error);
-                    alert("Error al conectar con Mercado Pago: " + (error.response?.data?.Message || error.message || error));
+                    alert("Error al conectar con Mercado Pago: " + (error.response?.data?.message || error.response?.data?.Message || error.message || error));
                 } finally {
                     setLoading(false);
                 }
@@ -4221,7 +4221,7 @@ const BookingsPage = () => {
                                                 {/* Selector de Terminal MP */}
                                                 {(() => {
                                                     const selectedMethodObj = paymentMethods.find(m => m.id.toString() === selectedPaymentMethod);
-                                                    const isMp = selectedMethodObj?.name?.toUpperCase().includes("MERCADO PAGO") || selectedMethodObj?.name?.toUpperCase().includes("MP");
+                                                    const isMp = selectedMethodObj?.name?.toUpperCase().includes("MERCADO PAGO") || selectedMethodObj?.name?.toUpperCase().includes("MP") || selectedMethodObj?.name?.toUpperCase().includes("QR");
                                                     if (isMp) {
                                                         return (
                                                             <div className="mt-3 p-3 bg-zinc-50 border border-zinc-100 rounded-2xl animate-in fade-in slide-in-from-top-1">

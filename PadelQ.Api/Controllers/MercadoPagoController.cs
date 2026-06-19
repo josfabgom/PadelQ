@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
@@ -11,7 +12,7 @@ using System.Threading.Tasks;
 namespace PadelQ.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/mercadopago")]
     public class MercadoPagoController : ControllerBase
     {
         private readonly IMercadoPagoService _mercadoPagoService;
@@ -241,7 +242,15 @@ namespace PadelQ.Api.Controllers
             try
             {
                 // El callback oficial que registrará el token en el backend
-                var backendCallbackUri = Url.Action("OAuthCallback", "MercadoPago", null, Request.Scheme);
+                var scheme = Request.Headers["X-Forwarded-Proto"].ToString();
+                if (string.IsNullOrEmpty(scheme)) scheme = Request.Scheme;
+                
+                // Forzar HTTPS en producción
+                if (Request.Host.Host.Contains("blackclubdepadel.com.ar"))
+                {
+                    scheme = "https";
+                }
+                var backendCallbackUri = Url.Action("OAuthCallback", "MercadoPago", null, scheme);
                 
                 // state almacena la URL final de frontend a la que queremos volver
                 var url = await _mercadoPagoService.GetOAuthUrlAsync(frontendRedirectUri, backendCallbackUri);
@@ -258,7 +267,15 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
-                var backendCallbackUri = Url.Action("OAuthCallback", "MercadoPago", null, Request.Scheme);
+                var scheme = Request.Headers["X-Forwarded-Proto"].ToString();
+                if (string.IsNullOrEmpty(scheme)) scheme = Request.Scheme;
+
+                // Forzar HTTPS en producción
+                if (Request.Host.Host.Contains("blackclubdepadel.com.ar"))
+                {
+                    scheme = "https";
+                }
+                var backendCallbackUri = Url.Action("OAuthCallback", "MercadoPago", null, scheme);
                 await _mercadoPagoService.ExchangeCodeForTokenAsync(code, backendCallbackUri);
                 
                 // Redirigir de vuelta al frontend con indicador de éxito
@@ -315,6 +332,89 @@ namespace PadelQ.Api.Controllers
 
             await _context.SaveChangesAsync();
             return Ok(new { Message = "Mercado Pago desconectado con éxito." });
+        }
+
+        [HttpGet("audit-transactions")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAuditTransactions([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            try
+            {
+                var start = startDate ?? DateTime.UtcNow.Date.AddDays(-30);
+                var end = endDate ?? DateTime.UtcNow;
+
+                // Buscar medios de pago relacionados a Mercado Pago o QR
+                var mpMethodIds = await _context.PaymentMethods
+                    .Where(m => m.Name.Contains("Mercado Pago") || m.Name.Contains("QR") || m.Name.Contains("MP"))
+                    .Select(m => m.Id)
+                    .ToListAsync();
+
+                var query = _context.Transactions
+                    .Include(t => t.User)
+                    .Include(t => t.PaymentMethod)
+                    .Where(t => t.Date >= start && t.Date <= end);
+
+                // Filtrar por ID de medio de pago o descripción
+                query = query.Where(t => (t.PaymentMethodId.HasValue && mpMethodIds.Contains(t.PaymentMethodId.Value))
+                                         || (t.Description != null && t.Description.Contains("Mercado Pago"))
+                                         || (t.Description != null && t.Description.Contains("QR")));
+
+                var list = await query
+                    .OrderByDescending(t => t.Date)
+                    .Select(t => new {
+                        t.Id,
+                        t.Amount,
+                        t.Date,
+                        t.Description,
+                        t.ProcessedBy,
+                        UserFullName = t.User != null ? t.User.FullName : "Consumidor Final",
+                        t.BookingId,
+                        t.SpaceBookingId,
+                        PaymentMethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Mercado Pago"
+                    })
+                    .ToListAsync();
+
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("payment-details/{paymentId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetPaymentDetails(string paymentId)
+        {
+            try
+            {
+                var payment = await _mercadoPagoService.GetPaymentAsync(paymentId);
+                if (payment == null) return NotFound("Payment not found in Mercado Pago");
+                return Ok(payment);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpPost("refund/{paymentId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RefundPayment(string paymentId)
+        {
+            try
+            {
+                var success = await _mercadoPagoService.RefundPaymentAsync(paymentId);
+                if (success)
+                {
+                    return Ok(new { Message = "Pago reembolsado con éxito en Mercado Pago." });
+                }
+                return BadRequest(new { Message = "No se pudo procesar el reembolso en Mercado Pago." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
     }
 

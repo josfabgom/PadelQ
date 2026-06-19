@@ -18,6 +18,7 @@ import ManageSpacesPage from './pages/ManageSpaces';
 import ProductsPage from './pages/Products';
 import CashManagementPage from './pages/CashManagement';
 import PurchaseReceptionPage from './pages/PurchaseReception';
+import MercadoPagoAuditPage from './pages/MercadoPagoAudit';
 
 
 function App() {
@@ -94,6 +95,10 @@ function App() {
         <Route 
           path="/purchase-reception" 
           element={isAuthenticated ? <PurchaseReceptionPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/mp-audit" 
+          element={isAuthenticated ? <MercadoPagoAuditPage /> : <Navigate to="/login" />} 
         />
 
         <Route path="/" element={<Navigate to="/dashboard" />} />

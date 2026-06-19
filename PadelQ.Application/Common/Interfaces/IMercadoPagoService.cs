@@ -9,5 +9,6 @@ namespace PadelQ.Application.Common.Interfaces
         Task<string> GetOAuthUrlAsync(string state, string redirectUri);
         Task<bool> ExchangeCodeForTokenAsync(string code, string redirectUri);
         Task<bool> RefreshTokenAsync();
+        Task<bool> RefundPaymentAsync(string paymentId);
     }
 }
