@@ -50,7 +50,7 @@ namespace PadelQ.Api.Controllers
                     var paymentId = id ?? Request.Query["data.id"].ToString();
                     if (!string.IsNullOrEmpty(paymentId))
                     {
-                        var payment = await _mercadoPagoService.GetPaymentAsync(paymentId);
+                        object payment = await _mercadoPagoService.GetPaymentAsync(paymentId);
                         if (payment != null)
                         {
                             JsonElement paymentJson = (JsonElement)payment;
@@ -154,6 +154,12 @@ namespace PadelQ.Api.Controllers
                             }
                         }
 
+                        var userId = booking.UserId;
+                        if (string.IsNullOrEmpty(userId))
+                        {
+                            userId = await GetOrCreateParticularUserIdAsync();
+                        }
+
                         // Registrar la transacción de pago total
                         var transaction = new Transaction
                         {
@@ -161,7 +167,7 @@ namespace PadelQ.Api.Controllers
                             Type = TransactionType.Payment,
                             Date = DateTime.UtcNow,
                             Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva {bookingId}",
-                            UserId = booking.UserId ?? "System",
+                            UserId = userId,
                             PaymentMethodId = mpMethod?.Id,
                             BookingId = bookingId
                         };
@@ -218,6 +224,12 @@ namespace PadelQ.Api.Controllers
                             }
                         }
 
+                        var userId = spaceBooking.UserId;
+                        if (string.IsNullOrEmpty(userId))
+                        {
+                            userId = await GetOrCreateParticularUserIdAsync();
+                        }
+
                         // Registrar la transacción de pago total
                         var transaction = new Transaction
                         {
@@ -225,7 +237,7 @@ namespace PadelQ.Api.Controllers
                             Type = TransactionType.Payment,
                             Date = DateTime.UtcNow,
                             Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva Espacio {bookingId}",
-                            UserId = spaceBooking.UserId ?? "System",
+                            UserId = userId,
                             PaymentMethodId = mpMethod?.Id,
                             SpaceBookingId = bookingId
                         };
@@ -388,7 +400,7 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
-                var payment = await _mercadoPagoService.GetPaymentAsync(paymentId);
+                object payment = await _mercadoPagoService.GetPaymentAsync(paymentId);
                 if (payment == null) return NotFound("Payment not found in Mercado Pago");
                 return Ok(payment);
             }
@@ -415,6 +427,25 @@ namespace PadelQ.Api.Controllers
             {
                 return BadRequest(new { Message = ex.Message });
             }
+        }
+
+        private async Task<string> GetOrCreateParticularUserIdAsync()
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "particular@padelq.com");
+            if (user == null)
+            {
+                user = new ApplicationUser
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserName = "particular@padelq.com",
+                    Email = "particular@padelq.com",
+                    FullName = "Consumidor Final (Particular)",
+                    IsActive = true
+                };
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+            }
+            return user.Id;
         }
     }
 
