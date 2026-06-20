@@ -237,6 +237,17 @@ namespace PadelQ.Api.Controllers
                 return;
             }
 
+            // Buscar el usuario por email si processedBy parece un correo electrónico.
+            // Si lo encuentra, usamos el UserName del usuario para que coincida con lo esperado por CashClosures (ej. "Admin").
+            if (!string.IsNullOrEmpty(processedBy) && processedBy.Contains("@"))
+            {
+                var userObj = await _context.Users.FirstOrDefaultAsync(u => u.Email == processedBy);
+                if (userObj != null)
+                {
+                    processedBy = userObj.UserName ?? processedBy;
+                }
+            }
+
             // Buscar el medio de pago "Pago con QR" o "Mercado Pago"
             var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => m.Name.Contains("QR") || m.Name.Contains("Mercado Pago"))
                            ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => m.IsActive);
