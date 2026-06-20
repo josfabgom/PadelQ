@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
+using PadelQ.Domain;
 using PadelQ.Infrastructure.Persistence;
 using System;
 using System.Linq;
@@ -72,14 +73,23 @@ namespace PadelQ.Api.Controllers
                                     }
                                 }
 
+                                string actualReference = externalReference;
+                                string processedBy = "Sistema";
+                                if (externalReference.Contains(";"))
+                                {
+                                    var parts = externalReference.Split(';');
+                                    actualReference = parts[0];
+                                    processedBy = parts[1];
+                                }
+
                                 if (amount > 0)
                                 {
-                                    await ProcessApprovedPaymentAsync(externalReference, paymentId, amount);
+                                    await ProcessApprovedPaymentAsync(actualReference, paymentId, amount, processedBy);
                                 }
                                 else
                                 {
                                     // Fallback just in case
-                                    await ProcessApprovedPaymentAsync(externalReference, paymentId, 0);
+                                    await ProcessApprovedPaymentAsync(actualReference, paymentId, 0, processedBy);
                                 }
                             }
                         }
@@ -94,7 +104,7 @@ namespace PadelQ.Api.Controllers
             }
         }
 
-        private async Task ProcessApprovedPaymentAsync(string referenceId, string mpPaymentId, decimal amount)
+        private async Task ProcessApprovedPaymentAsync(string referenceId, string mpPaymentId, decimal amount, string processedBy = "Sistema")
         {
             // Evitar procesamiento duplicado
             if (await _context.Transactions.AnyAsync(t => t.Description != null && t.Description.Contains(mpPaymentId)))
@@ -165,11 +175,12 @@ namespace PadelQ.Api.Controllers
                         {
                             Amount = amount,
                             Type = TransactionType.Payment,
-                            Date = DateTime.UtcNow,
+                            Date = TimeZoneHelper.GetArgNow(),
                             Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva {bookingId}",
                             UserId = userId,
                             PaymentMethodId = mpMethod?.Id,
-                            BookingId = bookingId
+                            BookingId = bookingId,
+                            ProcessedBy = processedBy
                         };
                         _context.Transactions.Add(transaction);
                         await _context.SaveChangesAsync();
@@ -235,11 +246,12 @@ namespace PadelQ.Api.Controllers
                         {
                             Amount = amount,
                             Type = TransactionType.Payment,
-                            Date = DateTime.UtcNow,
+                            Date = TimeZoneHelper.GetArgNow(),
                             Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva Espacio {bookingId}",
                             UserId = userId,
                             PaymentMethodId = mpMethod?.Id,
-                            SpaceBookingId = bookingId
+                            SpaceBookingId = bookingId,
+                            ProcessedBy = processedBy
                         };
                         _context.Transactions.Add(transaction);
                         await _context.SaveChangesAsync();
@@ -352,8 +364,8 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
-                var start = startDate ?? DateTime.UtcNow.Date.AddDays(-30);
-                var end = endDate ?? DateTime.UtcNow;
+                var start = startDate ?? TimeZoneHelper.GetArgNow().Date.AddDays(-30);
+                var end = endDate ?? TimeZoneHelper.GetArgNow();
 
                 // Buscar medios de pago relacionados a Mercado Pago o QR
                 var mpMethodIds = await _context.PaymentMethods

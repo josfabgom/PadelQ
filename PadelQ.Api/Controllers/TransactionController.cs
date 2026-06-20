@@ -8,6 +8,7 @@ using PadelQ.Infrastructure.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 
@@ -21,11 +22,13 @@ namespace PadelQ.Api.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IBillingService _billingService;
+        private readonly IMercadoPagoService _mercadoPagoService;
 
-        public TransactionController(ApplicationDbContext context, IBillingService billingService)
+        public TransactionController(ApplicationDbContext context, IBillingService billingService, IMercadoPagoService mercadoPagoService)
         {
             _context = context;
             _billingService = billingService;
+            _mercadoPagoService = mercadoPagoService;
         }
 
         [HttpGet("user/{userId}")]
@@ -367,6 +370,33 @@ namespace PadelQ.Api.Controllers
             var transaction = await _context.Transactions.FindAsync(id);
             if (transaction == null) return NotFound("Transacción no encontrada");
 
+            // Validar restricción de eliminación de pagos QR de Mercado Pago
+            var mpPaymentId = ExtractMercadoPagoPaymentId(transaction.Description);
+            if (!string.IsNullOrEmpty(mpPaymentId))
+            {
+                try
+                {
+                    object payment = await _mercadoPagoService.GetPaymentAsync(mpPaymentId);
+                    if (payment != null)
+                    {
+                        JsonElement paymentJson = (JsonElement)payment;
+                        if (paymentJson.TryGetProperty("status", out var statusProp))
+                        {
+                            string status = statusProp.GetString() ?? "";
+                            if (status != "refunded")
+                            {
+                                return BadRequest($"No se puede eliminar esta transacción porque corresponde a un cobro QR activo de Mercado Pago (Estado: '{status}'). Debe reembolsar/devolver el dinero al cliente en Mercado Pago antes de poder eliminar el registro del sistema.");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Prevenir eliminación por seguridad si la llamada falla
+                    return BadRequest($"No se pudo verificar el estado del cobro en Mercado Pago: {ex.Message}. Por seguridad, se ha bloqueado la eliminación de la transacción.");
+                }
+            }
+
             if (transaction.Type == TransactionType.Payment)
             {
                 if (transaction.BookingId.HasValue)
@@ -616,5 +646,15 @@ namespace PadelQ.Api.Controllers
 
         private DateTime GetArgNow() => TimeZoneHelper.GetArgNow();
 
+        private string? ExtractMercadoPagoPaymentId(string? description)
+        {
+            if (string.IsNullOrEmpty(description)) return null;
+            int idxStart = description.IndexOf("(ID: ");
+            if (idxStart < 0) return null;
+            idxStart += 5;
+            int idxEnd = description.IndexOf(")", idxStart);
+            if (idxEnd < 0) return null;
+            return description.Substring(idxStart, idxEnd - idxStart);
+        }
     }
 }

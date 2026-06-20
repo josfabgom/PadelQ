@@ -1911,11 +1911,12 @@ const BookingsPage = () => {
                     return;
                 }
                 try {
+                    const activeUserEmail = localStorage.getItem('padelq_user_email') || 'Sistema';
                     const intentRes = await createMercadoPagoIntent({
                         terminalId: selectedMpTerminal,
                         amount: currentTransactionTotal,
                         description: `Pago Reserva PadelQ - ${booking.id.substring(0, 8)}`,
-                        referenceId: isSpace ? `S-${booking.id}` : `B-${booking.id}`
+                        referenceId: `${isSpace ? 'S-' : 'B-'}${booking.id};${activeUserEmail}`
                     });
 
                     const qrData = intentRes.Result || intentRes.result || "";
