@@ -285,6 +285,7 @@ const BookingsPage = () => {
     const [isMpQrModalOpen, setIsMpQrModalOpen] = useState(false);
     const [mpQrData, setMpQrData] = useState('');
     const mpQrPollingTimerRef = useRef<any>(null);
+    const [mpInitialDepositPaid, setMpInitialDepositPaid] = useState<number>(0);
     const [firstMethodAmount, setFirstMethodAmount] = useState<number>(0);
     const [bookingConsumptions, setBookingConsumptions] = useState<any[]>([]);
     const [relatedBookings, setRelatedBookings] = useState<any[]>([]);
@@ -1736,7 +1737,7 @@ const BookingsPage = () => {
         setSelectedGlobalFractions([0]);
     };
 
-    const startMpQrPolling = (bookingId: string, isSpace: boolean) => {
+    const startMpQrPolling = (bookingId: string, isSpace: boolean, initialDeposit: number) => {
         if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
         
         const intervalId = setInterval(async () => {
@@ -1745,7 +1746,10 @@ const BookingsPage = () => {
                 const res = await api.get(url, config);
                 const updatedBooking = res.data;
 
-                if (updatedBooking.status === 4 || updatedBooking.Status === 4) {
+                const currentDeposit = updatedBooking.depositPaid || 0;
+                const isPaid = updatedBooking.status === 4 || updatedBooking.Status === 4;
+
+                if (isPaid || currentDeposit > initialDeposit) {
                     clearInterval(intervalId);
                     mpQrPollingTimerRef.current = null;
                     setIsMpQrModalOpen(false);
@@ -1921,9 +1925,11 @@ const BookingsPage = () => {
 
                     const qrData = intentRes.Result || intentRes.result || "";
                     if (qrData) {
+                        const initialDeposit = booking.depositPaid || 0;
+                        setMpInitialDepositPaid(initialDeposit);
                         setMpQrData(qrData);
                         setIsMpQrModalOpen(true);
-                        startMpQrPolling(booking.id, isSpace);
+                        startMpQrPolling(booking.id, isSpace, initialDeposit);
                     } else {
                         alert("Se envió el cobro a la terminal física Mercado Pago.");
                     }
@@ -5067,7 +5073,10 @@ const BookingsPage = () => {
                                         try {
                                             const res = await api.get(url, config);
                                             const updatedBooking = res.data;
-                                            if (updatedBooking.status === 4 || updatedBooking.Status === 4) {
+                                            const currentDeposit = updatedBooking.depositPaid || 0;
+                                            const isPaid = updatedBooking.status === 4 || updatedBooking.Status === 4;
+
+                                            if (isPaid || currentDeposit > mpInitialDepositPaid) {
                                                 if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
                                                 mpQrPollingTimerRef.current = null;
                                                 setIsMpQrModalOpen(false);
