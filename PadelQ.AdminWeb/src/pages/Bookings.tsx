@@ -5102,6 +5102,13 @@ const BookingsPage = () => {
                                     const booking = selectedBooking || selectedSpaceBooking;
                                     if (booking) {
                                         const isSpace = !!selectedSpaceBooking;
+                                        try {
+                                            // Consultar activamente a Mercado Pago para procesar cobros retrasados/acumulados
+                                            await api.post(`/api/mercadopago/verify/${booking.id}?isSpace=${isSpace}`, {}, config);
+                                        } catch (verifyErr) {
+                                            console.error("Error calling active verification endpoint", verifyErr);
+                                        }
+
                                         const url = isSpace ? `/api/spacebookings/${booking.id}` : `/api/bookings/${booking.id}`;
                                         try {
                                             const res = await api.get(url, config);

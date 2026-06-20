@@ -8,6 +8,8 @@ using PadelQ.Infrastructure.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -19,11 +21,13 @@ namespace PadelQ.Api.Controllers
     {
         private readonly IMercadoPagoService _mercadoPagoService;
         private readonly ApplicationDbContext _context;
+        private readonly HttpClient _httpClient;
 
-        public MercadoPagoController(IMercadoPagoService mercadoPagoService, ApplicationDbContext context)
+        public MercadoPagoController(IMercadoPagoService mercadoPagoService, ApplicationDbContext context, HttpClient httpClient)
         {
             _mercadoPagoService = mercadoPagoService;
             _context = context;
+            _httpClient = httpClient;
         }
 
         [HttpPost("intent")]
@@ -141,6 +145,87 @@ namespace PadelQ.Api.Controllers
             {
                 Console.WriteLine($"Webhook error: {ex.Message}");
                 return Ok(); // Acknowledge the webhook to avoid MP retrying unnecessarily if it's our logic error
+            }
+        }
+
+        [HttpPost("verify/{bookingId}")]
+        public async Task<IActionResult> VerifyBookingPayment(Guid bookingId, [FromQuery] bool isSpace = false)
+        {
+            try
+            {
+                var tokenSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "MercadoPago_AccessToken");
+                var accessToken = tokenSetting?.Value;
+                if (string.IsNullOrEmpty(accessToken)) return BadRequest("Mercado Pago Access Token not configured.");
+
+                var url = "https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&limit=30";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errContent = await response.Content.ReadAsStringAsync();
+                    return BadRequest($"Error searching payments in Mercado Pago: {errContent}");
+                }
+
+                var content = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("results", out var resultsProp) && resultsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var paymentElem in resultsProp.EnumerateArray())
+                    {
+                        var extRef = paymentElem.TryGetProperty("external_reference", out var extRefProp) ? extRefProp.GetString() : null;
+                        var status = paymentElem.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
+                        
+                        // Extract payment ID safely
+                        string paymentId = "";
+                        if (paymentElem.TryGetProperty("id", out var idProp))
+                        {
+                            if (idProp.ValueKind == JsonValueKind.Number)
+                            {
+                                paymentId = idProp.GetRawText();
+                            }
+                            else if (idProp.ValueKind == JsonValueKind.String)
+                            {
+                                paymentId = idProp.GetString() ?? "";
+                            }
+                        }
+
+                        if (extRef != null && extRef.Contains(bookingId.ToString()) && status == "approved" && !string.IsNullOrEmpty(paymentId))
+                        {
+                            decimal amount = 0;
+                            if (paymentElem.TryGetProperty("transaction_amount", out var amountElem))
+                            {
+                                if (amountElem.ValueKind == JsonValueKind.Number)
+                                {
+                                    amount = amountElem.GetDecimal();
+                                }
+                                else if (amountElem.ValueKind == JsonValueKind.String && decimal.TryParse(amountElem.GetString(), out var parsedAmount))
+                                {
+                                    amount = parsedAmount;
+                                }
+                            }
+
+                            string actualReference = extRef;
+                            string processedBy = "Sistema";
+                            if (extRef.Contains(";"))
+                            {
+                                var parts = extRef.Split(';');
+                                actualReference = parts[0];
+                                processedBy = parts[1];
+                            }
+
+                            await ProcessApprovedPaymentAsync(actualReference, paymentId, amount, processedBy);
+                            return Ok(new { Success = true, Message = "Pago verificado y procesado con éxito.", PaymentId = paymentId });
+                        }
+                    }
+                }
+
+                return Ok(new { Success = false, Message = "No se encontró ningún pago aprobado reciente para esta reserva en Mercado Pago." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
             }
         }
 
