@@ -6,6 +6,7 @@ using PadelQ.Domain.Entities;
 using PadelQ.Domain;
 using PadelQ.Infrastructure.Persistence;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -30,6 +31,45 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
+                // Si viene asignación de cobro, la persistimos en SystemSettings
+                if (request.RentAllocations != null || request.ConsumptionAllocations != null || request.PreviousDebt > 0)
+                {
+                    string actualReference = request.ReferenceId;
+                    if (request.ReferenceId.Contains(";"))
+                    {
+                        actualReference = request.ReferenceId.Split(';')[0];
+                    }
+                    if (actualReference.Length > 2)
+                    {
+                        var bookingIdStr = actualReference.Substring(2);
+                        var key = $"MP_Alloc_{bookingIdStr}";
+                        var allocationJson = JsonSerializer.Serialize(new
+                        {
+                            RentAllocations = request.RentAllocations,
+                            ConsumptionAllocations = request.ConsumptionAllocations,
+                            PreviousDebt = request.PreviousDebt
+                        });
+
+                        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == key);
+                        if (setting == null)
+                        {
+                            _context.SystemSettings.Add(new SystemSetting
+                            {
+                                Key = key,
+                                Value = allocationJson,
+                                UpdatedAt = DateTime.UtcNow
+                            });
+                        }
+                        else
+                        {
+                            setting.Value = allocationJson;
+                            setting.UpdatedAt = DateTime.UtcNow;
+                            _context.Entry(setting).State = EntityState.Modified;
+                        }
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
                 var result = await _mercadoPagoService.CreateQrOrderAsync(request.TerminalId, request.Amount, request.Description, request.ReferenceId);
                 return Ok(new { Message = "Intent created", Result = result });
             }
@@ -112,149 +152,316 @@ namespace PadelQ.Api.Controllers
                 return;
             }
 
-            // Buscar el medio de pago "Mercado Pago"
-            var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => m.Name.Contains("Mercado Pago"))
+            // Buscar el medio de pago "Pago con QR" o "Mercado Pago"
+            var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => m.Name.Contains("QR") || m.Name.Contains("Mercado Pago"))
                            ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => m.IsActive);
 
-            if (referenceId.StartsWith("B-"))
+            string bookingIdStr = "";
+            if (referenceId.StartsWith("B-") || referenceId.StartsWith("S-"))
             {
-                if (Guid.TryParse(referenceId.Substring(2), out Guid bookingId))
+                bookingIdStr = referenceId.Substring(2);
+            }
+
+            var allocKey = $"MP_Alloc_{bookingIdStr}";
+            var allocSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == allocKey);
+            bool allocationApplied = false;
+
+            if (allocSetting != null)
+            {
+                try
                 {
-                    var booking = await _context.Bookings
-                        .Include(b => b.BookingConsumptions)
-                        .FirstOrDefaultAsync(b => b.Id == bookingId);
-
-                    if (booking != null)
+                    var allocation = JsonSerializer.Deserialize<JsonElement>(allocSetting.Value);
+                    
+                    // Parsear las asignaciones
+                    List<RentAllocation> rentAllocations = new List<RentAllocation>();
+                    if (allocation.TryGetProperty("RentAllocations", out var rentAllocProp) && rentAllocProp.ValueKind == JsonValueKind.Array)
                     {
-                        var remainingAmount = amount;
+                        rentAllocations = JsonSerializer.Deserialize<List<RentAllocation>>(rentAllocProp.GetRawText()) ?? new List<RentAllocation>();
+                    }
 
-                        // 1. Pagar renta de la cancha
-                        var rentRemaining = booking.Price - booking.DepositPaid;
-                        if (rentRemaining > 0)
-                        {
-                            var rentPayment = Math.Min(remainingAmount, rentRemaining);
-                            booking.DepositPaid += rentPayment;
-                            remainingAmount -= rentPayment;
-                        }
+                    List<ConsumptionAllocation> consumptionAllocations = new List<ConsumptionAllocation>();
+                    if (allocation.TryGetProperty("ConsumptionAllocations", out var consAllocProp) && consAllocProp.ValueKind == JsonValueKind.Array)
+                    {
+                        consumptionAllocations = JsonSerializer.Deserialize<List<ConsumptionAllocation>>(consAllocProp.GetRawText()) ?? new List<ConsumptionAllocation>();
+                    }
 
-                        if (booking.DepositPaid >= booking.Price)
-                        {
-                            booking.Status = BookingStatus.Paid;
-                        }
+                    decimal previousDebt = 0;
+                    if (allocation.TryGetProperty("PreviousDebt", out var prevDebtProp) && prevDebtProp.ValueKind == JsonValueKind.Number)
+                    {
+                        previousDebt = prevDebtProp.GetDecimal();
+                    }
 
-                        // 2. Pagar consumiciones pendientes asociadas
-                        if (remainingAmount > 0)
+                    // 1. Aplicar pagos a rentas (canchas o espacios)
+                    foreach (var rentAlloc in rentAllocations)
+                    {
+                        if (rentAlloc.Amount <= 0) continue;
+                        
+                        if (referenceId.StartsWith("B-"))
                         {
-                            var unpaidConsumptions = booking.BookingConsumptions.Where(c => !c.IsPaid).ToList();
-                            foreach (var consumption in unpaidConsumptions)
+                            var booking = await _context.Bookings.FirstOrDefaultAsync(b => b.Id == rentAlloc.BookingId);
+                            if (booking != null)
                             {
-                                if (remainingAmount <= 0) break;
-                                var consumptionRemaining = consumption.TotalPrice - consumption.DepositPaid;
-                                if (consumptionRemaining > 0)
+                                booking.DepositPaid += rentAlloc.Amount;
+                                if (booking.DepositPaid >= booking.Price)
                                 {
-                                    var consumptionPayment = Math.Min(remainingAmount, consumptionRemaining);
-                                    consumption.DepositPaid += consumptionPayment;
-                                    remainingAmount -= consumptionPayment;
-
-                                    if (consumption.DepositPaid >= consumption.TotalPrice)
-                                    {
-                                        consumption.IsPaid = true;
-                                    }
+                                    booking.Status = BookingStatus.Paid;
                                 }
+
+                                var userId = booking.UserId ?? await GetOrCreateParticularUserIdAsync();
+                                _context.Transactions.Add(new Transaction
+                                {
+                                    Amount = rentAlloc.Amount,
+                                    Type = TransactionType.Payment,
+                                    Date = TimeZoneHelper.GetArgNow(),
+                                    Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Renta Cancha Reserva {booking.Id}",
+                                    UserId = userId,
+                                    PaymentMethodId = mpMethod?.Id,
+                                    BookingId = booking.Id,
+                                    ProcessedBy = processedBy
+                                });
                             }
                         }
-
-                        var userId = booking.UserId;
-                        if (string.IsNullOrEmpty(userId))
+                        else if (referenceId.StartsWith("S-"))
                         {
-                            userId = await GetOrCreateParticularUserIdAsync();
+                            var spaceBooking = await _context.SpaceBookings.FirstOrDefaultAsync(sb => sb.Id == rentAlloc.BookingId);
+                            if (spaceBooking != null)
+                            {
+                                spaceBooking.DepositPaid += rentAlloc.Amount;
+                                if (spaceBooking.DepositPaid >= spaceBooking.Price)
+                                {
+                                    spaceBooking.Status = BookingStatus.Paid;
+                                }
+
+                                var userId = spaceBooking.UserId ?? await GetOrCreateParticularUserIdAsync();
+                                _context.Transactions.Add(new Transaction
+                                {
+                                    Amount = rentAlloc.Amount,
+                                    Type = TransactionType.Payment,
+                                    Date = TimeZoneHelper.GetArgNow(),
+                                    Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Renta Espacio Reserva {spaceBooking.Id}",
+                                    UserId = userId,
+                                    PaymentMethodId = mpMethod?.Id,
+                                    SpaceBookingId = spaceBooking.Id,
+                                    ProcessedBy = processedBy
+                                });
+                            }
                         }
+                    }
 
-                        // Registrar la transacción de pago total
-                        var transaction = new Transaction
+                    // 2. Aplicar pagos a consumiciones
+                    foreach (var consAlloc in consumptionAllocations)
+                    {
+                        if (consAlloc.Amount <= 0) continue;
+
+                        var consumption = await _context.BookingConsumptions
+                            .Include(c => c.Product)
+                            .FirstOrDefaultAsync(c => c.Id == consAlloc.ConsumptionId);
+                        
+                        if (consumption != null)
                         {
-                            Amount = amount,
+                            consumption.DepositPaid += consAlloc.Amount;
+                            if (consumption.DepositPaid >= consumption.TotalPrice)
+                            {
+                                consumption.IsPaid = true;
+                            }
+
+                            var targetBookingId = referenceId.StartsWith("B-") && Guid.TryParse(bookingIdStr, out Guid bId) ? (Guid?)bId : null;
+                            var targetSpaceBookingId = referenceId.StartsWith("S-") && Guid.TryParse(bookingIdStr, out Guid sbId) ? (Guid?)sbId : null;
+                            var userId = consumption.UserId ?? await GetOrCreateParticularUserIdAsync();
+
+                            _context.Transactions.Add(new Transaction
+                            {
+                                Amount = consAlloc.Amount,
+                                Type = TransactionType.Payment,
+                                Date = TimeZoneHelper.GetArgNow(),
+                                Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Consumo: {consumption.Product?.Name ?? "Artículo"} (Cant: {consumption.Quantity})",
+                                UserId = userId,
+                                PaymentMethodId = mpMethod?.Id,
+                                BookingId = targetBookingId,
+                                SpaceBookingId = targetSpaceBookingId,
+                                ProcessedBy = processedBy
+                            });
+                        }
+                    }
+
+                    // 3. Aplicar pago a deuda anterior
+                    if (previousDebt > 0)
+                    {
+                        var targetBookingId = referenceId.StartsWith("B-") && Guid.TryParse(bookingIdStr, out Guid bId) ? (Guid?)bId : null;
+                        var targetSpaceBookingId = referenceId.StartsWith("S-") && Guid.TryParse(bookingIdStr, out Guid sbId) ? (Guid?)sbId : null;
+                        var userId = await GetOrCreateParticularUserIdAsync();
+
+                        _context.Transactions.Add(new Transaction
+                        {
+                            Amount = previousDebt,
                             Type = TransactionType.Payment,
                             Date = TimeZoneHelper.GetArgNow(),
-                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva {bookingId}",
+                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Pago Deuda Cta. Cte. Anterior",
                             UserId = userId,
                             PaymentMethodId = mpMethod?.Id,
-                            BookingId = bookingId,
+                            BookingId = targetBookingId,
+                            SpaceBookingId = targetSpaceBookingId,
                             ProcessedBy = processedBy
-                        };
-                        _context.Transactions.Add(transaction);
-                        await _context.SaveChangesAsync();
+                        });
                     }
+
+                    await _context.SaveChangesAsync();
+
+                    // Limpiar el setting de SystemSettings
+                    _context.SystemSettings.Remove(allocSetting);
+                    await _context.SaveChangesAsync();
+                    
+                    allocationApplied = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error al aplicar asignación QR, rebotando a fallback: {ex.Message}");
                 }
             }
-            else if (referenceId.StartsWith("S-"))
+
+            // Fallback (si no existía asignación o falló el procesamiento específico)
+            if (!allocationApplied)
             {
-                if (Guid.TryParse(referenceId.Substring(2), out Guid bookingId))
+                if (referenceId.StartsWith("B-"))
                 {
-                    var spaceBooking = await _context.SpaceBookings
-                        .Include(sb => sb.BookingConsumptions)
-                        .FirstOrDefaultAsync(sb => sb.Id == bookingId);
-
-                    if (spaceBooking != null)
+                    if (Guid.TryParse(referenceId.Substring(2), out Guid bookingId))
                     {
-                        var remainingAmount = amount;
+                        var booking = await _context.Bookings
+                            .Include(b => b.BookingConsumptions)
+                            .FirstOrDefaultAsync(b => b.Id == bookingId);
 
-                        // 1. Pagar renta del espacio
-                        var rentRemaining = spaceBooking.Price - spaceBooking.DepositPaid;
-                        if (rentRemaining > 0)
+                        if (booking != null)
                         {
-                            var rentPayment = Math.Min(remainingAmount, rentRemaining);
-                            spaceBooking.DepositPaid += rentPayment;
-                            remainingAmount -= rentPayment;
-                        }
+                            var remainingAmount = amount;
 
-                        if (spaceBooking.DepositPaid >= spaceBooking.Price)
-                        {
-                            spaceBooking.Status = BookingStatus.Paid;
-                        }
-
-                        // 2. Pagar consumiciones pendientes asociadas
-                        if (remainingAmount > 0)
-                        {
-                            var unpaidConsumptions = spaceBooking.BookingConsumptions.Where(c => !c.IsPaid).ToList();
-                            foreach (var consumption in unpaidConsumptions)
+                            // 1. Pagar renta de la cancha
+                            var rentRemaining = booking.Price - booking.DepositPaid;
+                            if (rentRemaining > 0)
                             {
-                                if (remainingAmount <= 0) break;
-                                var consumptionRemaining = consumption.TotalPrice - consumption.DepositPaid;
-                                if (consumptionRemaining > 0)
-                                {
-                                    var consumptionPayment = Math.Min(remainingAmount, consumptionRemaining);
-                                    consumption.DepositPaid += consumptionPayment;
-                                    remainingAmount -= consumptionPayment;
+                                var rentPayment = Math.Min(remainingAmount, rentRemaining);
+                                booking.DepositPaid += rentPayment;
+                                remainingAmount -= rentPayment;
+                            }
 
-                                    if (consumption.DepositPaid >= consumption.TotalPrice)
+                            if (booking.DepositPaid >= booking.Price)
+                            {
+                                booking.Status = BookingStatus.Paid;
+                            }
+
+                            // 2. Pagar consumiciones pendientes asociadas
+                            if (remainingAmount > 0)
+                            {
+                                var unpaidConsumptions = booking.BookingConsumptions.Where(c => !c.IsPaid).ToList();
+                                foreach (var consumption in unpaidConsumptions)
+                                {
+                                    if (remainingAmount <= 0) break;
+                                    var consumptionRemaining = consumption.TotalPrice - consumption.DepositPaid;
+                                    if (consumptionRemaining > 0)
                                     {
-                                        consumption.IsPaid = true;
+                                        var consumptionPayment = Math.Min(remainingAmount, consumptionRemaining);
+                                        consumption.DepositPaid += consumptionPayment;
+                                        remainingAmount -= consumptionPayment;
+
+                                        if (consumption.DepositPaid >= consumption.TotalPrice)
+                                        {
+                                            consumption.IsPaid = true;
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        var userId = spaceBooking.UserId;
-                        if (string.IsNullOrEmpty(userId))
-                        {
-                            userId = await GetOrCreateParticularUserIdAsync();
-                        }
+                            var userId = booking.UserId;
+                            if (string.IsNullOrEmpty(userId))
+                            {
+                                userId = await GetOrCreateParticularUserIdAsync();
+                            }
 
-                        // Registrar la transacción de pago total
-                        var transaction = new Transaction
+                            // Registrar la transacción de pago total
+                            var transaction = new Transaction
+                            {
+                                Amount = amount,
+                                Type = TransactionType.Payment,
+                                Date = TimeZoneHelper.GetArgNow(),
+                                Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva {bookingId}",
+                                UserId = userId,
+                                PaymentMethodId = mpMethod?.Id,
+                                BookingId = bookingId,
+                                ProcessedBy = processedBy
+                            };
+                            _context.Transactions.Add(transaction);
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                }
+                else if (referenceId.StartsWith("S-"))
+                {
+                    if (Guid.TryParse(referenceId.Substring(2), out Guid bookingId))
+                    {
+                        var spaceBooking = await _context.SpaceBookings
+                            .Include(sb => sb.BookingConsumptions)
+                            .FirstOrDefaultAsync(sb => sb.Id == bookingId);
+
+                        if (spaceBooking != null)
                         {
-                            Amount = amount,
-                            Type = TransactionType.Payment,
-                            Date = TimeZoneHelper.GetArgNow(),
-                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva Espacio {bookingId}",
-                            UserId = userId,
-                            PaymentMethodId = mpMethod?.Id,
-                            SpaceBookingId = bookingId,
-                            ProcessedBy = processedBy
-                        };
-                        _context.Transactions.Add(transaction);
-                        await _context.SaveChangesAsync();
+                            var remainingAmount = amount;
+
+                            // 1. Pagar renta del espacio
+                            var rentRemaining = spaceBooking.Price - spaceBooking.DepositPaid;
+                            if (rentRemaining > 0)
+                            {
+                                var rentPayment = Math.Min(remainingAmount, rentRemaining);
+                                spaceBooking.DepositPaid += rentPayment;
+                                remainingAmount -= rentPayment;
+                            }
+
+                            if (spaceBooking.DepositPaid >= spaceBooking.Price)
+                            {
+                                spaceBooking.Status = BookingStatus.Paid;
+                            }
+
+                            // 2. Pagar consumiciones pendientes asociadas
+                            if (remainingAmount > 0)
+                            {
+                                var unpaidConsumptions = spaceBooking.BookingConsumptions.Where(c => !c.IsPaid).ToList();
+                                foreach (var consumption in unpaidConsumptions)
+                                {
+                                    if (remainingAmount <= 0) break;
+                                    var consumptionRemaining = consumption.TotalPrice - consumption.DepositPaid;
+                                    if (consumptionRemaining > 0)
+                                    {
+                                        var consumptionPayment = Math.Min(remainingAmount, consumptionRemaining);
+                                        consumption.DepositPaid += consumptionPayment;
+                                        remainingAmount -= consumptionPayment;
+
+                                        if (consumption.DepositPaid >= consumption.TotalPrice)
+                                        {
+                                            consumption.IsPaid = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            var userId = spaceBooking.UserId;
+                            if (string.IsNullOrEmpty(userId))
+                            {
+                                userId = await GetOrCreateParticularUserIdAsync();
+                            }
+
+                            // Registrar la transacción de pago total
+                            var transaction = new Transaction
+                            {
+                                Amount = amount,
+                                Type = TransactionType.Payment,
+                                Date = TimeZoneHelper.GetArgNow(),
+                                Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Reserva Espacio {bookingId}",
+                                UserId = userId,
+                                PaymentMethodId = mpMethod?.Id,
+                                SpaceBookingId = bookingId,
+                                ProcessedBy = processedBy
+                            };
+                            _context.Transactions.Add(transaction);
+                            await _context.SaveChangesAsync();
+                        }
                     }
                 }
             }
@@ -467,5 +674,20 @@ namespace PadelQ.Api.Controllers
         public decimal Amount { get; set; }
         public string Description { get; set; }
         public string ReferenceId { get; set; }
+        public List<RentAllocation>? RentAllocations { get; set; }
+        public List<ConsumptionAllocation>? ConsumptionAllocations { get; set; }
+        public decimal PreviousDebt { get; set; }
+    }
+
+    public class RentAllocation
+    {
+        public Guid BookingId { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    public class ConsumptionAllocation
+    {
+        public Guid ConsumptionId { get; set; }
+        public decimal Amount { get; set; }
     }
 }

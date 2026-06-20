@@ -27,6 +27,9 @@ export interface CreateIntentRequest {
   amount: number;
   description: string;
   referenceId: string;
+  rentAllocations?: { bookingId: string; amount: number }[];
+  consumptionAllocations?: { consumptionId: string; amount: number }[];
+  previousDebt?: number;
 }
 
 export const createMercadoPagoIntent = async (request: CreateIntentRequest) => {

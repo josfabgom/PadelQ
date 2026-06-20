@@ -1916,11 +1916,44 @@ const BookingsPage = () => {
                 }
                 try {
                     const activeUserEmail = localStorage.getItem('padelq_user_email') || 'Sistema';
+                    
+                    // Preparar asignación de renta
+                    const rentAllocations: any[] = [];
+                    relatedBookingsPayments.forEach(rp => {
+                        rentAllocations.push({
+                            bookingId: rp.id,
+                            amount: rp.amount
+                        });
+                    });
+
+                    // Preparar asignación de consumos (distribuidos por registro de consumo individual)
+                    const consumptionAllocations: any[] = [];
+                    groupPayments.forEach(gp => {
+                        let remainingPaymentToDistribute = gp.amount;
+                        const records = (grouped[gp.productId]?.records || []).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+                        for (const record of records) {
+                            if (remainingPaymentToDistribute <= 0) break;
+                            const recordRemaining = record.totalPrice - (record.depositPaid || 0);
+                            if (recordRemaining <= 0) continue;
+
+                            const paymentForThisRecord = Math.min(remainingPaymentToDistribute, recordRemaining);
+                            consumptionAllocations.push({
+                                consumptionId: record.id,
+                                amount: paymentForThisRecord
+                            });
+                            remainingPaymentToDistribute -= paymentForThisRecord;
+                        }
+                    });
+
                     const intentRes = await createMercadoPagoIntent({
                         terminalId: selectedMpTerminal,
                         amount: currentTransactionTotal,
                         description: `Pago Reserva PadelQ - ${booking.id.substring(0, 8)}`,
-                        referenceId: `${isSpace ? 'S-' : 'B-'}${booking.id};${activeUserEmail}`
+                        referenceId: `${isSpace ? 'S-' : 'B-'}${booking.id};${activeUserEmail}`,
+                        rentAllocations,
+                        consumptionAllocations,
+                        previousDebt: previousDebtPayment
                     });
 
                     const qrData = intentRes.Result || intentRes.result || "";
