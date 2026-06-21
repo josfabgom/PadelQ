@@ -157,24 +157,32 @@ const getTotalDebt = (booking: any) => getRentDebt(booking) + getConsumptionDebt
 
 const isFullyPaid = (booking: any) => getTotalDebt(booking) <= 0;
 
-const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], totalAmount: number, onPartsChange: (parts: number[]) => void) => {
-    const partPrice = totalAmount / Math.max(1, partsCount);
+const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], originalAmount: number, paidAmount: number, onPartsChange: (parts: number[]) => void) => {
+    if (partsCount <= 1) return null;
+    const partPrice = originalAmount / partsCount;
+    const paidParts = Math.floor(paidAmount / partPrice);
+    
     return (
         <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-black/5">
-            {Array.from({ length: Math.max(1, partsCount) }).map((_, i) => (
-                <button
-                    key={i}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (selectedParts.includes(i)) onPartsChange(selectedParts.filter(p => p !== i));
-                        else onPartsChange([...selectedParts, i]);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${selectedParts.includes(i) ? 'bg-black text-white shadow-md' : 'bg-white text-zinc-400 border border-zinc-100 hover:border-black/20'}`}
-                >
-                    <span className={selectedParts.includes(i) ? 'text-white/50' : 'text-zinc-300'}>P.{i + 1}</span>
-                    <span>{formatARS(partPrice)}</span>
-                </button>
-            ))}
+            {Array.from({ length: partsCount }).map((_, i) => {
+                const isPaid = i < paidParts;
+                if (isPaid) return null; // No mostrar las partes ya pagadas
+                
+                return (
+                    <button
+                        key={i}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (selectedParts.includes(i)) onPartsChange(selectedParts.filter(p => p !== i));
+                            else onPartsChange([...selectedParts, i]);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${selectedParts.includes(i) ? 'bg-black text-white shadow-md' : 'bg-white text-zinc-400 border border-zinc-100 hover:border-black/20'}`}
+                    >
+                        <span className={selectedParts.includes(i) ? 'text-white/50' : 'text-zinc-300'}>P.{i + 1}</span>
+                        <span>{formatARS(partPrice)}</span>
+                    </button>
+                );
+            })}
         </div>
     );
 };
@@ -1167,15 +1175,7 @@ const BookingsPage = () => {
                 const remainingDebt = Math.max(0, originalPrice - depositPaid);
                 const originalFractions = (existing as any).rentFractions || 1;
                 
-                let initialFractions = originalFractions;
-                if (originalFractions > 1 && depositPaid > 0 && remainingDebt > 0) {
-                    const partAmount = originalPrice / originalFractions;
-                    initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
-                } else if (remainingDebt <= 0) {
-                    initialFractions = 1;
-                }
-                
-                setCourtFractions({ [existing.id]: initialFractions });
+                setCourtFractions({ [existing.id]: originalFractions });
                 setSelectedConsumptionParts({});
                 setConsumptionFractions({});
                 setSelectedRelatedBookingIds([]);
@@ -1234,15 +1234,7 @@ const BookingsPage = () => {
                     const remainingConsolidatedDebt = Math.max(0, totalConsolidatedPrice - totalConsolidatedDeposit);
                     const originalConsolidatedFractions = (existing as any).rentFractions || 1;
                     
-                    let initialConsolidatedFractions = originalConsolidatedFractions;
-                    if (originalConsolidatedFractions > 1 && totalConsolidatedDeposit > 0 && remainingConsolidatedDebt > 0) {
-                        const partAmount = totalConsolidatedPrice / originalConsolidatedFractions;
-                        initialConsolidatedFractions = Math.max(1, Math.round(remainingConsolidatedDebt / partAmount));
-                    } else if (remainingConsolidatedDebt <= 0) {
-                        initialConsolidatedFractions = 1;
-                    }
-                    
-                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: initialConsolidatedFractions }));
+                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: originalConsolidatedFractions }));
                     setSelectedCourtParts(prev => ({ ...prev, ['consolidated-rent']: [] }));
                 }
 
@@ -1275,14 +1267,7 @@ const BookingsPage = () => {
                         const g = groupedConsForFractions[pid];
                         if (g.fractions > 1) {
                             const remainingDebt = Math.max(0, g.totalPrice - g.depositPaid);
-                            let initialFractions = g.fractions;
-                            if (g.depositPaid > 0 && remainingDebt > 0) {
-                                const partAmount = g.totalPrice / g.fractions;
-                                initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
-                            } else if (remainingDebt <= 0) {
-                                initialFractions = 1;
-                            }
-                            consFractions[`group-${pid}`] = initialFractions;
+                            consFractions[`group-${pid}`] = g.fractions;
                         }
                     });
                     setConsumptionFractions(consFractions);
@@ -1354,15 +1339,7 @@ const BookingsPage = () => {
                     const remainingConsolidatedDebt = Math.max(0, totalConsolidatedPrice - totalConsolidatedDeposit);
                     const originalConsolidatedFractions = (existing as any).rentFractions || 1;
                     
-                    let initialConsolidatedFractions = originalConsolidatedFractions;
-                    if (originalConsolidatedFractions > 1 && totalConsolidatedDeposit > 0 && remainingConsolidatedDebt > 0) {
-                        const partAmount = totalConsolidatedPrice / originalConsolidatedFractions;
-                        initialConsolidatedFractions = Math.max(1, Math.round(remainingConsolidatedDebt / partAmount));
-                    } else if (remainingConsolidatedDebt <= 0) {
-                        initialConsolidatedFractions = 1;
-                    }
-                    
-                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: initialConsolidatedFractions }));
+                    setCourtFractions(prev => ({ ...prev, ['consolidated-rent']: originalConsolidatedFractions }));
                     setSelectedCourtParts(prev => ({ ...prev, ['consolidated-rent']: [] }));
                 }
 
@@ -1394,15 +1371,7 @@ const BookingsPage = () => {
                         const pid = Number(pidStr);
                         const g = groupedConsForFractions[pid];
                         if (g.fractions > 1) {
-                            const remainingDebt = Math.max(0, g.totalPrice - g.depositPaid);
-                            let initialFractions = g.fractions;
-                            if (g.depositPaid > 0 && remainingDebt > 0) {
-                                const partAmount = g.totalPrice / g.fractions;
-                                initialFractions = Math.max(1, Math.round(remainingDebt / partAmount));
-                            } else if (remainingDebt <= 0) {
-                                initialFractions = 1;
-                            }
-                            consFractions[`group-${pid}`] = initialFractions;
+                            consFractions[`group-${pid}`] = g.fractions;
                         }
                     });
                     setConsumptionFractions(consFractions);
@@ -1737,19 +1706,30 @@ const BookingsPage = () => {
         setSelectedGlobalFractions([0]);
     };
 
-    const startMpQrPolling = (bookingId: string, isSpace: boolean, initialDeposit: number) => {
+    const startMpQrPolling = (bookingId: string, isSpace: boolean, initialDeposit: number, initialConsDeposit: number = 0) => {
         if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
         
         const intervalId = setInterval(async () => {
             try {
+                // Consultar activamente a Mercado Pago para procesar cobros (Auto-Verificar)
+                try {
+                    await api.post(`/api/mercadopago/verify/${bookingId}?isSpace=${isSpace}`, {}, config);
+                } catch (verifyErr) {
+                    console.error("Error auto-verificando QR", verifyErr);
+                }
+
                 const url = isSpace ? `/api/spacebookings/${bookingId}` : `/api/bookings/${bookingId}`;
                 const res = await api.get(url, config);
                 const updatedBooking = res.data;
 
+                const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, config);
+                const consumptions = consRes.data || [];
+                const currentConsDeposit = consumptions.reduce((sum: number, c: any) => sum + (c.depositPaid || 0), 0);
+
                 const currentDeposit = updatedBooking.depositPaid || 0;
                 const isPaid = updatedBooking.status === 4 || updatedBooking.Status === 4;
 
-                if (isPaid || currentDeposit > initialDeposit) {
+                if (isPaid || currentDeposit > initialDeposit || currentConsDeposit > initialConsDeposit) {
                     clearInterval(intervalId);
                     mpQrPollingTimerRef.current = null;
                     setIsMpQrModalOpen(false);
@@ -1758,13 +1738,16 @@ const BookingsPage = () => {
                     
                     if (isSpace) setSelectedSpaceBooking(updatedBooking);
                     else setSelectedBooking(updatedBooking);
+                    
+                    setBookingConsumptions(consumptions);
+                    
                     await fetchBookingTransactions(bookingId, isSpace);
                     fetchData();
                 }
             } catch (err) {
                 console.error("Error polling payment status", err);
             }
-        }, 3000);
+        }, 5000);
 
         mpQrPollingTimerRef.current = intervalId;
     };
@@ -1797,12 +1780,14 @@ const BookingsPage = () => {
         const isConsolidated = selectedRelatedBookingIds.length > 0;
         
         if (isConsolidated) {
+            const originalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + (r.price || 0), 0);
             const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
             const fractions = courtFractions['consolidated-rent'] || 1;
             const selectedParts = selectedCourtParts['consolidated-rent'] || [];
             
             if (totalConsolidatedDebt > 0 && selectedParts.length > 0) {
-                const totalPaidForRent = (totalConsolidatedDebt / fractions) * selectedParts.length;
+                const calculatedPayment = (originalConsolidatedDebt / fractions) * selectedParts.length;
+                const totalPaidForRent = Math.min(totalConsolidatedDebt, calculatedPayment);
                 totalRentPayment = totalPaidForRent;
 
                 // Distribuir el pago proporcionalmente entre las reservas involucradas
@@ -1821,11 +1806,13 @@ const BookingsPage = () => {
             }
         } else {
             // Pago Individual (solo la principal)
-            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+            const originalRentDebt = booking.price || 0;
+            const mainRentDebt = originalRentDebt - (booking.depositPaid || 0);
             const mainFractions = courtFractions[booking.id] || 1;
             const mainSelectedParts = selectedCourtParts[booking.id] || [];
             if (mainRentDebt > 0 && mainSelectedParts.length > 0) {
-                totalRentPayment = (mainRentDebt / mainFractions) * mainSelectedParts.length;
+                const calculatedPayment = (originalRentDebt / mainFractions) * mainSelectedParts.length;
+                totalRentPayment = Math.min(mainRentDebt, calculatedPayment);
                 relatedBookingsPayments.push({
                     id: booking.id,
                     amount: totalRentPayment,
@@ -1862,8 +1849,9 @@ const BookingsPage = () => {
             
             if (selectedPartsCount > 0) {
                 const remainingPrice = g.totalPrice - g.totalDeposit;
-                const partPrice = remainingPrice / partsCount;
-                const amount = partPrice * selectedPartsCount;
+                const partPrice = g.totalPrice / partsCount;
+                const calculatedPayment = partPrice * selectedPartsCount;
+                const amount = Math.min(remainingPrice, calculatedPayment);
                 totalConsumptionsPayment += amount;
                 
                 const courtName = (booking as any).court?.name || (booking as any).space?.name || 'Cancha';
@@ -1959,10 +1947,11 @@ const BookingsPage = () => {
                     const qrData = intentRes.Result || intentRes.result || "";
                     if (qrData) {
                         const initialDeposit = booking.depositPaid || 0;
+                        const initialConsDeposit = bookingConsumptions.reduce((sum, c) => sum + (c.depositPaid || 0), 0);
                         setMpInitialDepositPaid(initialDeposit);
                         setMpQrData(qrData);
                         setIsMpQrModalOpen(true);
-                        startMpQrPolling(booking.id, isSpace, initialDeposit);
+                        startMpQrPolling(booking.id, isSpace, initialDeposit, initialConsDeposit);
                     } else {
                         alert("Se envió el cobro a la terminal física Mercado Pago.");
                     }
@@ -2170,14 +2159,12 @@ const BookingsPage = () => {
                     const cf = courtFractions['consolidated-rent'] || 1;
                     const cs = (selectedCourtParts['consolidated-rent'] || []).length;
                     if (cs > 0) {
-                        newCourtFractions['consolidated-rent'] = Math.max(1, cf - cs);
                         newSelectedCourtParts['consolidated-rent'] = [];
                     }
                 } else {
                     const mainF = courtFractions[booking.id] || 1;
                     const mainS = (selectedCourtParts[booking.id] || []).length;
                     if (mainS > 0) {
-                        newCourtFractions[booking.id] = Math.max(1, mainF - mainS);
                         newSelectedCourtParts[booking.id] = [];
                     }
                 }
@@ -2190,7 +2177,6 @@ const BookingsPage = () => {
                     const cf = consumptionFractions[groupKey] || 1;
                     const cs = (selectedConsumptionParts[groupKey] || []).length;
                     if (cs > 0) {
-                        newConsFractions[groupKey] = Math.max(1, cf - cs);
                         newSelectedConsParts[groupKey] = [];
                     }
                 });
@@ -2529,18 +2515,20 @@ const BookingsPage = () => {
         const isConsolidated = selectedRelatedBookingIds.length > 0;
         
         if (isConsolidated) {
+            const originalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + (r.price || 0), 0);
             const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
             const fractions = courtFractions['consolidated-rent'] || 1;
             const selectedParts = selectedCourtParts['consolidated-rent'] || [];
             if (totalConsolidatedDebt > 0 && selectedParts.length > 0) {
-                rent = (totalConsolidatedDebt / fractions) * selectedParts.length;
+                rent = Math.min(totalConsolidatedDebt, (originalConsolidatedDebt / fractions) * selectedParts.length);
             }
         } else {
-            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+            const originalMainRentDebt = booking.price || 0;
+            const mainRentDebt = originalMainRentDebt - (booking.depositPaid || 0);
             const mainFractions = courtFractions[booking.id] || 1;
             const mainSelectedParts = selectedCourtParts[booking.id] || [];
             if (mainRentDebt > 0 && mainSelectedParts.length > 0) {
-                rent = (mainRentDebt / mainFractions) * mainSelectedParts.length;
+                rent = Math.min(mainRentDebt, (originalMainRentDebt / mainFractions) * mainSelectedParts.length);
             }
         }
 
@@ -2559,9 +2547,10 @@ const BookingsPage = () => {
             const groupKey = `group-${pid}`;
             const partsCount = consumptionFractions[groupKey] || 1;
             const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
-            const remaining = grouped[Number(pid)].totalPrice - grouped[Number(pid)].totalDeposit;
+            const originalConsumptionDebt = grouped[Number(pid)].totalPrice;
+            const remaining = originalConsumptionDebt - grouped[Number(pid)].totalDeposit;
             if (remaining > 0) {
-                consumptions += (remaining / partsCount) * selectedPartsCount;
+                consumptions += Math.min(remaining, (originalConsumptionDebt / partsCount) * selectedPartsCount);
             }
         });
 
@@ -3821,9 +3810,13 @@ const BookingsPage = () => {
                                                                             }, true)}
                                                                         </div>
                                                                     </div>
-                                                                    {renderPartsSelector('consolidated-rent', courtFractions['consolidated-rent'] || 1, selectedCourtParts['consolidated-rent'] || [], totalConsolidatedDebt, (parts) => {
-                                                                        setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: parts });
-                                                                    })}
+                                                                    {(() => {
+                                                                        const originalTotalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + (r.price || 0), 0);
+                                                                        const totalConsolidatedDeposit = selectedRentals.reduce((sum, r) => sum + (r.depositPaid || 0), 0);
+                                                                        return renderPartsSelector('consolidated-rent', courtFractions['consolidated-rent'] || 1, selectedCourtParts['consolidated-rent'] || [], originalTotalConsolidatedDebt, totalConsolidatedDeposit, (parts) => {
+                                                                            setSelectedCourtParts({ ...selectedCourtParts, ['consolidated-rent']: parts });
+                                                                        });
+                                                                    })()}
                                                                     
                                                                     {/* Lista de canchas incluidas para deseleccionar */}
                                                                     <div className="mt-4 pt-4 border-t border-zinc-800/50 grid grid-cols-2 gap-2">
@@ -3910,9 +3903,13 @@ const BookingsPage = () => {
                                                                                 })}
                                                                             </div>
                                                                         </div>
-                                                                        {renderPartsSelector(booking.id, courtFractions[booking.id] || 1, selectedCourtParts[booking.id] || [], totalConsolidatedDebt, (parts) => {
-                                                                            setSelectedCourtParts({ ...selectedCourtParts, [booking.id]: parts });
-                                                                        })}
+                                                                        {(() => {
+                                                                            const originalRentDebt = booking.price || 0;
+                                                                            const rentDepositPaid = booking.depositPaid || 0;
+                                                                            return renderPartsSelector(booking.id, courtFractions[booking.id] || 1, selectedCourtParts[booking.id] || [], originalRentDebt, rentDepositPaid, (parts) => {
+                                                                                setSelectedCourtParts({ ...selectedCourtParts, [booking.id]: parts });
+                                                                            });
+                                                                        })()}
                                                                     </div>
                                                                     
                                                                     {/* Sugerencias de Consolidación */}
@@ -3981,9 +3978,13 @@ const BookingsPage = () => {
                                                                         })}
                                                                     </div>
                                                                 </div>
-                                                                {renderPartsSelector(groupKey, consumptionFractions[groupKey] || 1, selectedConsumptionParts[groupKey] || [], remaining, (parts) => {
-                                                                    setSelectedConsumptionParts({ ...selectedConsumptionParts, [groupKey]: parts });
-                                                                })}
+                                                                {(() => {
+                                                                    const originalConsumptionDebt = g.totalPrice;
+                                                                    const consumptionDepositPaid = g.totalDeposit;
+                                                                    return renderPartsSelector(groupKey, consumptionFractions[groupKey] || 1, selectedConsumptionParts[groupKey] || [], originalConsumptionDebt, consumptionDepositPaid, (parts) => {
+                                                                        setSelectedConsumptionParts({ ...selectedConsumptionParts, [groupKey]: parts });
+                                                                    });
+                                                                })()}
                                                             </div>
                                                         );
                                                     })}
@@ -4010,15 +4011,17 @@ const BookingsPage = () => {
                                         // 1 & 2. Rentas (Consolidada o Individual)
                                         if (selectedRelatedBookingIds.length > 0) {
                                             const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
+                                            const originalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + (r.price || 0), 0);
                                             const totalConsolidatedDebt = selectedRentals.reduce((sum, r) => sum + ((r.price || 0) - (r.depositPaid || 0)), 0);
                                             const fractions = courtFractions['consolidated-rent'] || 1;
                                             const selectedParts = selectedCourtParts['consolidated-rent'] || [];
-                                            if (totalConsolidatedDebt > 0) currentTransactionTotal += (totalConsolidatedDebt / fractions) * selectedParts.length;
+                                            if (totalConsolidatedDebt > 0) currentTransactionTotal += Math.min(totalConsolidatedDebt, (originalConsolidatedDebt / fractions) * selectedParts.length);
                                         } else {
-                                            const mainRentDebt = (booking.price || 0) - (booking.depositPaid || 0);
+                                            const originalMainRentDebt = booking.price || 0;
+                                            const mainRentDebt = originalMainRentDebt - (booking.depositPaid || 0);
                                             const mainFractions = courtFractions[booking.id] || 1;
                                             const mainSelectedParts = selectedCourtParts[booking.id] || [];
-                                            if (mainRentDebt > 0) currentTransactionTotal += (mainRentDebt / mainFractions) * mainSelectedParts.length;
+                                            if (mainRentDebt > 0) currentTransactionTotal += Math.min(mainRentDebt, (originalMainRentDebt / mainFractions) * mainSelectedParts.length);
                                         }
 
                                         // 3. Consumiciones Agrupadas
@@ -4034,8 +4037,9 @@ const BookingsPage = () => {
                                             const groupKey = `group-${pid}`;
                                             const partsCount = consumptionFractions[groupKey] || 1;
                                             const selectedPartsCount = (selectedConsumptionParts[groupKey] || []).length;
-                                            const remaining = grouped[Number(pid)].totalPrice - grouped[Number(pid)].totalDeposit;
-                                            if (remaining > 0) currentTransactionTotal += (remaining / partsCount) * selectedPartsCount;
+                                            const originalConsumptionDebt = grouped[Number(pid)].totalPrice;
+                                            const remaining = originalConsumptionDebt - grouped[Number(pid)].totalDeposit;
+                                            if (remaining > 0) currentTransactionTotal += Math.min(remaining, (originalConsumptionDebt / partsCount) * selectedPartsCount);
                                         });
 
                                         // 4. Deuda Anterior
@@ -5059,6 +5063,7 @@ const BookingsPage = () => {
                                 <QrCode className="w-6 h-6 text-emerald-400" />
                             </div>
                             <h3 className="text-xl font-black italic uppercase tracking-tight mb-1 text-zinc-100">Pago QR Mercado Pago</h3>
+                            <div className="text-2xl font-black text-emerald-400 mb-2">{formatARS(currentTransactionTotal)}</div>
                             <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Escanee el código QR desde la App de Mercado Pago para pagar</p>
                         </div>
 
@@ -5113,16 +5118,24 @@ const BookingsPage = () => {
                                         try {
                                             const res = await api.get(url, config);
                                             const updatedBooking = res.data;
+                                            
+                                            const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, config);
+                                            const consumptions = consRes.data || [];
+                                            
                                             const currentDeposit = updatedBooking.depositPaid || 0;
+                                            const currentConsDeposit = consumptions.reduce((sum: number, c: any) => sum + (c.depositPaid || 0), 0);
+                                            
                                             const isPaid = updatedBooking.status === 4 || updatedBooking.Status === 4;
+                                            const initialConsDeposit = bookingConsumptions.reduce((sum, c) => sum + (c.depositPaid || 0), 0);
 
-                                            if (isPaid || currentDeposit > mpInitialDepositPaid) {
+                                            if (isPaid || currentDeposit > mpInitialDepositPaid || currentConsDeposit > initialConsDeposit) {
                                                 if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
                                                 mpQrPollingTimerRef.current = null;
                                                 setIsMpQrModalOpen(false);
                                                 alert("¡Pago aprobado por Mercado Pago!");
                                                 if (isSpace) setSelectedSpaceBooking(updatedBooking);
                                                 else setSelectedBooking(updatedBooking);
+                                                setBookingConsumptions(consumptions);
                                                 await fetchBookingTransactions(booking.id, isSpace);
                                                 fetchData();
                                             } else {
@@ -5938,7 +5951,7 @@ const BookingsPage = () => {
                                                     </div>
 
                                                     {/* Selector de Partes (Debajo) */}
-                                                    {renderPartsSelector(`ds-${item.productId}`, dsFractions[`ds-${item.productId}`] || 1, dsSelectedParts[`ds-${item.productId}`] || [], (item.price * item.quantity), (parts) => {
+                                                    {renderPartsSelector(`ds-${item.productId}`, dsFractions[`ds-${item.productId}`] || 1, dsSelectedParts[`ds-${item.productId}`] || [], (item.price * item.quantity), 0, (parts: number[]) => {
                                                         setDsSelectedParts({ ...dsSelectedParts, [`ds-${item.productId}`]: parts });
                                                     })}
                                                 </div>

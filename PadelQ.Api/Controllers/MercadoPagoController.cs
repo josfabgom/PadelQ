@@ -74,7 +74,8 @@ namespace PadelQ.Api.Controllers
                     }
                 }
 
-                var result = await _mercadoPagoService.CreateQrOrderAsync(request.TerminalId, request.Amount, request.Description, request.ReferenceId);
+                var roundedAmount = Math.Round(request.Amount, 2);
+                var result = await _mercadoPagoService.CreateQrOrderAsync(request.TerminalId, roundedAmount, request.Description, request.ReferenceId);
                 return Ok(new { Message = "Intent created", Result = result });
             }
             catch (Exception ex)
@@ -248,8 +249,11 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
-            // Buscar el medio de pago "Pago con QR" o "Mercado Pago"
-            var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => m.Name.Contains("QR") || m.Name.Contains("Mercado Pago"))
+            // Buscar el medio de pago "Pago con QR" o "Mercado Pago" de forma case-insensitive
+            var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => 
+                            m.Name.ToLower().Contains("qr") || 
+                            m.Name.ToLower().Contains("mercado pago") || 
+                            m.Name.ToLower().Contains("mercadopago"))
                            ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => m.IsActive);
 
             string bookingIdStr = "";
@@ -261,30 +265,36 @@ namespace PadelQ.Api.Controllers
             var allocKey = $"MP_Alloc_{bookingIdStr}";
             var allocSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == allocKey);
             bool allocationApplied = false;
+            var paymentGroupId = Guid.NewGuid();
 
             if (allocSetting != null)
             {
                 try
                 {
-                    var allocation = JsonSerializer.Deserialize<JsonElement>(allocSetting.Value);
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    using var doc = JsonDocument.Parse(allocSetting.Value);
+                    var root = doc.RootElement;
                     
                     // Parsear las asignaciones
                     List<RentAllocation> rentAllocations = new List<RentAllocation>();
-                    if (allocation.TryGetProperty("RentAllocations", out var rentAllocProp) && rentAllocProp.ValueKind == JsonValueKind.Array)
+                    if (root.TryGetProperty("RentAllocations", out var rentAllocProp) || root.TryGetProperty("rentAllocations", out rentAllocProp))
                     {
-                        rentAllocations = JsonSerializer.Deserialize<List<RentAllocation>>(rentAllocProp.GetRawText()) ?? new List<RentAllocation>();
+                        if (rentAllocProp.ValueKind == JsonValueKind.Array)
+                            rentAllocations = JsonSerializer.Deserialize<List<RentAllocation>>(rentAllocProp.GetRawText(), options) ?? new List<RentAllocation>();
                     }
 
                     List<ConsumptionAllocation> consumptionAllocations = new List<ConsumptionAllocation>();
-                    if (allocation.TryGetProperty("ConsumptionAllocations", out var consAllocProp) && consAllocProp.ValueKind == JsonValueKind.Array)
+                    if (root.TryGetProperty("ConsumptionAllocations", out var consAllocProp) || root.TryGetProperty("consumptionAllocations", out consAllocProp))
                     {
-                        consumptionAllocations = JsonSerializer.Deserialize<List<ConsumptionAllocation>>(consAllocProp.GetRawText()) ?? new List<ConsumptionAllocation>();
+                        if (consAllocProp.ValueKind == JsonValueKind.Array)
+                            consumptionAllocations = JsonSerializer.Deserialize<List<ConsumptionAllocation>>(consAllocProp.GetRawText(), options) ?? new List<ConsumptionAllocation>();
                     }
 
                     decimal previousDebt = 0;
-                    if (allocation.TryGetProperty("PreviousDebt", out var prevDebtProp) && prevDebtProp.ValueKind == JsonValueKind.Number)
+                    if (root.TryGetProperty("PreviousDebt", out var prevDebtProp) || root.TryGetProperty("previousDebt", out prevDebtProp))
                     {
-                        previousDebt = prevDebtProp.GetDecimal();
+                        if (prevDebtProp.ValueKind == JsonValueKind.Number)
+                            previousDebt = prevDebtProp.GetDecimal();
                     }
 
                     // 1. Aplicar pagos a rentas (canchas o espacios)
@@ -313,7 +323,8 @@ namespace PadelQ.Api.Controllers
                                     UserId = userId,
                                     PaymentMethodId = mpMethod?.Id,
                                     BookingId = booking.Id,
-                                    ProcessedBy = processedBy
+                                    ProcessedBy = processedBy,
+                                    PaymentGroupId = paymentGroupId
                                 });
                             }
                         }
@@ -338,7 +349,8 @@ namespace PadelQ.Api.Controllers
                                     UserId = userId,
                                     PaymentMethodId = mpMethod?.Id,
                                     SpaceBookingId = spaceBooking.Id,
-                                    ProcessedBy = processedBy
+                                    ProcessedBy = processedBy,
+                                    PaymentGroupId = paymentGroupId
                                 });
                             }
                         }
@@ -375,7 +387,8 @@ namespace PadelQ.Api.Controllers
                                 PaymentMethodId = mpMethod?.Id,
                                 BookingId = targetBookingId,
                                 SpaceBookingId = targetSpaceBookingId,
-                                ProcessedBy = processedBy
+                                ProcessedBy = processedBy,
+                                PaymentGroupId = paymentGroupId
                             });
                         }
                     }
@@ -397,7 +410,8 @@ namespace PadelQ.Api.Controllers
                             PaymentMethodId = mpMethod?.Id,
                             BookingId = targetBookingId,
                             SpaceBookingId = targetSpaceBookingId,
-                            ProcessedBy = processedBy
+                            ProcessedBy = processedBy,
+                            PaymentGroupId = paymentGroupId
                         });
                     }
 
@@ -482,7 +496,8 @@ namespace PadelQ.Api.Controllers
                                 UserId = userId,
                                 PaymentMethodId = mpMethod?.Id,
                                 BookingId = bookingId,
-                                ProcessedBy = processedBy
+                                ProcessedBy = processedBy,
+                                PaymentGroupId = paymentGroupId
                             };
                             _context.Transactions.Add(transaction);
                             await _context.SaveChangesAsync();
@@ -553,7 +568,8 @@ namespace PadelQ.Api.Controllers
                                 UserId = userId,
                                 PaymentMethodId = mpMethod?.Id,
                                 SpaceBookingId = bookingId,
-                                ProcessedBy = processedBy
+                                ProcessedBy = processedBy,
+                                PaymentGroupId = paymentGroupId
                             };
                             _context.Transactions.Add(transaction);
                             await _context.SaveChangesAsync();
@@ -742,6 +758,109 @@ namespace PadelQ.Api.Controllers
             {
                 return BadRequest(new { Message = ex.Message });
             }
+        }
+
+        [HttpGet("diag-payments")]
+        public async Task<IActionResult> DiagPayments([FromQuery] string secret)
+        {
+            if (secret != "padelq2026") return Unauthorized("Invalid secret.");
+
+            var recentTransactions = await _context.Transactions
+                .Include(t => t.PaymentMethod)
+                .OrderByDescending(t => t.Date)
+                .Take(20)
+                .Select(t => new {
+                    t.Id,
+                    t.Amount,
+                    t.Date,
+                    t.Description,
+                    MethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "null",
+                    t.ProcessedBy,
+                    t.BookingId,
+                    t.SpaceBookingId
+                })
+                .ToListAsync();
+
+            var openClosures = await _context.CashClosures
+                .Where(c => c.IsOpen)
+                .Select(c => new {
+                    c.Id,
+                    c.OpeningDate,
+                    c.OpenedBy,
+                    c.IsOpen,
+                    c.InitialCash
+                })
+                .ToListAsync();
+
+            var users = await _context.Users
+                .Select(u => new {
+                    u.Id,
+                    u.UserName,
+                    u.Email,
+                    u.FullName
+                })
+                .ToListAsync();
+
+            var paymentMethods = await _context.PaymentMethods
+                .Select(pm => new {
+                    pm.Id,
+                    pm.Name,
+                    pm.IsActive,
+                    pm.HexColor
+                })
+                .ToListAsync();
+
+            // Simulación de GetCurrentStatus para "Admin"
+            var targetUser = "Admin";
+            var simActiveClosure = await _context.CashClosures
+                .Where(c => c.OpenedBy == targetUser && c.IsOpen)
+                .OrderByDescending(c => c.OpeningDate)
+                .FirstOrDefaultAsync();
+
+            if (simActiveClosure == null)
+            {
+                simActiveClosure = await _context.CashClosures
+                    .Where(c => c.OpenedBy == targetUser && !c.IsOpen)
+                    .OrderByDescending(c => c.OpeningDate)
+                    .FirstOrDefaultAsync();
+            }
+
+            var startDate = simActiveClosure?.OpeningDate ?? TimeZoneHelper.GetArgNow().Date;
+            var endDate = simActiveClosure?.ClosingDate ?? TimeZoneHelper.GetArgNow();
+
+            var simTransactions = await _context.Transactions
+                .Include(t => t.PaymentMethod)
+                .Include(t => t.User)
+                .Where(t => t.Date >= startDate && t.Date <= endDate && t.ProcessedBy == targetUser && (
+                    t.Type == TransactionType.Payment || 
+                    t.Type == TransactionType.MembershipPayment ||
+                    t.Type == TransactionType.CashIn ||
+                    t.Type == TransactionType.CashOut
+                ))
+                .Select(t => new {
+                    t.Id,
+                    t.Amount,
+                    t.Date,
+                    t.Description,
+                    MethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "null",
+                    t.ProcessedBy
+                })
+                .ToListAsync();
+
+            return Ok(new {
+                RecentTransactions = recentTransactions,
+                OpenClosures = openClosures,
+                Users = users,
+                PaymentMethods = paymentMethods,
+                SimulatedClosure = new {
+                    ActiveClosureId = simActiveClosure?.Id,
+                    StartDate = startDate,
+                    EndDate = endDate,
+                    TargetUser = targetUser,
+                    TransactionCount = simTransactions.Count,
+                    Transactions = simTransactions
+                }
+            });
         }
 
         private async Task<string> GetOrCreateParticularUserIdAsync()
