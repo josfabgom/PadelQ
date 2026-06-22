@@ -19,7 +19,7 @@ const MercadoPagoAudit: React.FC = () => {
   const [transactions, setTransactions] = useState<LocalTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    new Date().toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -135,6 +135,31 @@ const MercadoPagoAudit: React.FC = () => {
       spaceBookingId.toLowerCase().includes(searchLower)
     );
   });
+
+  const groupedTransactions = React.useMemo(() => {
+    const groups: Record<string, LocalTransaction & { groupedIds: number[], isGroup: boolean }> = {};
+    const result: (LocalTransaction & { groupedIds?: number[], isGroup?: boolean })[] = [];
+
+    filteredTransactions.forEach(t => {
+      const mpId = extractPaymentId(t.description);
+      if (mpId) {
+        if (groups[mpId]) {
+          groups[mpId].amount += t.amount;
+          groups[mpId].groupedIds.push(t.id);
+          if (!groups[mpId].description.includes(t.description)) {
+              groups[mpId].description += ` | ${t.description}`;
+          }
+        } else {
+          groups[mpId] = { ...t, groupedIds: [t.id], isGroup: true };
+          result.push(groups[mpId]);
+        }
+      } else {
+        result.push(t);
+      }
+    });
+    // Ordenar de más reciente a más antigua
+    return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [filteredTransactions]);
 
   // Exportar los datos actuales a CSV
   const handleExportCSV = () => {
@@ -269,11 +294,13 @@ const MercadoPagoAudit: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredTransactions.map(t => {
+                {groupedTransactions.map(t => {
                   const mpId = extractPaymentId(t.description);
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-6 font-mono font-bold text-zinc-500">#{t.id}</td>
+                      <td className="py-4 px-6 font-mono font-bold text-zinc-500">
+                        {t.isGroup && t.groupedIds && t.groupedIds.length > 1 ? `Múltiples (${t.groupedIds.length})` : `#${t.id}`}
+                      </td>
                       <td className="py-4 px-6 text-slate-600 font-medium">
                         {new Date(t.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                       </td>
@@ -308,7 +335,7 @@ const MercadoPagoAudit: React.FC = () => {
                     </tr>
                   );
                 })}
-                {filteredTransactions.length === 0 && (
+                {groupedTransactions.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                       No se encontraron transacciones cobradas con Mercado Pago en este período.
