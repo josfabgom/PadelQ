@@ -369,7 +369,7 @@ const MercadoPagoAudit: React.FC = () => {
               </div>
 
               {/* Local Details Summary */}
-              <div className="bg-slate-50 p-4 rounded-2xl space-y-2 border border-slate-100">
+              <div className="bg-slate-50 p-4 rounded-2xl space-y-4 border border-slate-100">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Transacción Local PadelQ</h4>
                 <div className="grid grid-cols-2 gap-4 text-xs font-medium">
                   <div>
@@ -389,6 +389,27 @@ const MercadoPagoAudit: React.FC = () => {
                     <span className="text-slate-800 font-bold">{selectedTx.processedBy || 'Sistema'}</span>
                   </div>
                 </div>
+
+                {(selectedTx as any).isGroup && (selectedTx as any).groupedIds && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <span className="text-slate-500 block uppercase text-[9px] font-black mb-2">Detalle de Cobros Agrupados</span>
+                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                      {transactions.filter(t => (selectedTx as any).groupedIds.includes(t.id)).map(subTx => (
+                        <div key={subTx.id} className="bg-white border border-slate-100 p-2.5 rounded-xl flex justify-between items-center shadow-sm">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-700">ID Local: #{subTx.id}</span>
+                            <span className="text-[10px] font-medium text-slate-500 line-clamp-1" title={subTx.description}>
+                              {subTx.description} 
+                            </span>
+                          </div>
+                          <span className="text-sm font-black text-emerald-600 ml-2 whitespace-nowrap">
+                            ${subTx.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Mercado Pago API Call Section */}
