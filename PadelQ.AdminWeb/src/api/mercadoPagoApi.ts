@@ -30,6 +30,7 @@ export interface CreateIntentRequest {
   rentAllocations?: { bookingId: string; amount: number }[];
   consumptionAllocations?: { consumptionId: string; amount: number }[];
   previousDebt?: number;
+  directSalePayload?: any;
 }
 
 export const createMercadoPagoIntent = async (request: CreateIntentRequest) => {

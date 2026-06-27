@@ -120,6 +120,15 @@ const Dashboard = () => {
       show: isAdmin || isStaff || isMerchant
     },
     {
+      href: '/payment-methods',
+      icon: <CreditCard className="w-5 h-5" />,
+      label: 'Medios de Pago',
+      desc: 'Configuración de canales de cobro (Efectivo, Tarjetas, Transferencias).',
+      color: 'text-indigo-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-indigo-600',
+      show: isAdmin
+    },
+    {
       href: '/settings',
       icon: <Settings className="w-5 h-5" />,
       label: 'Configuración',

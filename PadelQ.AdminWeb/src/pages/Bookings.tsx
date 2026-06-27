@@ -158,7 +158,6 @@ const getTotalDebt = (booking: any) => getRentDebt(booking) + getConsumptionDebt
 const isFullyPaid = (booking: any) => getTotalDebt(booking) <= 0;
 
 const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], originalAmount: number, paidAmount: number, onPartsChange: (parts: number[]) => void) => {
-    if (partsCount <= 1) return null;
     const partPrice = originalAmount / partsCount;
     const paidParts = Math.floor(paidAmount / partPrice);
     
@@ -292,6 +291,7 @@ const BookingsPage = () => {
     const [isWaitingMp, setIsWaitingMp] = useState(false);
     const [isMpQrModalOpen, setIsMpQrModalOpen] = useState(false);
     const [mpQrData, setMpQrData] = useState('');
+    const [mpDirectSaleId, setMpDirectSaleId] = useState<string | null>(null);
     const mpQrPollingTimerRef = useRef<any>(null);
     const [mpInitialDepositPaid, setMpInitialDepositPaid] = useState<number>(0);
     const [firstMethodAmount, setFirstMethodAmount] = useState<number>(0);
@@ -673,6 +673,36 @@ const BookingsPage = () => {
                 notes: isCtaCte ? `Venta Cta Cte (Responsable: ${selectedCtaCteUser?.fullName || 'Cliente'})` : (directSaleData.clientId ? `Venta Directa desde Calendario` : `Venta Consumidor Final`)
             };
 
+            const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
+            if (isPaid && !isInternal && !directSaleData.isSplitPayment && isMp) {
+                if (!selectedMpTerminal) {
+                    alert("Por favor, seleccione una terminal Mercado Pago.");
+                    return;
+                }
+                
+                const activeUserEmail = localStorage.getItem('padelq_user_email') || 'Sistema';
+                const directSaleId = uuidv4();
+                
+                const intentRes = await createMercadoPagoIntent({
+                    terminalId: selectedMpTerminal,
+                    amount: totalToPay,
+                    description: `Venta Directa PadelQ - ${directSaleId.substring(0, 8)}`,
+                    referenceId: `D-${directSaleId};${activeUserEmail}`,
+                    directSalePayload: payload
+                });
+
+                const qrData = intentRes.Result || intentRes.result || "";
+                if (qrData) {
+                    setMpQrData(qrData);
+                    setMpDirectSaleId(directSaleId);
+                    setIsMpQrModalOpen(true);
+                    startDirectSaleMpQrPolling(directSaleId);
+                } else {
+                    alert("Se envió el cobro a la terminal física Mercado Pago.");
+                }
+                return;
+            }
+
             await api.post('/api/consumptions/bulk-direct-sale', payload, config);
 
             // --- COMBO TICKET PRINT ---
@@ -811,6 +841,19 @@ const BookingsPage = () => {
             setDsFilteredClients([]);
         }
     }, [dsClientSearch, clients]);
+
+    useEffect(() => {
+        if (isDirectSaleModalOpen && !directSaleData.clientId && clients.length > 0) {
+            const consumidorFinal = clients.find(c => c.fullName?.toLowerCase().includes("consumidor final"));
+            if (consumidorFinal) {
+                setDirectSaleData(prev => ({
+                    ...prev,
+                    clientId: consumidorFinal.id,
+                    clientName: consumidorFinal.fullName
+                }));
+            }
+        }
+    }, [isDirectSaleModalOpen, clients, directSaleData.clientId]);
 
     useEffect(() => {
         if (dsProductSearch.length > 2) {
@@ -1746,6 +1789,30 @@ const BookingsPage = () => {
                 }
             } catch (err) {
                 console.error("Error polling payment status", err);
+            }
+        }, 5000);
+
+        mpQrPollingTimerRef.current = intervalId;
+    };
+
+    const startDirectSaleMpQrPolling = (directSaleId: string) => {
+        if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+        
+        const intervalId = setInterval(async () => {
+            try {
+                // Consultar activamente a Mercado Pago para procesar cobros
+                const verifyRes = await api.post(`/api/mercadopago/verify/${directSaleId}?isSpace=false`, {}, config);
+                if (verifyRes.data?.Success || verifyRes.data?.success) {
+                    clearInterval(intervalId);
+                    mpQrPollingTimerRef.current = null;
+                    setIsMpQrModalOpen(false);
+                    setIsDirectSaleModalOpen(false);
+                    
+                    alert("¡Pago de venta directa aprobado por Mercado Pago!");
+                    fetchData();
+                }
+            } catch (err) {
+                console.error("Error polling direct sale payment status", err);
             }
         }, 5000);
 
@@ -5063,7 +5130,7 @@ const BookingsPage = () => {
                                 <QrCode className="w-6 h-6 text-emerald-400" />
                             </div>
                             <h3 className="text-xl font-black italic uppercase tracking-tight mb-1 text-zinc-100">Pago QR Mercado Pago</h3>
-                            <div className="text-2xl font-black text-emerald-400 mb-2">{formatARS(currentTransactionTotal)}</div>
+                            <div className="text-2xl font-black text-emerald-400 mb-2">{formatARS(isDirectSaleModalOpen ? getDirectSaleTotals().totalToPay : currentTransactionTotal)}</div>
                             <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Escanee el código QR desde la App de Mercado Pago para pagar</p>
                         </div>
 
@@ -5104,6 +5171,26 @@ const BookingsPage = () => {
                             </button>
                             <button
                                 onClick={async () => {
+                                    if (isDirectSaleModalOpen && mpDirectSaleId) {
+                                        try {
+                                            const verifyRes = await api.post(`/api/mercadopago/verify/${mpDirectSaleId}?isSpace=false`, {}, config);
+                                            if (verifyRes.data?.Success || verifyRes.data?.success) {
+                                                if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
+                                                mpQrPollingTimerRef.current = null;
+                                                setIsMpQrModalOpen(false);
+                                                setIsDirectSaleModalOpen(false);
+                                                alert("¡Pago de venta directa aprobado por Mercado Pago!");
+                                                fetchData();
+                                            } else {
+                                                alert("No se encontró ningún pago aprobado reciente para esta venta en Mercado Pago.");
+                                            }
+                                        } catch (verifyErr) {
+                                            console.error("Error calling active verification endpoint", verifyErr);
+                                            alert("Error al verificar el pago.");
+                                        }
+                                        return;
+                                    }
+
                                     const booking = selectedBooking || selectedSpaceBooking;
                                     if (booking) {
                                         const isSpace = !!selectedSpaceBooking;
@@ -6108,6 +6195,31 @@ const BookingsPage = () => {
                                                         })}
                                                 </div>
                                             )}
+
+                                            {/* Selector de Terminal MP en Venta Directa */}
+                                            {(() => {
+                                                if (directSaleData.isSplitPayment) return null;
+                                                const selectedMethodObj = paymentMethods.find(m => m.id === directSaleData.paymentMethodId);
+                                                const isMp = selectedMethodObj?.name?.toUpperCase().includes("MERCADO PAGO") || selectedMethodObj?.name?.toUpperCase().includes("MP") || selectedMethodObj?.name?.toUpperCase().includes("QR");
+                                                if (isMp) {
+                                                    return (
+                                                        <div className="mt-3 p-3 bg-zinc-50 border border-zinc-100 rounded-2xl animate-in fade-in slide-in-from-top-1">
+                                                            <label className="text-[8px] font-black text-zinc-400 uppercase tracking-widest mb-1.5 block">Seleccione Terminal QR / Point</label>
+                                                            <select
+                                                                className="w-full bg-white border border-zinc-200 rounded-xl p-2 text-[10px] font-black uppercase text-zinc-800 outline-none focus:ring-2 focus:ring-black/5"
+                                                                value={selectedMpTerminal || ''}
+                                                                onChange={(e) => setSelectedMpTerminal(e.target.value ? Number(e.target.value) : null)}
+                                                            >
+                                                                <option value="">-- SELECCIONAR --</option>
+                                                                {mpTerminals.map(t => (
+                                                                    <option key={t.id} value={t.id}>{t.name} ({t.externalPosId})</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                     )}
                                 </div>
@@ -6130,7 +6242,7 @@ const BookingsPage = () => {
                                     )}
                                     <button 
                                         onClick={() => handleConfirmDirectSale(true)}
-                                        disabled={!directSaleData.clientId || directSaleData.consumptions.length === 0 || (!directSaleData.isInternalConsumption && !directSaleData.paymentMethodId)}
+                                        disabled={directSaleData.consumptions.length === 0 || (!directSaleData.isInternalConsumption && !directSaleData.paymentMethodId)}
                                         className={`py-5 text-white rounded-[24px] font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 ${directSaleData.isInternalConsumption ? 'bg-amber-600 shadow-amber-600/20 col-span-2' : 'bg-emerald-500 shadow-emerald-500/20'}`}
                                     >
                                         {directSaleData.isInternalConsumption ? 'Registrar Consumo' : 'Cobrar Ahora'}

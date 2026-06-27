@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X, Link, Unlink, QrCode } from 'lucide-react';
+import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X, Link, Unlink, QrCode, CreditCard } from 'lucide-react';
 import Header from '../components/Header';
 import { UPDATE_HISTORY, SYSTEM_VERSION } from '../constants/versions';
 import PointTerminals from './PointTerminals';
@@ -575,6 +575,26 @@ const AdminSettings = () => {
                 type="text"
               />
             </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                <CreditCard className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Medios de Pago</h2>
+                <p className="text-sm text-slate-500">Gestión de métodos de cobro (Efectivo, Tarjetas, Transferencias)</p>
+              </div>
+            </div>
+            
+            <a 
+              href="/payment-methods"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all active:scale-95"
+            >
+              <CreditCard className="w-4 h-4" />
+              Administrar Medios de Pago
+            </a>
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2">

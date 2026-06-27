@@ -36,7 +36,7 @@ namespace PadelQ.Api.Controllers
             try
             {
                 // Si viene asignación de cobro, la persistimos en SystemSettings
-                if (request.RentAllocations != null || request.ConsumptionAllocations != null || request.PreviousDebt > 0)
+                if (request.RentAllocations != null || request.ConsumptionAllocations != null || request.PreviousDebt > 0 || request.DirectSalePayload != null)
                 {
                     string actualReference = request.ReferenceId;
                     if (request.ReferenceId.Contains(";"))
@@ -47,12 +47,24 @@ namespace PadelQ.Api.Controllers
                     {
                         var bookingIdStr = actualReference.Substring(2);
                         var key = $"MP_Alloc_{bookingIdStr}";
-                        var allocationJson = JsonSerializer.Serialize(new
+                        string allocationJson = "";
+                        
+                        if (actualReference.StartsWith("D-"))
                         {
-                            RentAllocations = request.RentAllocations,
-                            ConsumptionAllocations = request.ConsumptionAllocations,
-                            PreviousDebt = request.PreviousDebt
-                        });
+                            allocationJson = JsonSerializer.Serialize(new
+                            {
+                                DirectSalePayload = request.DirectSalePayload
+                            });
+                        }
+                        else
+                        {
+                            allocationJson = JsonSerializer.Serialize(new
+                            {
+                                RentAllocations = request.RentAllocations,
+                                ConsumptionAllocations = request.ConsumptionAllocations,
+                                PreviousDebt = request.PreviousDebt
+                            });
+                        }
 
                         var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == key);
                         if (setting == null)
@@ -257,7 +269,7 @@ namespace PadelQ.Api.Controllers
                            ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => m.IsActive);
 
             string bookingIdStr = "";
-            if (referenceId.StartsWith("B-") || referenceId.StartsWith("S-"))
+            if (referenceId.StartsWith("B-") || referenceId.StartsWith("S-") || referenceId.StartsWith("D-"))
             {
                 bookingIdStr = referenceId.Substring(2);
             }
@@ -274,8 +286,20 @@ namespace PadelQ.Api.Controllers
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     using var doc = JsonDocument.Parse(allocSetting.Value);
                     var root = doc.RootElement;
-                    
-                    // Parsear las asignaciones
+
+                    if (referenceId.StartsWith("D-") && (root.TryGetProperty("DirectSalePayload", out var dsProp) || root.TryGetProperty("directSalePayload", out dsProp)))
+                    {
+                        var directSalePayload = JsonSerializer.Deserialize<BulkDirectSaleRequest>(dsProp.GetRawText(), options);
+                        if (directSalePayload != null)
+                        {
+                            var directSaleId = Guid.TryParse(bookingIdStr, out Guid dsGuid) ? dsGuid : Guid.NewGuid();
+                            await ProcessDirectSalePaymentAsync(directSalePayload, mpPaymentId, amount, mpMethod?.Id, processedBy, directSaleId);
+                            allocationApplied = true;
+                        }
+                    }
+                    else
+                    {
+                        // Parsear las asignaciones
                     List<RentAllocation> rentAllocations = new List<RentAllocation>();
                     if (root.TryGetProperty("RentAllocations", out var rentAllocProp) || root.TryGetProperty("rentAllocations", out rentAllocProp))
                     {
@@ -416,6 +440,7 @@ namespace PadelQ.Api.Controllers
                     }
 
                     await _context.SaveChangesAsync();
+                    }
 
                     // Limpiar el setting de SystemSettings
                     _context.SystemSettings.Remove(allocSetting);
@@ -881,6 +906,117 @@ namespace PadelQ.Api.Controllers
             }
             return user.Id;
         }
+
+        private async Task ProcessDirectSalePaymentAsync(BulkDirectSaleRequest request, string mpPaymentId, decimal amount, int? mpMethodId, string processedBy, Guid paymentGroupId)
+        {
+            if (request.Items == null || !request.Items.Any()) return;
+
+            var consumptions = new List<BookingConsumption>();
+            decimal totalAmount = 0;
+            var itemDescriptions = new List<string>();
+
+            // Get employee discount setting if any employee purchase
+            decimal discountPct = 0;
+            var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "EmployeeDiscountPercentage");
+            if (setting != null)
+            {
+                decimal.TryParse(setting.Value, out discountPct);
+            }
+
+            foreach (var item in request.Items)
+            {
+                var product = await _context.Products.FindAsync(item.ProductId);
+                if (product == null) continue;
+
+                decimal finalPrice = product.FinalPrice;
+                var discountAppliedStr = "";
+
+                if (!string.IsNullOrEmpty(request.UserId))
+                {
+                    var isStaff = await (from ur in _context.UserRoles
+                                         join r in _context.Roles on ur.RoleId equals r.Id
+                                         where ur.UserId == request.UserId && r.Name == "Staff"
+                                         select ur).AnyAsync();
+                    if (isStaff && discountPct > 0)
+                    {
+                        finalPrice = finalPrice * (1.0m - (discountPct / 100.0m));
+                        discountAppliedStr = $" (Descuento {discountPct:0.##}%)";
+                    }
+                }
+
+                var consumption = new BookingConsumption
+                {
+                    UserId = request.UserId,
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    UnitPrice = finalPrice,
+                    IsPaid = true,
+                    DepositPaid = item.PaidAmount ?? (finalPrice * item.Quantity),
+                    Notes = request.Notes ?? "Venta Directa unificada"
+                };
+
+                totalAmount += consumption.DepositPaid;
+                consumptions.Add(consumption);
+                itemDescriptions.Add($"{product.Name} x{item.Quantity}");
+
+                // Stock Control
+                string note = $"Venta Directa Bulk (QR): {product.Name} (Pagado){discountAppliedStr}";
+                await ApplyStockDeductionAsync(product, item.Quantity, note);
+            }
+
+            var itemsSummary = itemDescriptions.Any() ? string.Join(", ", itemDescriptions) : "Bulk";
+
+            var transaction = new Transaction
+            {
+                UserId = request.UserId,
+                Amount = totalAmount,
+                Date = TimeZoneHelper.GetArgNow(),
+                Type = TransactionType.Payment,
+                Description = $"Venta Directa (Pago QR Mercado Pago ID {mpPaymentId}): {itemsSummary}",
+                PaymentMethodId = mpMethodId,
+                ProcessedBy = processedBy,
+                PaymentGroupId = paymentGroupId
+            };
+            _context.Transactions.Add(transaction);
+
+            _context.BookingConsumptions.AddRange(consumptions);
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task ApplyStockDeductionAsync(Product product, int quantity, string note)
+        {
+            if (product.IsRecipe)
+            {
+                var recipeItems = await _context.ProductRecipeItems.Where(r => r.RecipeProductId == product.Id).ToListAsync();
+                foreach (var item in recipeItems)
+                {
+                    var baseProduct = await _context.Products.FindAsync(item.BaseProductId);
+                    if (baseProduct != null)
+                    {
+                        int deductQuantity = quantity * item.QuantityToDeduct;
+                        baseProduct.Stock -= deductQuantity;
+                        _context.ProductStockMovements.Add(new ProductStockMovement
+                        {
+                            ProductId = baseProduct.Id,
+                            Type = quantity >= 0 ? MovementType.Sale : MovementType.Adjustment,
+                            Quantity = -deductQuantity,
+                            Note = $"{note} (Receta: {product.Name})"
+                        });
+                    }
+                }
+            }
+            else
+            {
+                product.Stock -= quantity;
+                _context.ProductStockMovements.Add(new ProductStockMovement
+                {
+                    ProductId = product.Id,
+                    Type = quantity >= 0 ? MovementType.Sale : MovementType.Adjustment,
+                    Quantity = -quantity,
+                    Note = note
+                });
+            }
+        }
     }
 
     public class CreateIntentRequest
@@ -892,6 +1028,7 @@ namespace PadelQ.Api.Controllers
         public List<RentAllocation>? RentAllocations { get; set; }
         public List<ConsumptionAllocation>? ConsumptionAllocations { get; set; }
         public decimal PreviousDebt { get; set; }
+        public BulkDirectSaleRequest? DirectSalePayload { get; set; }
     }
 
     public class RentAllocation
