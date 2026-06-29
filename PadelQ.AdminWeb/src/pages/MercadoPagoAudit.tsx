@@ -56,8 +56,8 @@ const MercadoPagoAudit: React.FC = () => {
 
   const extractPaymentId = (description: string | null): string | null => {
     if (!description) return null;
-    // Busca patrones como "ID: 12345678" o "(ID: 12345678)"
-    const match = description.match(/ID:\s*([A-Za-z0-9_-]+)/i);
+    // Busca patrones como "ID: 12345678", "(ID: 12345678)", o "ID 12345678"
+    const match = description.match(/ID:?\s*([0-9]+)/i);
     return match ? match[1] : null;
   };
 

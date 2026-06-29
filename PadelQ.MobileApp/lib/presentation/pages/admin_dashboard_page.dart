@@ -39,6 +39,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
   List<dynamic> _cashHistory = [];
   Map<String, dynamic>? _selectedClosureDetails;
   bool _isLoadingClosureDetails = false;
+  bool _isReservationsExpanded = false;
+  bool _isMovementsExpanded = false;
 
   @override
   void initState() {
@@ -1544,6 +1546,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
           final double diff = actualCash - expectedCash;
           final bool hasDiff = !isOpen && diff.abs() > 0.01;
+          final int reservationsCount = item['reservationsCount'] ?? 0;
 
           String dateStr = DateFormat('EEEE, d MMMM yyyy', 'es_AR').format(openingDate);
           // Capitalize first letter of day/month
@@ -1627,6 +1630,17 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
                         ),
                       ),
                       const Spacer(),
+                      Icon(LucideIcons.calendar, size: 11.sp, color: Colors.grey.shade400),
+                      SizedBox(width: 4.w),
+                      Text(
+                        "$reservationsCount",
+                        style: TextStyle(
+                          fontSize: 10.sp,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 12.w),
                       Text(
                         "por: $openedBy",
                         style: TextStyle(
@@ -1721,6 +1735,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
     final closure = _selectedClosureDetails!['closure'];
     final transactions = _selectedClosureDetails!['transactions'] as List<dynamic>? ?? [];
+    final reservations = _selectedClosureDetails!['reservations'] as List<dynamic>? ?? [];
 
     final int id = closure['id'];
     final double expectedCash = (closure['expectedCash'] ?? 0.0).toDouble();
@@ -2023,7 +2038,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
           SizedBox(height: 24.h),
 
-          // 3. DESGLOSE DE MOVIMIENTOS
+          // 3. RESERVAS DE CANCHA
           Container(
             padding: EdgeInsets.all(24.w),
             decoration: BoxDecoration(
@@ -2034,74 +2049,199 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '3. DESGLOSE DE MOVIMIENTOS',
-                  style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
-                ),
-                SizedBox(height: 24.h),
-                if (transactions.isEmpty)
-                  Text('No hay transacciones registradas en esta caja.', style: TextStyle(fontSize: 10.sp, fontStyle: FontStyle.italic, color: Colors.grey.shade500, fontWeight: FontWeight.bold))
-                else
-                  ...transactions.map((tx) {
-                    final double amount = (tx['amount'] ?? 0.0).toDouble();
-                    final String description = tx['description'] ?? 'Sin concepto';
-                    final String userName = tx['userName'] ?? 'Particular';
-                    final String method = tx['method'] ?? 'Efectivo';
-                    final String time = tx['date'] != null ? DateFormat('HH:mm').format(DateTime.parse(tx['date']).toLocal()) : '--:--';
-                    final bool isEgreso = amount < 0;
-
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 12.h),
-                      padding: EdgeInsets.all(16.w),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: Colors.black.withOpacity(0.05)),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isReservationsExpanded = !_isReservationsExpanded;
+                    });
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '3. RESERVAS DE CANCHA',
+                        style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      Icon(_isReservationsExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, color: Colors.grey.shade400, size: 16.sp),
+                    ],
+                  ),
+                ),
+                if (_isReservationsExpanded) ...[
+                  SizedBox(height: 24.h),
+                  if (reservations.isEmpty)
+                    Text('No hay reservas registradas en este turno.', style: TextStyle(fontSize: 10.sp, fontStyle: FontStyle.italic, color: Colors.grey.shade500, fontWeight: FontWeight.bold))
+                  else
+                    ...reservations.map((r) {
+                      final double price = (r['price'] ?? 0.0).toDouble();
+                      final double deposit = (r['depositPaid'] ?? 0.0).toDouble();
+                      final String spaceName = r['spaceName'] ?? 'Cancha';
+                      final String userName = r['userName'] ?? 'Particular';
+                      final String time = r['startTime'] != null ? DateFormat('HH:mm').format(DateTime.parse(r['startTime']).toLocal()) : '--:--';
+                      final double consDebt = (r['consumptionsDebt'] ?? 0.0).toDouble();
+                      
+                      return Container(
+                        margin: EdgeInsets.only(bottom: 12.h),
+                        padding: EdgeInsets.all(16.w),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16.r),
+                          border: Border.all(color: Colors.black.withOpacity(0.05)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(LucideIcons.calendarDays, size: 10.sp, color: Colors.blue.shade700),
+                                      SizedBox(width: 6.w),
+                                      Text(spaceName.toUpperCase(), style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5.w)),
+                                    ],
+                                  ),
+                                  SizedBox(height: 6.h),
+                                  Text(userName, style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w700, color: Colors.grey.shade700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  SizedBox(height: 4.h),
+                                  Text('$time hs', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 0.5.w)),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                                      decoration: BoxDecoration(
-                                        color: isEgreso ? Colors.red.shade50 : Colors.green.shade50,
-                                        borderRadius: BorderRadius.circular(4.r),
-                                      ),
-                                      child: Text(
-                                        isEgreso ? 'EGRESO' : 'INGRESO',
-                                        style: TextStyle(fontSize: 7.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade700 : Colors.green.shade700, letterSpacing: 0.5.w),
-                                      ),
-                                    ),
-                                    SizedBox(width: 6.w),
-                                    Text(method.toUpperCase(), style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5.w)),
-                                  ],
+                                Text(
+                                  '\$${NumberFormat('#,##0.00', 'es_AR').format(price + consDebt)}',
+                                  style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
                                 ),
-                                SizedBox(height: 6.h),
-                                Text(description, style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w700, color: Colors.grey.shade700), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                SizedBox(height: 4.h),
-                                Text('$time hs • $userName', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 0.5.w)),
+                                if (deposit >= price && consDebt <= 0)
+                                  Text(
+                                    'Pagado totalmente',
+                                    style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.green.shade700),
+                                  )
+                                else ...[
+                                  if ((price - deposit) > 0 || consDebt > 0)
+                                    Text(
+                                      'Resta pagar: \$${NumberFormat('#,##0.00', 'es_AR').format((price - deposit > 0 ? price - deposit : 0) + consDebt)}${(price - deposit > 0 && consDebt > 0) ? ' (Alq: \$${NumberFormat('#,##0', 'es_AR').format(price - deposit)} - Bar: \$${NumberFormat('#,##0', 'es_AR').format(consDebt)})' : (price - deposit > 0 ? ' (Alquiler)' : ' (Bar)')}',
+                                      style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.red.shade700),
+                                    ),
+                                  if (deposit > 0)
+                                    Text(
+                                      'Pagado: \$${NumberFormat('#,##0.00', 'es_AR').format(deposit)}',
+                                      style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.green.shade700),
+                                    ),
+                                ],
                               ],
                             ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Text(
-                            '\$${NumberFormat('#,##0.00', 'es_AR').format(amount)}',
-                            style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade600 : Colors.black, fontStyle: FontStyle.italic),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
               ],
             ),
           ),
           
+          SizedBox(height: 24.h),
+
+          // 4. DESGLOSE DE MOVIMIENTOS
+          Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24.r),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isMovementsExpanded = !_isMovementsExpanded;
+                    });
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '4. DESGLOSE DE MOVIMIENTOS',
+                        style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 1.w),
+                      ),
+                      Icon(_isMovementsExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, color: Colors.grey.shade400, size: 16.sp),
+                    ],
+                  ),
+                ),
+                if (_isMovementsExpanded) ...[
+                  SizedBox(height: 24.h),
+                  if (transactions.isEmpty)
+                    Text('No hay transacciones registradas en esta caja.', style: TextStyle(fontSize: 10.sp, fontStyle: FontStyle.italic, color: Colors.grey.shade500, fontWeight: FontWeight.bold))
+                  else
+                    ...transactions.map((tx) {
+                      final double amount = (tx['amount'] ?? 0.0).toDouble();
+                      final String description = tx['description'] ?? 'Sin concepto';
+                      final String userName = tx['userName'] ?? 'Particular';
+                      final String method = tx['method'] ?? 'Efectivo';
+                      final String time = tx['date'] != null ? DateFormat('HH:mm').format(DateTime.parse(tx['date']).toLocal()) : '--:--';
+                      final bool isEgreso = amount < 0;
+
+                      return Container(
+                        margin: EdgeInsets.only(bottom: 12.h),
+                        padding: EdgeInsets.all(16.w),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16.r),
+                          border: Border.all(color: Colors.black.withOpacity(0.05)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                        decoration: BoxDecoration(
+                                          color: isEgreso ? Colors.red.shade50 : Colors.green.shade50,
+                                          borderRadius: BorderRadius.circular(4.r),
+                                        ),
+                                        child: Text(
+                                          isEgreso ? 'EGRESO' : 'INGRESO',
+                                          style: TextStyle(fontSize: 7.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade700 : Colors.green.shade700, letterSpacing: 0.5.w),
+                                        ),
+                                      ),
+                                      SizedBox(width: 6.w),
+                                      Text(method.toUpperCase(), style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5.w)),
+                                    ],
+                                  ),
+                                  SizedBox(height: 6.h),
+                                  Text(description, style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w700, color: Colors.grey.shade700), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  SizedBox(height: 4.h),
+                                  Text('$time hs • $userName', style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 0.5.w)),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Text(
+                              '\$${NumberFormat('#,##0.00', 'es_AR').format(amount)}',
+                              style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: isEgreso ? Colors.red.shade600 : Colors.black, fontStyle: FontStyle.italic),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
+              ],
+            ),
+          ),
+
           SizedBox(height: 32.h),
         ],
       ),

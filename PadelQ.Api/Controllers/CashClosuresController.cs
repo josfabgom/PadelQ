@@ -326,6 +326,26 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
+            var reservations = await _context.Bookings
+                .Include(b => b.Court)
+                .Include(b => b.User)
+                .Include(b => b.BookingConsumptions)
+                .Where(b => b.StartTime >= start.Date && (closure.ClosingDate == null || b.StartTime <= closure.ClosingDate) && b.Status != BookingStatus.Cancelled)
+                .OrderBy(b => b.StartTime)
+                .Select(b => new {
+                    b.Id,
+                    b.StartTime,
+                    b.EndTime,
+                    b.Price,
+                    b.DepositPaid,
+                    Status = (int)b.Status,
+                    b.GuestName,
+                    SpaceName = b.Court != null ? b.Court.Name : "Cancha",
+                    UserName = b.User != null ? b.User.FullName : (b.GuestName ?? "Particular"),
+                    ConsumptionsDebt = b.BookingConsumptions.Where(c => !c.IsPaid).Sum(c => (c.UnitPrice * c.Quantity) - c.DepositPaid)
+                })
+                .ToListAsync();
+
             return Ok(new {
                 closure,
                 transactions = transactions.Select(t => new {
@@ -340,7 +360,8 @@ namespace PadelQ.Api.Controllers
                     UserName = t.User != null ? t.User.FullName : "Particular"
                 }),
                 rentalsTotal,
-                consumptionsTotal
+                consumptionsTotal,
+                reservations
             });
         }
 
@@ -393,10 +414,35 @@ namespace PadelQ.Api.Controllers
                 query = query.Where(c => c.OpenedBy == User.Identity.Name);
             }
 
-            var history = await query
+            var historyData = await query
                 .OrderByDescending(c => c.OpeningDate)
                 .Take(50)
+                .Select(c => new {
+                    Closure = c,
+                    ReservationsCount = _context.Bookings.Count(b => b.StartTime >= c.OpeningDate.Date && (c.ClosingDate == null || b.StartTime <= c.ClosingDate) && b.Status != BookingStatus.Cancelled)
+                })
                 .ToListAsync();
+
+            var history = historyData.Select(x => new {
+                x.Closure.Id,
+                x.Closure.OpeningDate,
+                x.Closure.ClosingDate,
+                x.Closure.InitialCash,
+                x.Closure.ExpectedCash,
+                x.Closure.ActualCash,
+                x.Closure.Notes,
+                x.Closure.OpenedBy,
+                x.Closure.ClosedBy,
+                x.Closure.IsOpen,
+                x.Closure.TotalCashSales,
+                x.Closure.TotalCashIn,
+                x.Closure.TotalCashOut,
+                x.Closure.TotalTransferSales,
+                x.Closure.TotalCardSales,
+                x.Closure.TotalOtherSales,
+                x.Closure.ActualTotals,
+                ReservationsCount = x.ReservationsCount
+            }).ToList();
 
             return Ok(history);
         }
