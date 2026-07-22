@@ -16,6 +16,8 @@ import BookingsPage from './pages/Bookings';
 import SpacesPage from './pages/Spaces';
 import ManageSpacesPage from './pages/ManageSpaces';
 import ProductsPage from './pages/Products';
+import IngredientsPage from './pages/Ingredients';
+import RecipesPage from './pages/Recipes';
 import CashManagementPage from './pages/CashManagement';
 import PurchaseReceptionPage from './pages/PurchaseReception';
 import MercadoPagoAuditPage from './pages/MercadoPagoAudit';
@@ -101,6 +103,14 @@ function App() {
           element={isAuthenticated ? <MercadoPagoAuditPage /> : <Navigate to="/login" />} 
         />
 
+        <Route 
+          path="/ingredients" 
+          element={isAuthenticated ? <IngredientsPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/recipes" 
+          element={isAuthenticated ? <RecipesPage /> : <Navigate to="/login" />} 
+        />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>

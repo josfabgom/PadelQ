@@ -347,6 +347,29 @@ const BookingsPage = () => {
     const [ctaCteUserSearch, setCtaCteUserSearch] = useState('');
     const [ctaCteFilteredClients, setCtaCteFilteredClients] = useState<any[]>([]);
     
+    // Shift Sales Modal state
+    const [isShiftSalesModalOpen, setIsShiftSalesModalOpen] = useState(false);
+    const [shiftSales, setShiftSales] = useState<any[]>([]);
+    const [isFetchingShiftSales, setIsFetchingShiftSales] = useState(false);
+
+    const fetchShiftDirectSales = async () => {
+        setIsFetchingShiftSales(true);
+        try {
+            const res = await api.get('/api/cash-closures/current-status', config);
+            if (res.data && res.data.summary) {
+                const sales = res.data.summary
+                    .flatMap((s: any) => s.transactions.map((t: any) => ({ ...t, method: s.method, color: s.color })))
+                    .filter((t: any) => t.description?.toUpperCase().includes('VENTA DIRECTA'))
+                    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setShiftSales(sales);
+            }
+        } catch (e) {
+            console.error("Error fetching shift direct sales:", e);
+        } finally {
+            setIsFetchingShiftSales(false);
+        }
+    };
+    
     // Fraccionamiento para Venta Directa
     const [dsFractions, setDsFractions] = useState<Record<string, number>>({});
     const [dsSelectedParts, setDsSelectedParts] = useState<Record<string, number[]>>({});
@@ -558,7 +581,7 @@ const BookingsPage = () => {
             splitPayments: []
         });
         setSelectedCtaCteUser(null);
-        setDsClientSearch('');
+        setDsClientSearch(consumidorFinal?.fullName || 'Consumidor Final');
         setDsProductSearch('');
         setDsBarcodeValue('');
         setDsFractions({});
@@ -698,7 +721,7 @@ const BookingsPage = () => {
                     setIsMpQrModalOpen(true);
                     startDirectSaleMpQrPolling(directSaleId);
                 } else {
-                    alert("Se envió el cobro a la terminal física Mercado Pago.");
+                    showAlert("Se envió el cobro a la terminal física Mercado Pago.", 'success');
                 }
                 return;
             }
@@ -719,18 +742,18 @@ const BookingsPage = () => {
             setIsDirectSaleModalOpen(false);
             
             if (isInternal) {
-                alert("Consumo interno registrado con éxito.");
+                showAlert("Consumo interno registrado con éxito.", 'success');
             } else if (!isPaid) {
-                alert("Venta registrada como PENDIENTE. Queda cargada a la cuenta del cliente.");
+                showAlert("Venta registrada como PENDIENTE. Queda cargada a la cuenta del cliente.", 'warning');
                 fetchDebtors(); // Refrescar lista de deudores
             } else {
-                alert("¡Venta directa registrada y cobrada con éxito!");
+                showAlert("¡Venta directa registrada y cobrada con éxito!", 'success');
             }
             
             fetchData();
         } catch (error: any) {
             console.error("Error en venta directa:", error);
-            alert("Error al procesar la venta: " + (error.response?.data || error.message));
+            showAlert("Error al procesar la venta: " + (error.response?.data || error.message), 'error');
         }
     };
 
@@ -2727,6 +2750,15 @@ const BookingsPage = () => {
                                 className="px-5 py-3.5 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-sm flex items-center gap-2"
                             >
                                 <CreditCard className="w-3.5 h-3.5" /> Cuentas Pendientes
+                            </button>
+                            <button
+                                onClick={() => {
+                                    fetchShiftDirectSales();
+                                    setIsShiftSalesModalOpen(true);
+                                }}
+                                className="px-5 py-3.5 bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <History className="w-3.5 h-3.5" /> Ventas del Turno
                             </button>
                             <button
                                 onClick={handleOpenDirectSale}
@@ -6012,7 +6044,7 @@ const BookingsPage = () => {
 
                                                         {/* 3. Nombre y Precio Unitario */}
                                                         <div className="flex-1 min-w-0">
-                                                            <p className="text-lg font-black text-slate-900 uppercase italic truncate tracking-tight">{item.productName}</p>
+                                                            <p className="text-base font-black text-slate-900 uppercase italic leading-tight tracking-tight">{item.productName}</p>
                                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">${item.price.toLocaleString()} c/u</p>
                                                         </div>
 
@@ -6324,8 +6356,12 @@ const BookingsPage = () => {
                                                 >
                                                     <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-4 -mt-4 transition-all group-hover:bg-emerald-500 group-hover:scale-150 duration-500"></div>
 
-                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-50 mb-4 group-hover:bg-white group-hover:shadow-sm transition-all z-10">
-                                                        <Package className="w-7 h-7 text-slate-400 group-hover:text-emerald-500" />
+                                                    <div className="w-16 h-16 bg-slate-50 rounded-2xl border border-slate-50 mb-4 group-hover:bg-white group-hover:shadow-sm transition-all z-10 flex items-center justify-center overflow-hidden shrink-0">
+                                                        {product.imageUrl ? (
+                                                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Package className="w-7 h-7 text-slate-400 group-hover:text-emerald-500" />
+                                                        )}
                                                     </div>
                                                     <p className="text-[10px] font-black uppercase italic text-center leading-tight mb-1 text-slate-500 group-hover:text-slate-900 z-10 transition-colors">{product.name}</p>
                                                     <p className="text-xl font-black italic text-black z-10">${product.finalPrice || product.FinalPrice}</p>
@@ -6439,6 +6475,81 @@ const BookingsPage = () => {
                                 >
                                     Usar Cliente de la Reserva
                                 </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Shift Sales Modal */}
+            {isShiftSalesModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-[0_20px_60px_rgb(0,0,0,0.1)]">
+                        {/* Header */}
+                        <div className="p-8 border-b border-zinc-100 flex items-center justify-between bg-white relative">
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="w-14 h-14 bg-blue-500 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                                    <History className="w-7 h-7" />
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-black italic uppercase tracking-tight">Ventas del Turno</h2>
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Resumen de ventas directas en la caja actual</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsShiftSalesModalOpen(false)}
+                                className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center text-zinc-400 hover:bg-black hover:text-white transition-all z-10"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-8 overflow-y-auto bg-zinc-50 flex-1">
+                            {isFetchingShiftSales ? (
+                                <div className="py-20 text-center">
+                                    <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Cargando ventas...</p>
+                                </div>
+                            ) : shiftSales.length === 0 ? (
+                                <div className="py-20 text-center bg-white rounded-3xl border border-zinc-100">
+                                    <History className="w-12 h-12 mx-auto text-zinc-200 mb-4" />
+                                    <h3 className="text-xl font-black italic uppercase text-zinc-800 mb-1">Sin Ventas Directas</h3>
+                                    <p className="text-xs font-bold text-zinc-400 uppercase">No se han registrado ventas directas en el turno actual.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {shiftSales.map((sale: any) => (
+                                        <div key={sale.id} className="bg-white p-5 rounded-3xl border border-zinc-100 flex items-center justify-between hover:border-zinc-200 transition-all">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${sale.color}15`, color: sale.color }}>
+                                                    <DollarSign className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-black text-zinc-800">{sale.description}</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">{format(new Date(sale.date), 'HH:mm')}hs</span>
+                                                        <span className="text-[10px] font-bold text-zinc-300">•</span>
+                                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider" style={{ backgroundColor: `${sale.color}15`, color: sale.color }}>
+                                                            {sale.method}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-black text-green-600">${sale.amount.toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <div className="bg-black text-white p-6 rounded-3xl flex items-center justify-between mt-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Total Ventas Directas</p>
+                                            <p className="text-3xl font-black italic">${shiftSales.reduce((sum, sale) => sum + sale.amount, 0).toLocaleString()}</p>
+                                        </div>
+                                        <History className="w-12 h-12 opacity-20" />
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

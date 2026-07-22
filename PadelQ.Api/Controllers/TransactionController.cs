@@ -290,8 +290,23 @@ namespace PadelQ.Api.Controllers
             var start = startDate ?? DateTime.UtcNow.Date.AddDays(-30);
             var end = endDate ?? DateTime.UtcNow;
 
+            var closuresQuery = _context.CashClosures.AsQueryable();
+            closuresQuery = closuresQuery.Where(c => c.OpeningDate >= start);
+            var endLimit = end.Date.AddDays(1).AddTicks(-1);
+            closuresQuery = closuresQuery.Where(c => c.OpeningDate <= endLimit);
+
+            var closures = await closuresQuery.ToListAsync();
+
+            if (!closures.Any())
+            {
+                return Ok(new List<object>());
+            }
+
+            var minDate = closures.Min(c => c.OpeningDate);
+            var maxDate = closures.Max(c => c.ClosingDate) ?? DateTime.UtcNow;
+
             var report = await _context.Transactions
-                .Where(t => (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment) && t.Date >= start && t.Date <= end)
+                .Where(t => (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment) && t.Date >= minDate && t.Date <= maxDate)
                 .GroupBy(t => new { t.PaymentMethodId, MethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Sin Especificar", Color = t.PaymentMethod != null ? t.PaymentMethod.HexColor : "#888888" })
                 .Select(g => new
                 {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import Header from '../components/Header';
+import ProductsMatrixByClosure from '../components/ProductsMatrixByClosure';
 import { 
   BarChart as BarChartIcon, TrendingUp, Calendar, 
   ArrowLeft, Download, Filter, DollarSign, PieChart as PieChartIcon
@@ -18,10 +19,11 @@ interface ReportItem {
 }
 
 const ReportsPage = () => {
+  const [activeTab, setActiveTab] = useState<'dates' | 'products'>('dates');
   const [data, setData] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+    start: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
 
@@ -54,10 +56,29 @@ const ReportsPage = () => {
           </a>
           <div>
             <h1 className="text-4xl font-black text-black tracking-tight uppercase italic">Reportes</h1>
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Métricas de Ingresos y Cobranzas</p>
+            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">
+               {activeTab === 'dates' ? 'Métricas de Ingresos y Cobranzas' : 'Matriz de Productos por Caja'}
+            </p>
           </div>
         </div>
 
+        <div className="flex gap-2 bg-white p-2 rounded-[28px] border border-black/5 shadow-sm overflow-x-auto">
+           <button 
+             onClick={() => setActiveTab('dates')}
+             className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'dates' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+           >
+             Por Fechas
+           </button>
+           <button 
+             onClick={() => setActiveTab('products')}
+             className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+           >
+             Por Caja - Productos
+           </button>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
         <div className="flex gap-4 items-center bg-white p-4 rounded-[28px] border border-black/5 shadow-sm">
            <div className="flex items-center gap-3 px-4 border-r border-zinc-100">
               <Calendar className="w-4 h-4 text-zinc-400" />
@@ -77,13 +98,19 @@ const ReportsPage = () => {
               />
            </div>
            <button 
-             onClick={fetchReport}
+             onClick={() => {
+                if (activeTab === 'dates') fetchReport();
+                // for other tabs, it re-fetches via useEffect on dateRange
+             }}
              className="p-3 bg-black text-white rounded-2xl hover:scale-105 transition-all"
            >
              <Filter className="w-4 h-4" />
            </button>
         </div>
       </div>
+
+      {activeTab === 'dates' ? (
+        <div className="space-y-10">
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
          <div className="bg-black p-10 rounded-[40px] shadow-2xl relative overflow-hidden group col-span-1">
@@ -195,6 +222,10 @@ const ReportsPage = () => {
             </div>
          </div>
       </div>
+      </div>
+      ) : (
+        <ProductsMatrixByClosure dateRange={dateRange} />
+      )}
     </div>
   );
 };

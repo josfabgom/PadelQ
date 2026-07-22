@@ -985,23 +985,16 @@ namespace PadelQ.Api.Controllers
 
         private async Task ApplyStockDeductionAsync(Product product, int quantity, string note)
         {
-            if (product.IsRecipe)
+            if (product.RecipeId.HasValue)
             {
-                var recipeItems = await _context.ProductRecipeItems.Where(r => r.RecipeProductId == product.Id).ToListAsync();
+                var recipeItems = await _context.RecipeIngredients.Where(r => r.RecipeId == product.RecipeId).ToListAsync();
                 foreach (var item in recipeItems)
                 {
-                    var baseProduct = await _context.Products.FindAsync(item.BaseProductId);
-                    if (baseProduct != null)
+                    var baseIngredient = await _context.Ingredients.FindAsync(item.IngredientId);
+                    if (baseIngredient != null)
                     {
-                        int deductQuantity = quantity * item.QuantityToDeduct;
-                        baseProduct.Stock -= deductQuantity;
-                        _context.ProductStockMovements.Add(new ProductStockMovement
-                        {
-                            ProductId = baseProduct.Id,
-                            Type = quantity >= 0 ? MovementType.Sale : MovementType.Adjustment,
-                            Quantity = -deductQuantity,
-                            Note = $"{note} (Receta: {product.Name})"
-                        });
+                        decimal deductQuantity = quantity * item.Quantity;
+                        baseIngredient.Stock -= deductQuantity;
                     }
                 }
             }

@@ -42,10 +42,16 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
   bool _isReservationsExpanded = false;
   bool _isMovementsExpanded = false;
 
+  bool _isLoadingMatrix = true;
+  Map<String, dynamic>? _matrixData;
+  DateTime _matrixStartDate = DateTime.now().subtract(const Duration(days: 1));
+  DateTime _matrixEndDate = DateTime.now();
+  final ScrollController _matrixScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       setState(() {});
     });
@@ -59,6 +65,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _matrixScrollController.dispose();
     super.dispose();
   }
 
@@ -89,12 +96,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
       final cashData = await _adminService.getCashStatus();
       final alertsData = await _adminService.getStockAlerts();
       final productsData = await _adminService.getProducts();
+      final matrixData = await _adminService.getProductsMatrixByClosure(_matrixStartDate, _matrixEndDate);
 
       setState(() {
         _salesSummary = salesData;
         _cashStatus = cashData;
         _stockAlerts = alertsData;
         _products = productsData;
+        _matrixData = matrixData;
         _filteredProducts = productsData;
         _todayBookings = salesData?['todayBookingsList'] ?? [];
         _todaySpaceBookings = salesData?['todaySpaceBookingsList'] ?? [];
@@ -102,6 +111,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
         _isLoadingCash = false;
         _isLoadingStock = false;
         _isLoadingBookings = false;
+        _isLoadingMatrix = false;
       });
 
       if (_showingHistory) {
@@ -123,6 +133,23 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
           const SnackBar(content: Text('Error al cargar datos del panel')),
         );
       }
+    }
+  }
+
+  Future<void> _loadMatrixData() async {
+    setState(() {
+      _isLoadingMatrix = true;
+    });
+    try {
+      final matrixData = await _adminService.getProductsMatrixByClosure(_matrixStartDate, _matrixEndDate);
+      setState(() {
+        _matrixData = matrixData;
+        _isLoadingMatrix = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingMatrix = false;
+      });
     }
   }
 
@@ -578,6 +605,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
           tabs: const [
             Tab(text: 'VENTAS DIARIAS'),
             Tab(text: 'CAJA DIARIA'),
+            Tab(text: 'VENTAS (CAJAS)'),
             Tab(text: 'CONTROL STOCK'),
           ],
         ),
@@ -587,10 +615,11 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
         children: [
           _buildSalesTab(),
           _buildCashTab(),
+          _buildProductsMatrixTab(),
           _buildStockTab(),
         ],
       ),
-      floatingActionButton: _tabController.index == 2 && _selectedToOrder.isNotEmpty
+      floatingActionButton: _tabController.index == 3 && _selectedToOrder.isNotEmpty
           ? _buildOrderFloatingBar()
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -2352,6 +2381,212 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> with Si
 
   Color _getMethodColor(String method) {
     return _parseHexColor(_getMethodHexColor(method));
+  }
+
+  Widget _buildProductsMatrixTab() {
+    if (_isLoadingMatrix) {
+      return const Center(child: CircularProgressIndicator(color: Colors.black));
+    }
+
+    if (_matrixData == null) {
+      return _buildErrorState();
+    }
+
+    final closures = (_matrixData!['closures'] as List<dynamic>?) ?? [];
+    final products = (_matrixData!['products'] as List<dynamic>?) ?? [];
+
+    return RefreshIndicator(
+      onRefresh: _loadMatrixData,
+      color: Colors.black,
+      child: ListView(
+        padding: EdgeInsets.all(24.w),
+        children: [
+          // Date Picker Filter
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28.r),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final DateTimeRange? picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                        initialDateRange: DateTimeRange(start: _matrixStartDate, end: _matrixEndDate),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Colors.black,
+                                onPrimary: Colors.white,
+                                onSurface: Colors.black,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _matrixStartDate = picked.start;
+                          _matrixEndDate = picked.end;
+                        });
+                        _loadMatrixData();
+                      }
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.calendar, size: 16),
+                        SizedBox(width: 8.w),
+                        Text(
+                          '${DateFormat('dd/MM/yyyy').format(_matrixStartDate)}  -  ${DateFormat('dd/MM/yyyy').format(_matrixEndDate)}',
+                          style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 24.h),
+          
+          if (closures.isEmpty)
+            Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.w),
+                child: Text(
+                  'No hay cajas registradas en este rango de fechas.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 12.sp, fontWeight: FontWeight.bold),
+                ),
+              ),
+            )
+          else
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(color: Colors.black.withOpacity(0.05)),
+              ),
+              child: Scrollbar(
+                thumbVisibility: true,
+                controller: _matrixScrollController,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  controller: _matrixScrollController,
+                  child: DataTable(
+                  columnSpacing: 24.w,
+                  headingRowHeight: 56.h,
+                  dataRowMinHeight: 72.h,
+                  dataRowMaxHeight: 72.h,
+                  headingRowColor: MaterialStateProperty.all(Colors.grey.shade50),
+                  columns: [
+                    DataColumn(
+                      label: Text(
+                        'PRODUCTO',
+                        style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w, color: Colors.grey.shade600),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'TOTAL UNID.',
+                        style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w, color: Colors.grey.shade600),
+                      ),
+                    ),
+                    ...closures.map((c) {
+                      String dateStr = '';
+                      if (c['openingDate'] != null) {
+                        try {
+                          dateStr = DateFormat('dd/MM').format(DateTime.parse(c['openingDate']).toLocal());
+                        } catch(e) {}
+                      }
+                      return DataColumn(
+                        label: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'CAJA #${c['id']}',
+                              style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w),
+                            ),
+                            Text(
+                              '$dateStr • ${c['openedBy']}',
+                              style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade500),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                  rows: products.map((p) {
+                    final quantities = p['quantitiesByClosure'] as Map<String, dynamic>? ?? {};
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                (p['productName'] ?? '').toString().toUpperCase(),
+                                style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
+                              ),
+                              Text(
+                                (p['category'] ?? '').toString().toUpperCase(),
+                                style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.w900, letterSpacing: 1.w, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        DataCell(
+                          Center(
+                            child: Text(
+                              '${p['totalQuantity']}',
+                              style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ),
+                        ...closures.map((c) {
+                          final qty = quantities[c['id'].toString()] ?? 0;
+                          return DataCell(
+                            Center(
+                              child: Text(
+                                qty > 0 ? '$qty' : '-',
+                                style: TextStyle(
+                                  fontSize: 12.sp, 
+                                  fontWeight: FontWeight.w900, 
+                                  color: qty > 0 ? Colors.black : Colors.grey.shade300
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCashTab() {

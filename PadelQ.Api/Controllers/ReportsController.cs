@@ -416,5 +416,186 @@ namespace PadelQ.Api.Controllers
 
             return Ok(alerts);
         }
+
+        [HttpGet("sales-by-closure")]
+        public async Task<IActionResult> GetSalesByClosure([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 50)
+        {
+            var query = _context.CashClosures.AsQueryable();
+
+            if (startDate.HasValue)
+                query = query.Where(c => c.OpeningDate >= startDate.Value);
+            
+            if (endDate.HasValue)
+            {
+                var endLimit = endDate.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(c => c.OpeningDate <= endLimit);
+            }
+
+            var closures = await query
+                .OrderByDescending(c => c.OpeningDate)
+                .Take(limit)
+                .ToListAsync();
+
+            var result = new List<object>();
+
+            foreach (var closure in closures)
+            {
+                var start = closure.OpeningDate;
+                var end = closure.ClosingDate ?? DateTime.UtcNow;
+
+                var transactions = await _context.Transactions
+                    .Where(t => t.Date >= start && t.Date <= end && (
+                        t.Type == TransactionType.Payment || 
+                        t.Type == TransactionType.MembershipPayment
+                    ))
+                    .ToListAsync();
+
+                decimal rentalsTotal = 0;
+                decimal consumptionsTotal = 0;
+
+                foreach (var t in transactions)
+                {
+                    var desc = t.Description ?? "";
+                    if (desc.Contains("Alquiler + Consumiciones", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (t.BookingId.HasValue)
+                        {
+                            var bookingCons = await _context.BookingConsumptions
+                                .Where(c => c.BookingId == t.BookingId.Value)
+                                .SumAsync(c => c.UnitPrice * c.Quantity);
+                            var consAmount = Math.Min(t.Amount, bookingCons);
+                            consumptionsTotal += consAmount;
+                            rentalsTotal += (t.Amount - consAmount);
+                        }
+                        else
+                        {
+                            rentalsTotal += t.Amount;
+                        }
+                    }
+                    else if (desc.Contains("Consumo", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Consumicion", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase) || 
+                             desc.Contains("Cantina", StringComparison.OrdinalIgnoreCase))
+                    {
+                        consumptionsTotal += t.Amount;
+                    }
+                    else
+                    {
+                        rentalsTotal += t.Amount;
+                    }
+                }
+
+                result.Add(new {
+                    id = closure.Id,
+                    openingDate = closure.OpeningDate,
+                    closingDate = closure.ClosingDate,
+                    openedBy = closure.OpenedBy,
+                    isOpen = closure.IsOpen,
+                    rentalsTotal,
+                    consumptionsTotal,
+                    totalRevenue = rentalsTotal + consumptionsTotal,
+                    expectedCash = closure.ExpectedCash ?? 0,
+                    actualCash = closure.ActualCash ?? 0,
+                    difference = (closure.ActualCash ?? 0) - (closure.ExpectedCash ?? 0),
+                    totalCashSales = closure.TotalCashSales ?? 0,
+                    totalCardSales = closure.TotalCardSales ?? 0,
+                    totalTransferSales = closure.TotalTransferSales ?? 0,
+                    totalOtherSales = closure.TotalOtherSales ?? 0
+                });
+            }
+
+            return Ok(result);
+        }
+
+        [HttpGet("closure-products/{closureId}")]
+        public async Task<IActionResult> GetClosureProducts(int closureId)
+        {
+            var closure = await _context.CashClosures.FindAsync(closureId);
+            if (closure == null) return NotFound();
+
+            var start = closure.OpeningDate;
+            var end = closure.ClosingDate ?? DateTime.UtcNow;
+
+            var sales = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Where(c => c.CreatedAt >= start && c.CreatedAt <= end)
+                .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
+                .Select(g => new
+                {
+                    productId = g.Key.ProductId,
+                    productName = g.Key.Name,
+                    category = g.Key.Category,
+                    totalQuantity = g.Sum(x => x.Quantity),
+                    totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity)
+                })
+                .OrderByDescending(x => x.totalQuantity)
+                .ToListAsync();
+
+            return Ok(sales);
+        }
+
+        [HttpGet("products-matrix-by-closure")]
+        public async Task<IActionResult> GetProductsMatrixByClosure([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 10)
+        {
+            var query = _context.CashClosures.AsQueryable();
+
+            if (startDate.HasValue)
+                query = query.Where(c => c.OpeningDate >= startDate.Value);
+            
+            if (endDate.HasValue)
+            {
+                var endLimit = endDate.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(c => c.OpeningDate <= endLimit);
+            }
+
+            var closures = await query
+                .OrderByDescending(c => c.OpeningDate)
+                .Take(limit)
+                .ToListAsync();
+
+            if (!closures.Any())
+            {
+                return Ok(new { Closures = new List<object>(), Products = new List<object>() });
+            }
+
+            // Ordenar cronológicamente de izquierda a derecha (más antiguos a más recientes)
+            closures = closures.OrderBy(c => c.OpeningDate).ToList();
+
+            var start = closures.Min(c => c.OpeningDate);
+            var end = closures.Max(c => c.ClosingDate) ?? DateTime.UtcNow;
+
+            var sales = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Where(c => c.CreatedAt >= start && c.CreatedAt <= end)
+                .ToListAsync();
+
+            var products = sales.GroupBy(s => s.ProductId)
+                .Select(g => new
+                {
+                    productId = g.Key,
+                    productName = g.First().Product.Name,
+                    category = g.First().Product.Category,
+                    totalQuantity = g.Sum(x => x.Quantity),
+                    totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
+                    quantitiesByClosure = closures.ToDictionary(
+                        c => c.Id.ToString(),
+                        c => g.Where(x => x.CreatedAt >= c.OpeningDate && x.CreatedAt <= (c.ClosingDate ?? DateTime.UtcNow)).Sum(x => x.Quantity)
+                    )
+                })
+                .OrderByDescending(p => p.totalQuantity)
+                .ToList();
+
+            return Ok(new
+            {
+                closures = closures.Select(c => new { 
+                    id = c.Id, 
+                    label = $"Caja #{c.Id}", 
+                    isOpen = c.IsOpen,
+                    openedBy = c.OpenedBy,
+                    date = c.OpeningDate.ToString("dd/MM")
+                }),
+                products = products
+            });
+        }
     }
 }

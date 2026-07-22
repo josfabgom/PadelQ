@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, 
-  Settings, CreditCard, QrCode, ShieldCheck, Box, ArrowRight
+  Settings, CreditCard, QrCode, ShieldCheck, Box, ArrowRight, Utensils, Coffee
 } from 'lucide-react';
 import Header from '../components/Header';
 
@@ -54,6 +54,24 @@ const Dashboard = () => {
       desc: 'Control de inventario, stock y venta de bebidas, pelotas e insumos del bar.',
       color: 'text-sky-500 group-hover:text-white',
       bgHover: 'group-hover:bg-sky-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/ingredients',
+      icon: <Coffee className="w-5 h-5" />,
+      label: 'Insumos (Ingredientes)',
+      desc: 'Control de stock e inventario de insumos (materias primas no vendibles directamente).',
+      color: 'text-orange-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-orange-500',
+      show: isAdmin || isStaff
+    },
+    {
+      href: '/recipes',
+      icon: <Utensils className="w-5 h-5" />,
+      label: 'Recetas / Preparados',
+      desc: 'Armado de combos y preparaciones descontando stock automáticamente de los insumos.',
+      color: 'text-red-500 group-hover:text-white',
+      bgHover: 'group-hover:bg-red-500',
       show: isAdmin || isStaff
     },
     {

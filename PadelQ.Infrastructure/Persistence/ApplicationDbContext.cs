@@ -25,7 +25,9 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<BookingConsumption> BookingConsumptions { get; set; } = null!;
         public DbSet<ProductStockMovement> ProductStockMovements { get; set; } = null!;
-        public DbSet<ProductRecipeItem> ProductRecipeItems { get; set; } = null!;
+        public DbSet<Ingredient> Ingredients { get; set; } = null!;
+        public DbSet<Recipe> Recipes { get; set; } = null!;
+        public DbSet<RecipeIngredient> RecipeIngredients { get; set; } = null!;
         public DbSet<CashClosure> CashClosures { get; set; } = null!;
         public DbSet<Supplier> Suppliers { get; set; } = null!;
         public DbSet<SupplierPurchase> SupplierPurchases { get; set; } = null!;
@@ -68,16 +70,21 @@ namespace PadelQ.Infrastructure.Persistence
                 entity.Property(p => p.TotalOtherSales).HasPrecision(18, 2);
             });
 
-            builder.Entity<ProductRecipeItem>()
-                .HasOne(p => p.RecipeProduct)
-                .WithMany(p => p.RecipeItems)
-                .HasForeignKey(p => p.RecipeProductId)
+            builder.Entity<Ingredient>().Property(i => i.Stock).HasPrecision(18, 2);
+            builder.Entity<Ingredient>().Property(i => i.MinimumStock).HasPrecision(18, 2);
+            builder.Entity<Ingredient>().Property(i => i.CostPrice).HasPrecision(18, 2);
+            builder.Entity<RecipeIngredient>().Property(ri => ri.Quantity).HasPrecision(18, 2);
+            
+            builder.Entity<RecipeIngredient>()
+                .HasOne(ri => ri.Recipe)
+                .WithMany(r => r.RecipeIngredients)
+                .HasForeignKey(ri => ri.RecipeId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Entity<ProductRecipeItem>()
-                .HasOne(p => p.BaseProduct)
+            builder.Entity<RecipeIngredient>()
+                .HasOne(ri => ri.Ingredient)
                 .WithMany()
-                .HasForeignKey(p => p.BaseProductId)
+                .HasForeignKey(ri => ri.IngredientId)
                 .OnDelete(DeleteBehavior.Restrict);
 
 

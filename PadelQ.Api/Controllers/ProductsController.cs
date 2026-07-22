@@ -24,7 +24,6 @@ namespace PadelQ.Api.Controllers
         public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
         {
             return await _context.Products
-                .Include(p => p.RecipeItems)
                 .Where(p => p.IsActive)
                 .OrderBy(p => p.Category)
                 .ThenBy(p => p.Name)
@@ -35,7 +34,6 @@ namespace PadelQ.Api.Controllers
         public async Task<ActionResult<Product>> GetProduct(int id)
         {
             var product = await _context.Products
-                .Include(p => p.RecipeItems)
                 .FirstOrDefaultAsync(p => p.Id == id);
             if (product == null) return NotFound();
             return product;
@@ -56,7 +54,6 @@ namespace PadelQ.Api.Controllers
             if (id != product.Id) return BadRequest();
             
             var existingProduct = await _context.Products
-                .Include(p => p.RecipeItems)
                 .FirstOrDefaultAsync(p => p.Id == id);
                 
             if (existingProduct == null) return NotFound();
@@ -64,20 +61,6 @@ namespace PadelQ.Api.Controllers
             // Update main properties
             _context.Entry(existingProduct).CurrentValues.SetValues(product);
             _context.Entry(existingProduct).Property(x => x.CreatedAt).IsModified = false;
-
-            // Update RecipeItems
-            existingProduct.RecipeItems.Clear();
-            if (product.IsRecipe && product.RecipeItems != null)
-            {
-                foreach(var item in product.RecipeItems)
-                {
-                    existingProduct.RecipeItems.Add(new ProductRecipeItem 
-                    {
-                        BaseProductId = item.BaseProductId,
-                        QuantityToDeduct = item.QuantityToDeduct
-                    });
-                }
-            }
 
             await _context.SaveChangesAsync();
             return NoContent();

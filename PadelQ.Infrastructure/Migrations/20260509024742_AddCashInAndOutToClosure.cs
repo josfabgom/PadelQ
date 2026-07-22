@@ -26,17 +26,6 @@ namespace PadelQ.Infrastructure.Migrations
                 scale: 2,
                 nullable: true);
 
-            migrationBuilder.AddColumn<string>(
-                name: "ActualTotals",
-                table: "CashClosures",
-                type: "nvarchar(max)",
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "SpecificDate",
-                table: "ActivitySchedules",
-                type: "datetime2",
-                nullable: true);
         }
 
         /// <inheritdoc />
@@ -50,13 +39,6 @@ namespace PadelQ.Infrastructure.Migrations
                 name: "TotalCashOut",
                 table: "CashClosures");
 
-            migrationBuilder.DropColumn(
-                name: "ActualTotals",
-                table: "CashClosures");
-
-            migrationBuilder.DropColumn(
-                name: "SpecificDate",
-                table: "ActivitySchedules");
         }
     }
 }

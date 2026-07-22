@@ -49,13 +49,11 @@ namespace PadelQ.Domain.Entities
 
         public bool IsActive { get; set; } = true;
         
-        public bool IsSellable { get; set; } = true;
-
         public bool IsDoubleUnitCombo { get; set; } = false;
         
-        public bool IsRecipe { get; set; } = false;
-        
-        public virtual ICollection<ProductRecipeItem> RecipeItems { get; set; } = new List<ProductRecipeItem>();
+        public int? RecipeId { get; set; }
+        [ForeignKey("RecipeId")]
+        public virtual Recipe? Recipe { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

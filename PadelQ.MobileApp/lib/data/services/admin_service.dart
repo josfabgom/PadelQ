@@ -24,6 +24,23 @@ class AdminService {
     }
   }
 
+  Future<Map<String, dynamic>?> getProductsMatrixByClosure(DateTime? startDate, DateTime? endDate) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (startDate != null) queryParams['startDate'] = startDate.toIso8601String();
+      if (endDate != null) queryParams['endDate'] = endDate.toIso8601String();
+      
+      final response = await _dio.get('/api/reports/products-matrix-by-closure', queryParameters: queryParams, options: await _getOptions());
+      if (response.statusCode == 200) {
+        return response.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print("Error fetching products matrix: $e");
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getCashStatus() async {
     try {
       final response = await _dio.get('/api/cash-closures/current-status', options: await _getOptions());

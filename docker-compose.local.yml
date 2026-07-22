@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: padelq_db_local
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=LocalPassword2026!
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data_local:/var/opt/mssql
+
+volumes:
+  mssql_data_local:
