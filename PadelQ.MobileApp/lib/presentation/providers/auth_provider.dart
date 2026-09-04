@@ -19,6 +19,13 @@ class AuthState {
     return role == 'Admin';
   }
 
+  bool get isCocinero {
+    if (user == null) return false;
+    final role = user!['role'] ?? user!['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+    if (role is List) return role.contains('Cocinero');
+    return role == 'Cocinero';
+  }
+
   bool get canAccessActivities {
     if (user == null) return true;
     return user!['canAccessActivities'] ?? user!['CanAccessActivities'] ?? true;

@@ -12,7 +12,7 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/recipes")]
-    [Authorize(Roles = "Admin,Staff")]
+    [Authorize(Roles = "Admin,Staff,Cocinero")]
     public class RecipesController : ControllerBase
     {
         private readonly ApplicationDbContext _context;

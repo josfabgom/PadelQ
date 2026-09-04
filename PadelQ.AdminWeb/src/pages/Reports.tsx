@@ -18,9 +18,24 @@ interface ReportItem {
   color: string;
 }
 
+interface KitchenSale {
+  date: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  stock: number;
+}
+
 const ReportsPage = () => {
-  const [activeTab, setActiveTab] = useState<'dates' | 'products'>('dates');
+  const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
+  const isAdmin = roles.includes('Admin');
+  const isCocinero = roles.includes('Cocinero');
+  const initialTab = (isCocinero && !isAdmin) ? 'kitchen' : 'dates';
+
+  const [activeTab, setActiveTab] = useState<'dates' | 'products' | 'kitchen'>(initialTab);
   const [data, setData] = useState<ReportItem[]>([]);
+  const [kitchenData, setKitchenData] = useState<KitchenSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0],
@@ -28,6 +43,19 @@ const ReportsPage = () => {
   });
 
   const fetchReport = async () => {
+    if (activeTab === 'kitchen') {
+      try {
+        setLoading(true);
+        const res = await api.get(`/api/reports/kitchen-sales?startDate=${dateRange.start}&endDate=${dateRange.end}`, getAuthConfig());
+        setKitchenData(res.data);
+      } catch (err) {
+        console.error("Error fetching kitchen report", err);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       setLoading(true);
       const res = await api.get(`/api/transaction/report/payments-by-method?startDate=${dateRange.start}&endDate=${dateRange.end}`, getAuthConfig());
@@ -41,7 +69,7 @@ const ReportsPage = () => {
 
   useEffect(() => {
     fetchReport();
-  }, [dateRange]);
+  }, [dateRange, activeTab]);
 
   const totalCollected = data.reduce((acc, curr) => acc + curr.total, 0);
 
@@ -63,18 +91,30 @@ const ReportsPage = () => {
         </div>
 
         <div className="flex gap-2 bg-white p-2 rounded-[28px] border border-black/5 shadow-sm overflow-x-auto">
-           <button 
-             onClick={() => setActiveTab('dates')}
-             className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'dates' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
-           >
-             Por Fechas
-           </button>
-           <button 
-             onClick={() => setActiveTab('products')}
-             className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
-           >
-             Por Caja - Productos
-           </button>
+           {isAdmin && (
+             <>
+               <button 
+                 onClick={() => setActiveTab('dates')}
+                 className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'dates' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+               >
+                 Por Fechas
+               </button>
+               <button 
+                 onClick={() => setActiveTab('products')}
+                 className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+               >
+                 Por Caja - Productos
+               </button>
+             </>
+           )}
+           {(isAdmin || isCocinero) && (
+             <button 
+               onClick={() => setActiveTab('kitchen')}
+               className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'kitchen' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+             >
+               Ventas Cocina
+             </button>
+           )}
         </div>
       </div>
 
@@ -223,8 +263,51 @@ const ReportsPage = () => {
          </div>
       </div>
       </div>
-      ) : (
+      ) : activeTab === 'products' ? (
         <ProductsMatrixByClosure dateRange={dateRange} />
+      ) : (
+        <div className="bg-white rounded-[40px] border border-black/5 shadow-sm overflow-hidden p-10">
+           <h3 className="text-2xl font-black text-black uppercase italic tracking-tight mb-8">Ventas de Cocina</h3>
+           <div className="overflow-x-auto">
+             <table className="w-full text-left">
+               <thead>
+                 <tr className="border-b border-zinc-100">
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha</th>
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Producto</th>
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Cant. Vendida</th>
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Stock Actual</th>
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Precio Unit.</th>
+                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Total</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-zinc-50">
+                 {kitchenData.map((sale, i) => (
+                   <tr key={i} className="hover:bg-zinc-50/50 transition-colors">
+                     <td className="py-4 text-sm font-bold text-black">{sale.date}</td>
+                     <td className="py-4 text-sm font-bold text-black">{sale.productName}</td>
+                     <td className="py-4 text-sm font-bold text-zinc-500 text-center">{sale.quantity}</td>
+                     <td className="py-4 text-sm font-bold text-zinc-500 text-center">{sale.stock}</td>
+                     <td className="py-4 text-sm font-bold text-zinc-500 text-right">${sale.unitPrice.toLocaleString()}</td>
+                     <td className="py-4 text-sm font-black text-black italic text-right">${sale.total.toLocaleString()}</td>
+                   </tr>
+                 ))}
+                 {kitchenData.length === 0 && (
+                   <tr>
+                     <td colSpan={5} className="py-8 text-center text-sm font-bold text-zinc-400">No hay ventas registradas en este período.</td>
+                   </tr>
+                 )}
+               </tbody>
+             </table>
+           </div>
+           {kitchenData.length > 0 && (
+             <div className="mt-8 pt-8 border-t border-zinc-100 flex justify-end">
+                <div className="text-right">
+                   <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Total Cocina</p>
+                   <p className="text-3xl font-black text-black italic">${kitchenData.reduce((acc, sale) => acc + sale.total, 0).toLocaleString()}</p>
+                </div>
+             </div>
+           )}
+        </div>
       )}
     </div>
   );

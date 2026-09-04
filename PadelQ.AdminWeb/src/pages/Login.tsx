@@ -22,7 +22,7 @@ const LoginPage = () => {
       const { token, fullName, email: userEmail, roles } = response.data;
       
       // Strict Check for valid Admin Panel roles
-      const allowedRoles = ['Admin', 'Merchant', 'Staff', 'Teacher'];
+      const allowedRoles = ['Admin', 'Merchant', 'Staff', 'Teacher', 'Cocinero'];
       const hasPermission = roles && roles.some((r: string) => allowedRoles.includes(r));
 
       if (!hasPermission) {

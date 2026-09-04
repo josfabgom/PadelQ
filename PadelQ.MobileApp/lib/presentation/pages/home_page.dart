@@ -71,7 +71,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           }),
         ],
       ),
-      body: SingleChildScrollView(
+      body: (authState.isCocinero && !authState.isAdmin) ? _buildCocineroPanel(context, authState) : SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -300,7 +300,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 24),
         ),
       ),
-      bottomNavigationBar: Container(
+      bottomNavigationBar: (authState.isCocinero && !authState.isAdmin) ? null : Container(
         decoration: BoxDecoration(
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
         ),
@@ -320,6 +320,84 @@ class _HomePageState extends ConsumerState<HomePage> {
             BottomNavigationBarItem(icon: Icon(Icons.person, size: 20), label: 'PERFIL'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCocineroPanel(BuildContext context, AuthState authState) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 32.h),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'HOLA, ',
+                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.normal, color: Colors.black),
+                    ),
+                    Text(
+                      (authState.user?['fullName'] ?? authState.user?['FullName'] ?? 'COCINERO').toString().toUpperCase(),
+                      style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900, color: Colors.black, fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'PANEL DE CONTROL DE COCINA',
+                  style: TextStyle(fontSize: 9.sp, color: Colors.grey.shade400, fontWeight: FontWeight.w900, letterSpacing: 2.w),
+                ),
+                SizedBox(height: 32.h),
+                GestureDetector(
+                  onTap: () => context.push('/kitchen-dashboard'),
+                  child: Container(
+                    padding: EdgeInsets.all(24.w),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(32.r),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 30, offset: const Offset(0, 15))],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(12.w),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16.r),
+                          ),
+                          child: Icon(LucideIcons.utensils, color: Colors.white, size: 32.sp),
+                        ),
+                        SizedBox(width: 20.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'REPORTES DE VENTAS',
+                                style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.w),
+                              ),
+                              SizedBox(height: 4.h),
+                              Text(
+                                'Revisar historial y ventas diarias.',
+                                style: TextStyle(fontSize: 11.sp, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(LucideIcons.chevronRight, color: Colors.white, size: 24.sp),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

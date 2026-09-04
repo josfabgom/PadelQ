@@ -19,7 +19,7 @@ namespace PadelQ.Infrastructure.Persistence
             await context.Database.MigrateAsync();
 
             // 1. Roles
-            string[] roles = { "Admin", "User", "Merchant", "Staff" };
+            string[] roles = { "Admin", "User", "Merchant", "Staff", "Cocinero" };
             foreach (var role in roles)
             {
                 if (!await roleManager.RoleExistsAsync(role))

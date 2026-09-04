@@ -12,7 +12,6 @@ namespace PadelQ.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]
     public class ReportsController : ControllerBase
     {
         private readonly IBookingService _bookingService;
@@ -26,6 +25,7 @@ namespace PadelQ.Api.Controllers
             _context = context;
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("summary")]
         public async Task<IActionResult> GetSummary()
         {
@@ -200,6 +200,7 @@ namespace PadelQ.Api.Controllers
             });
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("revenue-stats")]
         public async Task<IActionResult> GetRevenueStats()
         {
@@ -229,6 +230,7 @@ namespace PadelQ.Api.Controllers
             return Ok(stats);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("product-sales-daily")]
         public async Task<IActionResult> GetProductSalesDaily([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
@@ -310,6 +312,7 @@ namespace PadelQ.Api.Controllers
             return Ok(sales);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("products-ranking-by-day")]
         public async Task<IActionResult> GetProductsRankingByDay([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
@@ -361,6 +364,7 @@ namespace PadelQ.Api.Controllers
             return Ok(ranking);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("stock-alerts")]
         public async Task<IActionResult> GetStockAlerts()
         {
@@ -417,6 +421,7 @@ namespace PadelQ.Api.Controllers
             return Ok(alerts);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("sales-by-closure")]
         public async Task<IActionResult> GetSalesByClosure([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 50)
         {
@@ -507,6 +512,7 @@ namespace PadelQ.Api.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("closure-products/{closureId}")]
         public async Task<IActionResult> GetClosureProducts(int closureId)
         {
@@ -534,6 +540,7 @@ namespace PadelQ.Api.Controllers
             return Ok(sales);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("products-matrix-by-closure")]
         public async Task<IActionResult> GetProductsMatrixByClosure([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 10)
         {
@@ -596,6 +603,37 @@ namespace PadelQ.Api.Controllers
                 }),
                 products = products
             });
+        }
+        [Authorize(Roles = "Admin,Cocinero")]
+        [HttpGet("kitchen-sales")]
+        public async Task<IActionResult> GetKitchenSales([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
+            var filterEnd = (endDate?.Date ?? filterStart).AddDays(1);
+
+            var salesRaw = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.Product.Category == "Cocina" && c.CreatedAt >= filterStart && c.CreatedAt <= filterEnd)
+                .ToListAsync();
+
+            var sales = salesRaw
+                .Where(c => (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                            (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
+                .Select(c => new
+                {
+                    date = c.CreatedAt.AddHours(-3).ToString("dd/MM/yyyy HH:mm"),
+                    productName = c.Product.Name,
+                    quantity = c.Quantity,
+                    unitPrice = c.UnitPrice,
+                    total = c.Quantity * c.UnitPrice,
+                    stock = c.Product.Stock
+                })
+                .OrderByDescending(c => c.date)
+                .ToList();
+
+            return Ok(sales);
         }
     }
 }

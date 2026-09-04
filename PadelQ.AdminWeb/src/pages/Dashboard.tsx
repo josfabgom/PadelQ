@@ -11,6 +11,7 @@ const Dashboard = () => {
   const isMerchant = roles.includes('Merchant');
   const isStaff = roles.includes('Staff');
   const isTeacher = roles.includes('Teacher');
+  const isCocinero = roles.includes('Cocinero');
 
   useEffect(() => {
     // If only merchant, redirect to validate immediately
@@ -63,7 +64,7 @@ const Dashboard = () => {
       desc: 'Control de stock e inventario de insumos (materias primas no vendibles directamente).',
       color: 'text-orange-500 group-hover:text-white',
       bgHover: 'group-hover:bg-orange-500',
-      show: isAdmin || isStaff
+      show: isAdmin || isStaff || isCocinero
     },
     {
       href: '/recipes',
@@ -72,7 +73,7 @@ const Dashboard = () => {
       desc: 'Armado de combos y preparaciones descontando stock automáticamente de los insumos.',
       color: 'text-red-500 group-hover:text-white',
       bgHover: 'group-hover:bg-red-500',
-      show: isAdmin || isStaff
+      show: isAdmin || isStaff || isCocinero
     },
     {
       href: '/users',
@@ -114,10 +115,10 @@ const Dashboard = () => {
       href: '/reports',
       icon: <TrendingUp className="w-5 h-5" />,
       label: 'Reportes y Finanzas',
-      desc: 'Gráficos financieros, análisis de recaudación y exportación de Libro IVA para ARCA.',
+      desc: 'Métricas de ingresos, ocupación, reservas y cobranzas.',
       color: 'text-fuchsia-500 group-hover:text-white',
       bgHover: 'group-hover:bg-fuchsia-500',
-      show: isAdmin
+      show: isAdmin || isCocinero
     },
     {
       href: '/mp-audit',
