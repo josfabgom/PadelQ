@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
+using PadelQ.Api.Hubs;
 
 namespace PadelQ.Api.Controllers
 {
@@ -19,11 +21,13 @@ namespace PadelQ.Api.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IHubContext<KitchenHub> _kitchenHub;
 
-        public ConsumptionsController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        public ConsumptionsController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IHubContext<KitchenHub> kitchenHub)
         {
             _context = context;
             _userManager = userManager;
+            _kitchenHub = kitchenHub;
         }
 
         [HttpGet("booking/{bookingId}")]
@@ -116,6 +120,8 @@ namespace PadelQ.Api.Controllers
 
             await _context.SaveChangesAsync();
 
+            await CheckAndCreateKitchenOrderAsync(new List<BookingConsumption> { consumption }, request.CustomerName);
+
             return Ok(consumption);
         }
 
@@ -149,6 +155,30 @@ namespace PadelQ.Api.Controllers
                 if (product.IsDoubleUnitCombo && consumption.IsComboRedeemed)
                 {
                     await ApplyStockDeductionAsync(product, -consumption.Quantity, $"Devolución de 2da Unidad Combo {consumption.BookingId}");
+                }
+            }
+
+            var kitchenOrderItems = await _context.KitchenOrderItems
+                .Include(koi => koi.KitchenOrder)
+                .Where(koi => koi.BookingConsumptionId == id)
+                .ToListAsync();
+
+            foreach (var item in kitchenOrderItems)
+            {
+                _context.KitchenOrderItems.Remove(item);
+                
+                var order = item.KitchenOrder;
+                if (order != null)
+                {
+                    var otherItemsCount = await _context.KitchenOrderItems
+                        .CountAsync(koi => koi.KitchenOrderId == order.Id && koi.Id != item.Id);
+                    
+                    if (otherItemsCount == 0)
+                    {
+                        var audits = await _context.KitchenOrderAudits.Where(a => a.KitchenOrderId == order.Id).ToListAsync();
+                        _context.KitchenOrderAudits.RemoveRange(audits);
+                        _context.KitchenOrders.Remove(order);
+                    }
                 }
             }
 
@@ -197,7 +227,7 @@ namespace PadelQ.Api.Controllers
                     UnitPrice = finalPrice,
                     IsPaid = request.IsPaid || request.IsInternal,
                     DepositPaid = (request.IsPaid || request.IsInternal) ? (item.PaidAmount ?? (finalPrice * item.Quantity)) : 0,
-                    Notes = request.Notes ?? "Venta Directa unificada"
+                    Notes = !string.IsNullOrWhiteSpace(item.Notes) ? item.Notes : (request.Notes ?? "Venta Directa unificada")
                 };
 
                 if (consumption.IsPaid && consumption.DepositPaid < consumption.TotalPrice)
@@ -255,6 +285,8 @@ namespace PadelQ.Api.Controllers
 
             _context.BookingConsumptions.AddRange(consumptions);
             await _context.SaveChangesAsync();
+            
+            await CheckAndCreateKitchenOrderAsync(consumptions, request.CustomerName);
 
             return Ok(new { Message = "Venta bulk procesada", Total = totalAmount, ItemsCount = consumptions.Count });
         }
@@ -323,6 +355,8 @@ namespace PadelQ.Api.Controllers
 
             _context.BookingConsumptions.Add(consumption);
             await _context.SaveChangesAsync();
+            
+            await CheckAndCreateKitchenOrderAsync(new List<BookingConsumption> { consumption }, request.CustomerName);
 
             return Ok(consumption);
         }
@@ -515,6 +549,82 @@ namespace PadelQ.Api.Controllers
                 });
             }
         }
+
+        private async Task CheckAndCreateKitchenOrderAsync(List<BookingConsumption> consumptions, string? customerName)
+        {
+            var kitchenItems = new List<KitchenOrderItem>();
+            
+            // Check which consumptions are food
+            foreach (var consumption in consumptions)
+            {
+                var product = await _context.Products.FindAsync(consumption.ProductId);
+                if (product != null && (product.RecipeId.HasValue || (product.Category != null && product.Category.ToLower() == "comida")))
+                {
+                    kitchenItems.Add(new KitchenOrderItem
+                    {
+                        BookingConsumptionId = consumption.Id,
+                        ProductId = consumption.ProductId,
+                        Quantity = consumption.Quantity,
+                        Notes = consumption.Notes
+                    });
+                }
+            }
+
+            if (kitchenItems.Any())
+            {
+                var firstConsumption = consumptions.First();
+                var kitchenOrder = new KitchenOrder
+                {
+                    BookingId = firstConsumption.BookingId,
+                    SpaceBookingId = firstConsumption.SpaceBookingId,
+                    UserId = firstConsumption.UserId,
+                    CustomerName = customerName,
+                    Items = kitchenItems
+                };
+
+                _context.KitchenOrders.Add(kitchenOrder);
+                
+                var audit = new KitchenOrderAudit
+                {
+                    KitchenOrder = kitchenOrder,
+                    FromStatus = null,
+                    ToStatus = KitchenOrderStatus.Pending,
+                    ChangedBy = User.Identity?.Name ?? "Sistema"
+                };
+                _context.KitchenOrderAudits.Add(audit);
+                
+                await _context.SaveChangesAsync();
+
+                // Load product details for the notification
+                var orderToNotify = await _context.KitchenOrders
+                    .Include(ko => ko.Items)
+                        .ThenInclude(i => i.Product)
+                    .FirstOrDefaultAsync(ko => ko.Id == kitchenOrder.Id);
+
+                if (orderToNotify != null)
+                {
+                    var notificationData = new
+                    {
+                        orderToNotify.Id,
+                        orderToNotify.OrderNumber,
+                        Status = orderToNotify.Status.ToString(),
+                        orderToNotify.BookingId,
+                        orderToNotify.SpaceBookingId,
+                        orderToNotify.CustomerName,
+                        CreatedAt = orderToNotify.CreatedAt.ToString("o"),
+                        Items = orderToNotify.Items.Select(i => new 
+                        { 
+                            i.ProductId,
+                            i.Quantity, 
+                            i.Notes,
+                            ProductName = i.Product?.Name
+                        })
+                    };
+
+                    await _kitchenHub.Clients.Group("Cocineros").SendAsync("NewOrder", notificationData);
+                }
+            }
+        }
     }
 
     public class AddConsumptionRequest
@@ -523,6 +633,7 @@ namespace PadelQ.Api.Controllers
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public string? Notes { get; set; }
+        public string? CustomerName { get; set; }
     }
 
     public class DirectSaleRequest
@@ -534,6 +645,7 @@ namespace PadelQ.Api.Controllers
         public bool IsInternal { get; set; }
         public int? PaymentMethodId { get; set; }
         public string? Notes { get; set; }
+        public string? CustomerName { get; set; }
     }
 
     public class BulkDirectSaleRequest
@@ -545,6 +657,7 @@ namespace PadelQ.Api.Controllers
         public int? PaymentMethodId { get; set; }
         public List<SplitPaymentRequest>? SplitPayments { get; set; }
         public string? Notes { get; set; }
+        public string? CustomerName { get; set; }
     }
 
     public class BulkPayPendingRequest
@@ -558,6 +671,7 @@ namespace PadelQ.Api.Controllers
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public decimal? PaidAmount { get; set; }
+        public string? Notes { get; set; }
     }
 
     public class SplitPaymentRequest

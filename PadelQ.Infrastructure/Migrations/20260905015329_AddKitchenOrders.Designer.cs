@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PadelQ.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using PadelQ.Infrastructure.Persistence;
 namespace PadelQ.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905015329_AddKitchenOrders")]
+    partial class AddKitchenOrders
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -674,35 +677,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("KitchenOrders");
-                });
-
-            modelBuilder.Entity("PadelQ.Domain.Entities.KitchenOrderAudit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("ChangedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ChangedBy")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("FromStatus")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("KitchenOrderId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("ToStatus")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("KitchenOrderId");
-
-                    b.ToTable("KitchenOrderAudits");
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.KitchenOrderItem", b =>
@@ -1446,17 +1420,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Navigation("SpaceBooking");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("PadelQ.Domain.Entities.KitchenOrderAudit", b =>
-                {
-                    b.HasOne("PadelQ.Domain.Entities.KitchenOrder", "KitchenOrder")
-                        .WithMany()
-                        .HasForeignKey("KitchenOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("KitchenOrder");
                 });
 
             modelBuilder.Entity("PadelQ.Domain.Entities.KitchenOrderItem", b =>

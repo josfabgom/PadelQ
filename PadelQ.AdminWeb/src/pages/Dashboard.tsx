@@ -155,6 +155,15 @@ const Dashboard = () => {
       color: 'text-amber-600 group-hover:text-white',
       bgHover: 'group-hover:bg-amber-600',
       show: isAdmin
+    },
+    {
+      href: '/kitchen-orders',
+      icon: <Utensils className="w-5 h-5" />,
+      label: 'Cocina',
+      desc: 'Gestión de pedidos de cocina y preparación de combos.',
+      color: 'text-orange-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-orange-600',
+      show: isAdmin || isCocinero || isStaff
     }
   ];
 

@@ -1,0 +1,1 @@
+docker exec padelq-db-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'BlackClubPadel-2026' -C -Q "BACKUP DATABASE [PadelQDB] TO DISK = N'/var/opt/mssql/backup_pre_deploy.bak' WITH FORMAT, INIT, NAME = 'Full Database Backup', SKIP, NOREWIND, NOUNLOAD, STATS = 10"

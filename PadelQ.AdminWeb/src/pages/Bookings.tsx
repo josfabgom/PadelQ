@@ -425,7 +425,7 @@ const BookingsPage = () => {
     const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
     const [employeeDiscountPercentage, setEmployeeDiscountPercentage] = useState<number>(0);
     const [directSaleData, setDirectSaleData] = useState({
-        consumptions: [] as { productId: number, productName: string, quantity: number, price: number }[],
+        consumptions: [] as { productId: number, productName: string, quantity: number, price: number, notes?: string }[],
         clientId: '',
         clientName: '',
         paymentMethodId: null as number | null,
@@ -667,7 +667,7 @@ const BookingsPage = () => {
             
             totalOriginal += paidAmountOriginal;
             totalToPay += paidAmount;
-            return { productId: c.productId, quantity: c.quantity, paidAmount };
+            return { productId: c.productId, quantity: c.quantity, paidAmount, notes: c.notes };
         });
         
         return { totalToPay, totalOriginal, items, discountFactor };
@@ -693,7 +693,8 @@ const BookingsPage = () => {
                 isInternal: isInternal,
                 paymentMethodId: directSaleData.isSplitPayment ? null : directSaleData.paymentMethodId,
                 splitPayments: directSaleData.isSplitPayment ? directSaleData.splitPayments.filter(p => p.paymentMethodId && p.amount > 0) : null,
-                notes: isCtaCte ? `Venta Cta Cte (Responsable: ${selectedCtaCteUser?.fullName || 'Cliente'})` : (directSaleData.clientId ? `Venta Directa desde Calendario` : `Venta Consumidor Final`)
+                notes: isCtaCte ? `Venta Cta Cte (Responsable: ${selectedCtaCteUser?.fullName || 'Cliente'})` : (directSaleData.clientId ? `Venta Directa desde Calendario` : `Venta Consumidor Final`),
+                customerName: directSaleData.clientName || selectedCtaCteUser?.fullName || dsClientSearch
             };
 
             const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
@@ -738,6 +739,19 @@ const BookingsPage = () => {
                     }, selectedCtaCteUser?.fullName || directSaleData.clientName || 'Particular');
                 }
             });
+
+            // --- KITCHEN TICKET PRINT ---
+            const kitchenItems = directSaleData.consumptions.map(item => {
+                const prod = allProducts.find(p => p.id === item.productId);
+                return prod && (prod.recipeId || (prod.category && prod.category.toLowerCase() === 'comida')) 
+                    ? { productName: prod.name, quantity: item.quantity, notes: item.notes } 
+                    : null;
+            }).filter(i => i !== null);
+
+            if (kitchenItems.length > 0) {
+                const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                handlePrintKitchenTicket(shortId, kitchenItems, selectedCtaCteUser?.fullName || directSaleData.clientName || dsClientSearch || 'Particular');
+            }
 
             setIsDirectSaleModalOpen(false);
             
@@ -985,17 +999,24 @@ const BookingsPage = () => {
                     const booking = selectedBooking || selectedSpaceBooking;
                     if (!booking) return;
 
+                    const clientName = booking.user?.fullName || booking.guestName || 'Particular';
                     const res = await api.post('/api/consumptions', {
                         bookingId: booking.id,
                         productId: product.id,
-                        quantity: 1
+                        quantity: 1,
+                        customerName: clientName
                     }, config);
 
                     if (product.isDoubleUnitCombo) {
                         handlePrintComboTicket({
                             productName: product.name,
                             quantity: 1
-                        }, booking.user?.fullName || booking.guestName || 'Particular', res.data?.id);
+                        }, clientName, res.data?.id);
+                    }
+
+                    if (product.recipeId || (product.category && product.category.toLowerCase() === 'comida')) {
+                        const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        handlePrintKitchenTicket(shortId, [{ productName: product.name, quantity: 1 }], clientName);
                     }
 
                     const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, config);
@@ -2292,6 +2313,84 @@ const BookingsPage = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handlePrintKitchenTicket = (orderNumber: string, items: any[], clientName: string) => {
+        const printWindow = window.open('', '_blank', 'width=300,height=600');
+        if (!printWindow) return;
+
+        const ticketHtml = `
+            <html>
+            <head>
+                <style>
+                    @media print {
+                        @page { margin: 0; }
+                        body { margin: 0; padding: 0; }
+                    }
+                    body { 
+                        font-family: 'Courier New', Courier, monospace; 
+                        width: 80mm; 
+                        margin: 0; 
+                        padding: 4mm; 
+                        font-size: 12px;
+                        line-height: 1.3;
+                        color: #000;
+                    }
+                    .center { text-align: center; }
+                    .bold { font-weight: bold; }
+                    .line { border-bottom: 2px dashed #000; margin: 8px 0; }
+                    .title { font-size: 20px; margin-bottom: 2px; }
+                    .header-box { border: 2px solid #000; padding: 4px; margin: 10px 0; text-align: center; }
+                </style>
+            </head>
+            <body>
+                <div class="center">
+                    <div class="title bold">COMANDA DE COCINA</div>
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        Fecha: ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
+                    </div>
+                </div>
+                
+                <div class="line"></div>
+                <div><strong>ORDEN #:</strong> ${orderNumber}</div>
+                <div><strong>CLIENTE:</strong> ${clientName || 'Particular'}</div>
+                <div class="line"></div>
+                
+                <div class="header-box bold">
+                    DETALLE DEL PEDIDO
+                </div>
+                
+                <table style="width: 100%; text-align: left; margin-bottom: 15px;">
+                    ${items.map(item => `
+                        <tr>
+                            <td style="width: 20%; vertical-align: top;"><strong>${item.quantity}x</strong></td>
+                            <td style="padding-bottom: 5px;">
+                                <div>${item.productName}</div>
+                                ${item.notes ? `<div style="font-size: 11px; font-style: italic; margin-top: 2px;">* Obs: ${item.notes}</div>` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </table>
+                
+                <div class="line"></div>
+                <div class="center" style="font-size: 10px; margin-top: 20px;">--- DUPLICADO CLIENTE ---</div>
+            </body>
+            </html>
+        `;
+
+        const ticketKitchenHtml = ticketHtml.replace('--- DUPLICADO CLIENTE ---', '--- DUPLICADO COCINA ---');
+
+        const finalHtml = `
+            ${ticketHtml}
+            <div style="page-break-after: always; height: 30px;"></div>
+            ${ticketKitchenHtml}
+            <script>
+                window.onload = function() { window.print(); window.close(); }
+            </script>
+        `;
+
+        printWindow.document.write(finalHtml);
+        printWindow.document.close();
     };
 
     const handlePrintComboTicket = (comboItem: any, clientName: string, consumptionId?: string) => {
@@ -4783,18 +4882,25 @@ const BookingsPage = () => {
                                             const bookingId = booking?.id;
                                             if (!bookingId) return;
                                             
+                                            const clientName = booking.user?.fullName || booking.guestName || 'Particular';
                                             const res = await api.post('/api/consumptions', {
                                                 bookingId: bookingId,
                                                 productId: productForObservation.id,
                                                 quantity: 1,
-                                                notes: tempObservation
+                                                notes: tempObservation,
+                                                customerName: clientName
                                             }, getAuthConfig());
 
                                             if (productForObservation.isDoubleUnitCombo) {
                                                 handlePrintComboTicket({
                                                     productName: productForObservation.name,
                                                     quantity: 1
-                                                }, booking.user?.fullName || booking.guestName || 'Particular', res.data?.id);
+                                                }, clientName, res.data?.id);
+                                            }
+
+                                            if (productForObservation.recipeId || (productForObservation.category && productForObservation.category.toLowerCase() === 'comida')) {
+                                                const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                                                handlePrintKitchenTicket(shortId, [{ productName: productForObservation.name, quantity: 1, notes: tempObservation }], clientName);
                                             }
 
                                             const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
@@ -6067,6 +6173,21 @@ const BookingsPage = () => {
                                                         >
                                                             <Trash2 className="w-5 h-5" />
                                                         </button>
+                                                    </div>
+
+                                                    {/* Observaciones (Opcional) */}
+                                                    <div className="pl-[72px] pr-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Observaciones (ej. sin cebolla, muy cocida...)"
+                                                            value={item.notes || ''}
+                                                            onChange={(e) => {
+                                                                const newConsumptions = [...directSaleData.consumptions];
+                                                                newConsumptions[index].notes = e.target.value;
+                                                                setDirectSaleData({ ...directSaleData, consumptions: newConsumptions });
+                                                            }}
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                        />
                                                     </div>
 
                                                     {/* Selector de Partes (Debajo) */}

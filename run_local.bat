@@ -14,7 +14,7 @@ echo [2] Iniciando Admin Web (Frontend)...
 start "PadelQ Admin Web" cmd /k "cd PadelQ.AdminWeb && npm install && npm run dev"
 
 echo [3] Iniciando Mobile App (Flutter Web)...
-start "PadelQ Mobile App" cmd /k "cd PadelQ.MobileApp && flutter run -d chrome"
+start "PadelQ Mobile App" cmd /k "cd PadelQ.MobileApp && run_flutter.bat run -d chrome"
 
 echo ==============================================
 echo Todos los servicios se han iniciado en nuevas ventanas.

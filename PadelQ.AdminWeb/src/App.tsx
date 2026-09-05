@@ -21,6 +21,7 @@ import RecipesPage from './pages/Recipes';
 import CashManagementPage from './pages/CashManagement';
 import PurchaseReceptionPage from './pages/PurchaseReception';
 import MercadoPagoAuditPage from './pages/MercadoPagoAudit';
+import KitchenOrders from './pages/KitchenOrders';
 
 
 function App() {
@@ -110,6 +111,10 @@ function App() {
         <Route 
           path="/recipes" 
           element={isAuthenticated ? <RecipesPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/kitchen-orders" 
+          element={isAuthenticated ? <KitchenOrders /> : <Navigate to="/login" />} 
         />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

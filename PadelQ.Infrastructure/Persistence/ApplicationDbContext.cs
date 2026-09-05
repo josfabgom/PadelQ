@@ -33,7 +33,9 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<SupplierPurchase> SupplierPurchases { get; set; } = null!;
         public DbSet<SupplierPurchaseItem> SupplierPurchaseItems { get; set; } = null!;
         public DbSet<PointTerminal> PointTerminals { get; set; } = null!;
-
+        public DbSet<KitchenOrder> KitchenOrders { get; set; } = null!;
+        public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; } = null!;
+        public DbSet<KitchenOrderAudit> KitchenOrderAudits { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -87,6 +89,23 @@ namespace PadelQ.Infrastructure.Persistence
                 .HasForeignKey(ri => ri.IngredientId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            builder.Entity<KitchenOrderItem>()
+                .HasOne(i => i.BookingConsumption)
+                .WithMany()
+                .HasForeignKey(i => i.BookingConsumptionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<KitchenOrderItem>()
+                .HasOne(i => i.Product)
+                .WithMany()
+                .HasForeignKey(i => i.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<KitchenOrderAudit>()
+                .HasOne(a => a.KitchenOrder)
+                .WithMany()
+                .HasForeignKey(a => a.KitchenOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // No forzamos UTC de forma global para permitir que las reservas se guarden y lean como 'Wall Clock Time' (Hora Local)
         }

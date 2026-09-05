@@ -76,7 +76,7 @@ builder.Services.AddScoped<IChatbotService, ChatbotService>();
 builder.Services.AddHttpClient<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddHostedService<BillingBackgroundService>();
 builder.Services.AddMemoryCache();
-
+builder.Services.AddSignalR();
 
  builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -154,5 +154,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<PadelQ.Api.Hubs.KitchenHub>("/kitchenHub");
 
 app.Run();
