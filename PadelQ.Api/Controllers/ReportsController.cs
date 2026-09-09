@@ -260,12 +260,14 @@ namespace PadelQ.Api.Controllers
                 filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
                 filterEnd = (endDate?.Date ?? filterStart).AddDays(1);
             }
+            var filterStartUtc = filterStart.AddHours(3);
+            var filterEndUtc = filterEnd.AddHours(3);
             
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)
                 .Include(c => c.Booking)
                 .Include(c => c.SpaceBooking)
-                .Where(c => c.CreatedAt >= filterStart && c.CreatedAt < filterEnd &&
+                .Where(c => c.CreatedAt >= filterStartUtc && c.CreatedAt < filterEndUtc &&
                            (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
                            (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                 .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
@@ -319,11 +321,14 @@ namespace PadelQ.Api.Controllers
             var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date.AddDays(-30);
             var filterEnd = (endDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date).AddDays(1);
 
+            var filterStartUtc = filterStart.AddHours(3);
+            var filterEndUtc = filterEnd.AddHours(3);
+
             var consumptions = await _context.BookingConsumptions
                 .Include(c => c.Product)
                 .Include(c => c.Booking)
                 .Include(c => c.SpaceBooking)
-                .Where(c => c.CreatedAt >= filterStart && c.CreatedAt < filterEnd &&
+                .Where(c => c.CreatedAt >= filterStartUtc && c.CreatedAt < filterEndUtc &&
                            (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
                            (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
                 .Select(c => new
@@ -519,12 +524,12 @@ namespace PadelQ.Api.Controllers
             var closure = await _context.CashClosures.FindAsync(closureId);
             if (closure == null) return NotFound();
 
-            var start = closure.OpeningDate;
-            var end = closure.ClosingDate ?? DateTime.UtcNow;
+            var startUtc = closure.OpeningDate.AddHours(3);
+            var endUtc = (closure.ClosingDate?.AddHours(3) ?? DateTime.UtcNow);
 
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)
-                .Where(c => c.CreatedAt >= start && c.CreatedAt <= end)
+                .Where(c => c.CreatedAt >= startUtc && c.CreatedAt <= endUtc)
                 .GroupBy(c => new { c.ProductId, c.Product.Name, c.Product.Category })
                 .Select(g => new
                 {
@@ -571,9 +576,12 @@ namespace PadelQ.Api.Controllers
             var start = closures.Min(c => c.OpeningDate);
             var end = closures.Max(c => c.ClosingDate) ?? DateTime.UtcNow;
 
+            var startUtc = start.AddHours(3);
+            var endUtc = end.AddHours(3);
+
             var sales = await _context.BookingConsumptions
                 .Include(c => c.Product)
-                .Where(c => c.CreatedAt >= start && c.CreatedAt <= end)
+                .Where(c => c.CreatedAt >= startUtc && c.CreatedAt <= endUtc)
                 .ToListAsync();
 
             var products = sales.GroupBy(s => s.ProductId)
@@ -586,7 +594,7 @@ namespace PadelQ.Api.Controllers
                     totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
                     quantitiesByClosure = closures.ToDictionary(
                         c => c.Id.ToString(),
-                        c => g.Where(x => x.CreatedAt >= c.OpeningDate && x.CreatedAt <= (c.ClosingDate ?? DateTime.UtcNow)).Sum(x => x.Quantity)
+                        c => g.Where(x => x.CreatedAt >= c.OpeningDate.AddHours(3) && x.CreatedAt <= (c.ClosingDate?.AddHours(3) ?? DateTime.UtcNow)).Sum(x => x.Quantity)
                     )
                 })
                 .OrderByDescending(p => p.totalQuantity)
@@ -608,14 +616,17 @@ namespace PadelQ.Api.Controllers
         [HttpGet("kitchen-sales")]
         public async Task<IActionResult> GetKitchenSales([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
-            var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
-            var filterEnd = (endDate?.Date ?? filterStart).AddDays(1);
+            var filterStartLocal = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
+            var filterEndLocal = (endDate?.Date ?? filterStartLocal).AddDays(1);
+
+            var filterStartUtc = filterStartLocal.AddHours(3);
+            var filterEndUtc = filterEndLocal.AddHours(3);
 
             var salesRaw = await _context.BookingConsumptions
                 .Include(c => c.Product)
                 .Include(c => c.Booking)
                 .Include(c => c.SpaceBooking)
-                .Where(c => c.Product.Category == "Cocina" && c.CreatedAt >= filterStart && c.CreatedAt <= filterEnd)
+                .Where(c => (c.Product.RecipeId != null || (c.Product.Category != null && c.Product.Category.ToLower() == "comida")) && c.CreatedAt >= filterStartUtc && c.CreatedAt < filterEndUtc)
                 .ToListAsync();
 
             var sales = salesRaw

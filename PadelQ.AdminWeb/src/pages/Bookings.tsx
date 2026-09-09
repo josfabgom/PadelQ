@@ -2315,78 +2315,149 @@ const BookingsPage = () => {
         }
     };
 
+    const buildKitchenTicketHtml = (orderNumber: string, items: any[], clientName: string, copyLabel: string) => {
+        const ticketStyles = `
+            <style>
+                @media print {
+                    @page { margin: 0; size: 80mm auto; }
+                    body { margin: 0; padding: 0; }
+                }
+                body {
+                    font-family: 'Courier New', Courier, monospace;
+                    width: 80mm;
+                    margin: 0;
+                    padding: 4mm;
+                    font-size: 14px;
+                    font-weight: bold;
+                    line-height: 1.4;
+                    color: #000;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .center { text-align: center; }
+                .line { border-bottom: 3px dashed #000; margin: 8px 0; }
+                .title { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin-bottom: 2px; }
+                .date-line { font-size: 12px; font-weight: bold; margin-top: 5px; }
+                .header-box { border: 3px solid #000; padding: 5px; margin: 10px 0; text-align: center; font-size: 16px; font-weight: 900; }
+                .qty { font-size: 18px; font-weight: 900; vertical-align: top; width: 20%; }
+                .product-name { font-size: 16px; font-weight: 900; padding-bottom: 6px; }
+                .obs { font-size: 15px; font-weight: bold; margin-top: 4px; }
+                .copy-label { font-size: 11px; font-weight: bold; margin-top: 20px; }
+                .cut-margin { height: 25mm; }
+            </style>
+        `;
+
+        const body = `
+            <div class="center">
+                <div class="title">COMANDA DE COCINA</div>
+                <div class="date-line">
+                    Fecha: ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
+                </div>
+            </div>
+
+            <div class="line"></div>
+            <div>ORDEN #: ${orderNumber}</div>
+            <div>CLIENTE: ${clientName || 'Particular'}</div>
+            <div class="line"></div>
+
+            <div class="header-box">DETALLE DEL PEDIDO</div>
+
+            <table style="width: 100%; text-align: left; margin-bottom: 15px; border-collapse: collapse;">
+                ${items.map(item => `
+                    <tr>
+                        <td class="qty">${item.quantity}x</td>
+                        <td style="padding-bottom: 8px;">
+                            <div class="product-name">${item.productName}</div>
+                            ${item.notes ? `<div class="obs">* OBS: ${item.notes}</div>` : ''}
+                        </td>
+                    </tr>
+                `).join('')}
+            </table>
+
+            <div class="line"></div>
+            <div class="center copy-label">--- ${copyLabel} ---</div>
+            <div class="cut-margin"></div>
+        `;
+
+        return `<html><head>${ticketStyles}</head><body>${body}<script>window.onload=function(){window.print();setTimeout(function(){window.close();},600);}<\/script></body></html>`;
+    };
+
     const handlePrintKitchenTicket = (orderNumber: string, items: any[], clientName: string) => {
-        const printWindow = window.open('', '_blank', 'width=300,height=600');
+        const printWindow = window.open('', '_blank', 'width=320,height=700');
         if (!printWindow) return;
 
-        const ticketHtml = `
-            <html>
-            <head>
-                <style>
-                    @media print {
-                        @page { margin: 0; }
-                        body { margin: 0; padding: 0; }
-                    }
-                    body { 
-                        font-family: 'Courier New', Courier, monospace; 
-                        width: 80mm; 
-                        margin: 0; 
-                        padding: 4mm; 
-                        font-size: 12px;
-                        line-height: 1.3;
-                        color: #000;
-                    }
-                    .center { text-align: center; }
-                    .bold { font-weight: bold; }
-                    .line { border-bottom: 2px dashed #000; margin: 8px 0; }
-                    .title { font-size: 20px; margin-bottom: 2px; }
-                    .header-box { border: 2px solid #000; padding: 4px; margin: 10px 0; text-align: center; }
-                </style>
-            </head>
-            <body>
+        const buildTicketSection = (copyLabel: string) => `
+            <div class="ticket">
                 <div class="center">
-                    <div class="title bold">COMANDA DE COCINA</div>
-                    <div style="font-size: 11px; margin-top: 5px;">
+                    <div class="title">COMANDA DE COCINA</div>
+                    <div class="date-line">
                         Fecha: ${new Date().toLocaleDateString('es-AR')} - ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
                     </div>
                 </div>
-                
                 <div class="line"></div>
-                <div><strong>ORDEN #:</strong> ${orderNumber}</div>
-                <div><strong>CLIENTE:</strong> ${clientName || 'Particular'}</div>
+                <div>ORDEN #: ${orderNumber}</div>
+                <div>CLIENTE: ${clientName || 'Particular'}</div>
                 <div class="line"></div>
-                
-                <div class="header-box bold">
-                    DETALLE DEL PEDIDO
-                </div>
-                
-                <table style="width: 100%; text-align: left; margin-bottom: 15px;">
+                <div class="header-box">DETALLE DEL PEDIDO</div>
+                <table style="width:100%;text-align:left;margin-bottom:15px;border-collapse:collapse;">
                     ${items.map(item => `
                         <tr>
-                            <td style="width: 20%; vertical-align: top;"><strong>${item.quantity}x</strong></td>
-                            <td style="padding-bottom: 5px;">
-                                <div>${item.productName}</div>
-                                ${item.notes ? `<div style="font-size: 11px; font-style: italic; margin-top: 2px;">* Obs: ${item.notes}</div>` : ''}
+                            <td class="qty">${item.quantity}x</td>
+                            <td style="padding-bottom:8px;">
+                                <div class="product-name">${item.productName}</div>
+                                ${item.notes ? `<div class="obs">* OBS: ${item.notes}</div>` : ''}
                             </td>
                         </tr>
                     `).join('')}
                 </table>
-                
                 <div class="line"></div>
-                <div class="center" style="font-size: 10px; margin-top: 20px;">--- DUPLICADO CLIENTE ---</div>
-            </body>
-            </html>
+                <div class="center copy-label">--- ${copyLabel} ---</div>
+            </div>
         `;
 
-        const ticketKitchenHtml = ticketHtml.replace('--- DUPLICADO CLIENTE ---', '--- DUPLICADO COCINA ---');
-
         const finalHtml = `
-            ${ticketHtml}
-            <div style="page-break-after: always; height: 30px;"></div>
-            ${ticketKitchenHtml}
-            <script>
-                window.onload = function() { window.print(); window.close(); }
-            </script>
+            <html>
+            <head>
+                <style>
+                    @media print {
+                        @page { margin: 0; size: 80mm auto; }
+                        body { margin: 0; padding: 0; }
+                        .ticket { page-break-after: always; }
+                        .ticket:last-child { page-break-after: avoid; }
+                    }
+                    body {
+                        font-family: 'Courier New', Courier, monospace;
+                        width: 80mm;
+                        margin: 0;
+                        padding: 0;
+                        font-size: 14px;
+                        font-weight: bold;
+                        line-height: 1.4;
+                        color: #000;
+                    }
+                    .ticket { padding: 4mm 4mm 25mm 4mm; }
+                    .center { text-align: center; }
+                    .line { border-bottom: 3px dashed #000; margin: 8px 0; }
+                    .title { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin-bottom: 2px; }
+                    .date-line { font-size: 12px; font-weight: bold; margin-top: 5px; }
+                    .header-box { border: 3px solid #000; padding: 5px; margin: 10px 0; text-align: center; font-size: 16px; font-weight: 900; }
+                    .qty { font-size: 18px; font-weight: 900; vertical-align: top; width: 20%; }
+                    .product-name { font-size: 16px; font-weight: 900; padding-bottom: 6px; }
+                    .obs { font-size: 15px; font-weight: bold; margin-top: 4px; }
+                    .copy-label { font-size: 11px; font-weight: bold; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                ${buildTicketSection('DUPLICADO CLIENTE')}
+                ${buildTicketSection('DUPLICADO COCINA')}
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 700);
+                    };
+                <\/script>
+            </body>
+            </html>
         `;
 
         printWindow.document.write(finalHtml);
@@ -2455,6 +2526,7 @@ const BookingsPage = () => {
                     Presente este ticket en barra/mostrador para retirar su unidad restante.<br/><br/>
                     ¡Muchas gracias!
                 </div>
+                <div style="height: 15mm;"></div>
                 
                 <script>
                     window.onload = function() {
