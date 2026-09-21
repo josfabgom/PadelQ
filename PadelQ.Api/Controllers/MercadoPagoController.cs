@@ -5,12 +5,13 @@ using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
 using PadelQ.Domain;
 using PadelQ.Infrastructure.Persistence;
-using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PadelQ.Api.Controllers
@@ -19,6 +20,7 @@ namespace PadelQ.Api.Controllers
     [Route("api/mercadopago")]
     public class MercadoPagoController : ControllerBase
     {
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _paymentLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
         private readonly IMercadoPagoService _mercadoPagoService;
         private readonly ApplicationDbContext _context;
         private readonly HttpClient _httpClient;
@@ -244,11 +246,16 @@ namespace PadelQ.Api.Controllers
 
         private async Task ProcessApprovedPaymentAsync(string referenceId, string mpPaymentId, decimal amount, string processedBy = "Sistema")
         {
-            // Evitar procesamiento duplicado
-            if (await _context.Transactions.AnyAsync(t => t.Description != null && t.Description.Contains(mpPaymentId)))
+            var paymentLock = _paymentLocks.GetOrAdd(mpPaymentId, _ => new SemaphoreSlim(1, 1));
+            await paymentLock.WaitAsync();
+            using var dbTransaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            try
             {
-                return;
-            }
+                // Evitar procesamiento duplicado
+                if (await _context.Transactions.AnyAsync(t => t.Description != null && t.Description.Contains(mpPaymentId)))
+                {
+                    return;
+                }
 
             // Buscar el usuario por email si processedBy parece un correo electrónico.
             // Si lo encuentra, usamos el UserName del usuario para que coincida con lo esperado por CashClosures (ej. "Admin").
@@ -439,12 +446,10 @@ namespace PadelQ.Api.Controllers
                         });
                     }
 
-                    await _context.SaveChangesAsync();
                     }
 
                     // Limpiar el setting de SystemSettings
                     _context.SystemSettings.Remove(allocSetting);
-                    await _context.SaveChangesAsync();
                     
                     allocationApplied = true;
                 }
@@ -525,7 +530,6 @@ namespace PadelQ.Api.Controllers
                                 PaymentGroupId = paymentGroupId
                             };
                             _context.Transactions.Add(transaction);
-                            await _context.SaveChangesAsync();
                         }
                     }
                 }
@@ -597,12 +601,24 @@ namespace PadelQ.Api.Controllers
                                 PaymentGroupId = paymentGroupId
                             };
                             _context.Transactions.Add(transaction);
-                            await _context.SaveChangesAsync();
                         }
                     }
                 }
             }
+            
+            await _context.SaveChangesAsync();
+            await dbTransaction.CommitAsync();
         }
+        catch
+        {
+            await dbTransaction.RollbackAsync();
+            throw;
+        }
+        finally
+        {
+            paymentLock.Release();
+        }
+    }
 
         [HttpGet("oauth-url")]
         public async Task<IActionResult> GetOAuthUrl([FromQuery] string frontendRedirectUri)
@@ -702,7 +718,7 @@ namespace PadelQ.Api.Controllers
             return Ok(new { Message = "Mercado Pago desconectado con éxito." });
         }
 
-        [HttpGet("audit-transactions")]
+                [HttpGet("audit-transactions")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAuditTransactions([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
@@ -711,38 +727,113 @@ namespace PadelQ.Api.Controllers
                 var start = startDate ?? TimeZoneHelper.GetArgNow().Date.AddDays(-30);
                 var end = endDate ?? TimeZoneHelper.GetArgNow();
 
-                // Buscar medios de pago relacionados a Mercado Pago o QR
                 var mpMethodIds = await _context.PaymentMethods
                     .Where(m => m.Name.Contains("Mercado Pago") || m.Name.Contains("QR") || m.Name.Contains("MP"))
                     .Select(m => m.Id)
                     .ToListAsync();
 
-                var query = _context.Transactions
+                var list = await _context.Transactions
                     .Include(t => t.User)
                     .Include(t => t.PaymentMethod)
-                    .Where(t => t.Date >= start && t.Date <= end);
-
-                // Filtrar por ID de medio de pago o descripción
-                query = query.Where(t => (t.PaymentMethodId.HasValue && mpMethodIds.Contains(t.PaymentMethodId.Value))
-                                         || (t.Description != null && t.Description.Contains("Mercado Pago"))
-                                         || (t.Description != null && t.Description.Contains("QR")));
-
-                var list = await query
+                    .Where(t => t.Date >= start && t.Date <= end &&
+                                ((t.PaymentMethodId.HasValue && mpMethodIds.Contains(t.PaymentMethodId.Value))
+                                 || (t.Description != null && (t.Description.Contains("Mercado Pago") || t.Description.Contains("QR")))))
                     .OrderByDescending(t => t.Date)
-                    .Select(t => new {
-                        t.Id,
-                        t.Amount,
-                        t.Date,
-                        t.Description,
-                        t.ProcessedBy,
-                        UserFullName = t.User != null ? t.User.FullName : "Consumidor Final",
-                        t.BookingId,
-                        t.SpaceBookingId,
-                        PaymentMethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Mercado Pago"
-                    })
                     .ToListAsync();
 
-                return Ok(list);
+                var grouped = new List<object>();
+                var groupedDict = new Dictionary<string, List<Transaction>>();
+                var noneGrouped = new List<Transaction>();
+
+                foreach (var t in list)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(t.Description ?? "", @"ID:?\s*([0-9]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        var mpId = match.Groups[1].Value;
+                        if (!groupedDict.ContainsKey(mpId)) groupedDict[mpId] = new List<Transaction>();
+                        groupedDict[mpId].Add(t);
+                    }
+                    else
+                    {
+                        noneGrouped.Add(t);
+                    }
+                }
+
+                var resultList = new ConcurrentBag<object>();
+
+                foreach (var kvp in groupedDict)
+                {
+                    var mpId = kvp.Key;
+                    var txs = kvp.Value;
+                    var firstTx = txs.First();
+                    decimal mpAmount = 0;
+                    string status = "Desconocido";
+
+                    try
+                    {
+                        var paymentObj = await _mercadoPagoService.GetPaymentAsync(mpId);
+                        if (paymentObj is JsonElement paymentJson)
+                        {
+                            if (paymentJson.TryGetProperty("transaction_amount", out var amtProp))
+                            {
+                                if (amtProp.ValueKind == JsonValueKind.Number) mpAmount = amtProp.GetDecimal();
+                                else if (amtProp.ValueKind == JsonValueKind.String && decimal.TryParse(amtProp.GetString(), out var parsedAmount)) mpAmount = parsedAmount;
+                            }
+                            if (paymentJson.TryGetProperty("status", out var statusProp))
+                            {
+                                status = statusProp.GetString();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Error fetching MP API for " + mpId + ": " + ex.Message);
+                    }
+
+                    resultList.Add(new
+                    {
+                        Id = firstTx.Id,
+                        IsGroup = true,
+                        GroupedIds = txs.Select(t => t.Id).ToArray(),
+                        Amount = txs.Sum(t => t.Amount),
+                        MpAmount = mpAmount,
+                        MpStatus = status,
+                        Date = firstTx.Date,
+                        Description = string.Join(" | ", txs.Select(t => t.Description).Distinct()),
+                        ProcessedBy = firstTx.ProcessedBy,
+                        UserFullName = firstTx.User != null ? firstTx.User.FullName : "Consumidor Final",
+                        BookingId = firstTx.BookingId,
+                        SpaceBookingId = firstTx.SpaceBookingId,
+                        PaymentMethodName = firstTx.PaymentMethod != null ? firstTx.PaymentMethod.Name : "Mercado Pago",
+                        MpId = mpId
+                    });
+                }
+
+                foreach (var t in noneGrouped)
+                {
+                    resultList.Add(new
+                    {
+                        Id = t.Id,
+                        IsGroup = false,
+                        GroupedIds = new[] { t.Id },
+                        Amount = t.Amount,
+                        MpAmount = (decimal)0,
+                        MpStatus = "",
+                        Date = t.Date,
+                        Description = t.Description,
+                        ProcessedBy = t.ProcessedBy,
+                        UserFullName = t.User != null ? t.User.FullName : "Consumidor Final",
+                        BookingId = t.BookingId,
+                        SpaceBookingId = t.SpaceBookingId,
+                        PaymentMethodName = t.PaymentMethod != null ? t.PaymentMethod.Name : "Mercado Pago",
+                        MpId = (string)null
+                    });
+                }
+
+                var finalSorted = resultList.OrderByDescending(r => ((dynamic)r).Date).ToList();
+
+                return Ok(finalSorted);
             }
             catch (Exception ex)
             {

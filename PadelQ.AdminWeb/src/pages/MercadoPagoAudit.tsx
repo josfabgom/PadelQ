@@ -13,6 +13,11 @@ interface LocalTransaction {
   bookingId: string | null;
   spaceBookingId: string | null;
   paymentMethodName: string;
+  isGroup?: boolean;
+  groupedIds?: number[];
+  mpAmount?: number;
+  mpStatus?: string;
+  mpId?: string | null;
 }
 
 const MercadoPagoAudit: React.FC = () => {
@@ -136,42 +141,21 @@ const MercadoPagoAudit: React.FC = () => {
     );
   });
 
-  const groupedTransactions = React.useMemo(() => {
-    const groups: Record<string, LocalTransaction & { groupedIds: number[], isGroup: boolean }> = {};
-    const result: (LocalTransaction & { groupedIds?: number[], isGroup?: boolean })[] = [];
-
-    filteredTransactions.forEach(t => {
-      const mpId = extractPaymentId(t.description);
-      if (mpId) {
-        if (groups[mpId]) {
-          groups[mpId].amount += t.amount;
-          groups[mpId].groupedIds.push(t.id);
-          if (!groups[mpId].description.includes(t.description)) {
-              groups[mpId].description += ` | ${t.description}`;
-          }
-        } else {
-          groups[mpId] = { ...t, groupedIds: [t.id], isGroup: true };
-          result.push(groups[mpId]);
-        }
-      } else {
-        result.push(t);
-      }
-    });
-    // Ordenar de más reciente a más antigua
-    return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filteredTransactions]);
+  const groupedTransactions = filteredTransactions; // Ya viene agrupado del backend
 
   // Exportar los datos actuales a CSV
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) return;
 
-    const headers = ['ID Transacción Local', 'Fecha', 'Cliente', 'Monto Local', 'ID Mercado Pago', 'Descripción', 'Procesado Por'];
+    const headers = ['ID Transacción Local', 'Fecha', 'Cliente', 'Monto Sistema', 'Monto MP', 'Diferencia', 'ID Mercado Pago', 'Descripción', 'Procesado Por'];
     const rows = filteredTransactions.map(t => [
       t.id,
       new Date(t.date).toLocaleString(),
       t.userFullName,
       t.amount,
-      extractPaymentId(t.description) || 'N/A',
+      t.mpAmount || 0,
+      t.amount - (t.mpAmount || 0),
+      t.mpId || extractPaymentId(t.description) || 'N/A',
       t.description,
       t.processedBy
     ]);
@@ -287,7 +271,9 @@ const MercadoPagoAudit: React.FC = () => {
                   <th className="py-5 px-6">ID Local</th>
                   <th className="py-5 px-6">Fecha/Hora</th>
                   <th className="py-5 px-6">Cliente</th>
-                  <th className="py-5 px-6 text-right">Monto</th>
+                  <th className="py-5 px-6 text-right">Monto Sist.</th>
+                  <th className="py-5 px-6 text-right">Monto MP</th>
+                  <th className="py-5 px-6 text-center">Estado/Dif.</th>
                   <th className="py-5 px-6">ID Pago MP</th>
                   <th className="py-5 px-6">Referencia</th>
                   <th className="py-5 px-6 text-center">Acción</th>
@@ -295,9 +281,10 @@ const MercadoPagoAudit: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {groupedTransactions.map(t => {
-                  const mpId = extractPaymentId(t.description);
+                  const mpId = t.mpId || extractPaymentId(t.description);
+                  const hasDifference = t.mpAmount !== undefined && Math.abs(t.amount - t.mpAmount) > 0.01;
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={t.id} className={`hover:bg-slate-50/50 transition-colors ${hasDifference ? 'bg-rose-50/30' : ''}`}>
                       <td className="py-4 px-6 font-mono font-bold text-zinc-500">
                         {t.isGroup && t.groupedIds && t.groupedIds.length > 1 ? `Múltiples (${t.groupedIds.length})` : `#${t.id}`}
                       </td>
@@ -307,6 +294,19 @@ const MercadoPagoAudit: React.FC = () => {
                       <td className="py-4 px-6 font-bold text-slate-900">{t.userFullName}</td>
                       <td className="py-4 px-6 text-right font-black text-slate-900 italic">
                         ${t.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-4 px-6 text-right font-black text-slate-600">
+                        {t.mpAmount !== undefined ? `$${t.mpAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '-'}
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        {hasDifference ? (
+                          <span className="flex items-center justify-center gap-1 text-rose-600 font-bold text-xs bg-rose-50 px-2 py-1 rounded-full border border-rose-100">
+                            <AlertCircle className="w-3 h-3" />
+                            Dif: ${Math.abs(t.amount - (t.mpAmount || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          t.mpStatus ? getStatusBadge(t.mpStatus) : <span className="text-zinc-400">-</span>
+                        )}
                       </td>
                       <td className="py-4 px-6">
                         {mpId ? (

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PadelQ.Application.Common.Interfaces;
+using System.Text.Json;
 using PadelQ.Domain;
 using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
@@ -17,10 +19,12 @@ namespace PadelQ.Api.Controllers
     public class CashClosuresController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMercadoPagoService _mercadoPagoService;
 
-        public CashClosuresController(ApplicationDbContext context)
+        public CashClosuresController(ApplicationDbContext context, IMercadoPagoService mercadoPagoService)
         {
             _context = context;
+            _mercadoPagoService = mercadoPagoService;
         }
 
         [HttpGet("current-status")]
@@ -224,6 +228,55 @@ namespace PadelQ.Api.Controllers
                 ))
                 .ToListAsync();
 
+            var mpTransactions = transactions.Where(t => t.PaymentMethod != null && (t.PaymentMethod.Name.Contains("Mercado Pago", StringComparison.OrdinalIgnoreCase) || t.PaymentMethod.Name.Contains("QR", StringComparison.OrdinalIgnoreCase)) || (t.Description != null && (t.Description.Contains("Mercado Pago") || t.Description.Contains("QR")))).ToList();
+            
+            var groupedDict = new Dictionary<string, decimal>();
+            foreach(var t in mpTransactions)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(t.Description ?? "", @"ID:?\s*([0-9]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    var mpId = match.Groups[1].Value;
+                    if (!groupedDict.ContainsKey(mpId)) groupedDict[mpId] = 0;
+                    groupedDict[mpId] += t.Amount;
+                }
+            }
+            
+            bool hasDifferences = false;
+            foreach (var kvp in groupedDict)
+            {
+                var mpId = kvp.Key;
+                var localAmount = kvp.Value;
+                try
+                {
+                    var paymentObj = await _mercadoPagoService.GetPaymentAsync(mpId);
+                    if (paymentObj is JsonElement paymentJson)
+                        {
+                        decimal mpAmount = 0;
+                        if (paymentJson.TryGetProperty("transaction_amount", out var amtProp))
+                        {
+                            if (amtProp.ValueKind == JsonValueKind.Number) mpAmount = amtProp.GetDecimal();
+                            else if (amtProp.ValueKind == JsonValueKind.String && decimal.TryParse(amtProp.GetString(), out var parsedAmount)) mpAmount = parsedAmount;
+                        }
+                        
+                        if (Math.Abs(mpAmount - localAmount) > 0.01m)
+                        {
+                            hasDifferences = true;
+                            break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error in closure MP check: " + ex.Message);
+                }
+            }
+            
+            if (hasDifferences)
+            {
+                return BadRequest("Existen diferencias en cobros de Mercado Pago. Revise la auditoría MP antes de cerrar la caja.");
+            }
+            
             // Calcular totales por tipo de método (solo ventas/pagos)
             var salesTransactions = transactions.Where(t => t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment).ToList();
 
