@@ -740,18 +740,7 @@ const BookingsPage = () => {
                 }
             });
 
-            // --- KITCHEN TICKET PRINT ---
-            const kitchenItems = directSaleData.consumptions.map(item => {
-                const prod = allProducts.find(p => p.id === item.productId);
-                return prod && (prod.recipeId || (prod.category && prod.category.toLowerCase() === 'comida')) 
-                    ? { productName: prod.name, quantity: item.quantity, notes: item.notes } 
-                    : null;
-            }).filter(i => i !== null);
 
-            if (kitchenItems.length > 0) {
-                const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
-                handlePrintKitchenTicket(shortId, kitchenItems, selectedCtaCteUser?.fullName || directSaleData.clientName || dsClientSearch || 'Particular');
-            }
 
             setIsDirectSaleModalOpen(false);
             
@@ -1014,10 +1003,7 @@ const BookingsPage = () => {
                         }, clientName, res.data?.id);
                     }
 
-                    if (product.recipeId || (product.category && product.category.toLowerCase() === 'comida')) {
-                        const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
-                        handlePrintKitchenTicket(shortId, [{ productName: product.name, quantity: 1 }], clientName);
-                    }
+
 
                     const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, config);
                     setBookingConsumptions(consRes.data || []);
@@ -3771,6 +3757,40 @@ const BookingsPage = () => {
                             </button>
                             
                             <button
+                                onClick={() => {
+                                    const booking = selectedBooking || selectedSpaceBooking;
+                                    if (booking) {
+                                        // Find kitchen items
+                                        const kitchenItems = bookingConsumptions
+                                            .map(c => {
+                                                const prod = allProducts.find(p => p.id === c.productId);
+                                                return prod && (prod.recipeId || (prod.category && prod.category.toLowerCase() === 'comida'))
+                                                    ? { productName: prod.name, quantity: c.quantity, notes: c.notes }
+                                                    : null;
+                                            })
+                                            .filter(i => i !== null);
+                                            
+                                        if (kitchenItems.length > 0) {
+                                            const clientName = booking.user?.fullName || booking.guestName || 'Particular';
+                                            handlePrintKitchenTicket("ACTUALIZADA", kitchenItems, clientName);
+                                        } else {
+                                            alert("No hay productos de cocina en esta reserva.");
+                                        }
+                                    }
+                                    setIsPrintChoiceModalOpen(false);
+                                }}
+                                className="w-full flex items-center gap-4 p-5 bg-white rounded-[24px] border border-zinc-200 hover:border-orange-500 hover:ring-4 hover:ring-orange-500/10 transition-all group shadow-sm hover:shadow-md"
+                            >
+                                <div className="p-3 bg-orange-500 text-white rounded-xl group-hover:scale-110 transition-transform">
+                                    <Printer className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="font-black text-sm uppercase tracking-tight text-black">Comanda Cocina</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Solo items de cocina</p>
+                                </div>
+                            </button>
+
+                            <button
                                 onClick={handleDownloadPDF}
                                 className="w-full flex items-center gap-4 p-5 bg-white rounded-[24px] border border-zinc-200 hover:border-emerald-500 hover:ring-4 hover:ring-emerald-500/10 transition-all group shadow-sm hover:shadow-md"
                             >
@@ -4970,10 +4990,7 @@ const BookingsPage = () => {
                                                 }, clientName, res.data?.id);
                                             }
 
-                                            if (productForObservation.recipeId || (productForObservation.category && productForObservation.category.toLowerCase() === 'comida')) {
-                                                const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
-                                                handlePrintKitchenTicket(shortId, [{ productName: productForObservation.name, quantity: 1, notes: tempObservation }], clientName);
-                                            }
+
 
                                             const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
                                             setBookingConsumptions(consRes.data || []);
