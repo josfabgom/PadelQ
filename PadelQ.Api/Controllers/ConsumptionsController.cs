@@ -592,7 +592,10 @@ namespace PadelQ.Api.Controllers
                 if (existingOrder != null)
                 {
                     // Append to existing
-                    foreach (var ki in kitchenItems) { existingOrder.Items.Add(ki); }
+                    foreach (var ki in kitchenItems) { 
+                        ki.KitchenOrderId = existingOrder.Id;
+                        _context.KitchenOrderItems.Add(ki); 
+                    }
                     orderIdToNotify = existingOrder.Id;
                     
                     var audit = new KitchenOrderAudit
