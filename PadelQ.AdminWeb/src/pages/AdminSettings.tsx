@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
-import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X, Link, Unlink, QrCode, CreditCard } from 'lucide-react';
+import { Settings, Clock, DollarSign, Save, ChevronLeft, AlertCircle, LogOut, Trash2, ArrowLeft, Search, History, CheckCircle2, Briefcase, Check, Mail, Phone, MapPin, Globe, X, Link, Unlink, QrCode, CreditCard, Hash, Image as ImageIcon } from 'lucide-react';
 import Header from '../components/Header';
 import { UPDATE_HISTORY, SYSTEM_VERSION } from '../constants/versions';
 import PointTerminals from './PointTerminals';
@@ -23,6 +23,10 @@ const AdminSettings = () => {
   const [foundBookings, setFoundBookings] = useState<any[] | null>(null);
   const [companyInfo, setCompanyInfo] = useState({
     name: 'PadelQ',
+    razonSocial: '',
+    logoUrl: '',
+    cuit: '',
+    condicionIva: 'Responsable Inscripto',
     address: '',
     phone: '',
     email: '',
@@ -40,6 +44,15 @@ const AdminSettings = () => {
     try {
       const res = await api.get('/api/SystemSettings', getAuthConfig());
       setSettings(res.data);
+      
+      const resArca = await api.get('/api/arca/settings', getAuthConfig());
+      if (resArca.data) {
+        setCompanyInfo(prev => ({
+          ...prev,
+          cuit: resArca.data.cuitEmisor || '',
+          condicionIva: resArca.data.condicionIva || 'Responsable Inscripto'
+        }));
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -129,6 +142,8 @@ const AdminSettings = () => {
       const info = { ...companyInfo };
       settings.forEach(s => {
         if (s.key === 'CompanyName') info.name = s.value;
+        if (s.key === 'CompanyRazonSocial') info.razonSocial = s.value;
+        if (s.key === 'CompanyLogoUrl') info.logoUrl = s.value;
         if (s.key === 'CompanyAddress') info.address = s.value;
         if (s.key === 'CompanyPhone') info.phone = s.value;
         if (s.key === 'CompanyEmail') info.email = s.value;
@@ -138,17 +153,42 @@ const AdminSettings = () => {
     }
   }, [settings]);
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setCompanyInfo({...companyInfo, logoUrl: reader.result});
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveCompanyInfo = async () => {
     try {
       const bulkSettings = [
         { key: 'CompanyName', value: companyInfo.name },
+        { key: 'CompanyRazonSocial', value: companyInfo.razonSocial },
+        { key: 'CompanyLogoUrl', value: companyInfo.logoUrl },
         { key: 'CompanyAddress', value: companyInfo.address },
         { key: 'CompanyPhone', value: companyInfo.phone },
         { key: 'CompanyEmail', value: companyInfo.email },
         { key: 'CompanyWebsite', value: companyInfo.website }
       ];
       await api.post('/api/systemsettings/bulk', bulkSettings, getAuthConfig());
-      setMessage({ text: "Información de la empresa guardada. Se recomienda recargar la página.", type: 'success' });
+      
+      const resArca = await api.get('/api/arca/settings', getAuthConfig());
+      if (resArca.data) {
+        await api.post('/api/arca/settings', {
+          ...resArca.data,
+          cuitEmisor: companyInfo.cuit,
+          condicionIva: companyInfo.condicionIva
+        }, getAuthConfig());
+      }
+      
+      setMessage({ text: "Información de la empresa y encabezado de tickets guardada.", type: 'success' });
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       setMessage({ text: "Error al guardar información", type: 'error' });
@@ -283,8 +323,53 @@ const AdminSettings = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Logo de la Empresa</label>
+                <div className="flex items-center gap-4">
+                  {companyInfo.logoUrl ? (
+                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                      <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-300 shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="relative flex-1">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Link className="w-4 h-4" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={companyInfo.logoUrl}
+                      onChange={e => setCompanyInfo({...companyInfo, logoUrl: e.target.value})}
+                      className="w-full bg-slate-50 border-0 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                      placeholder="Pega una URL o sube una imagen..."
+                    />
+                  </div>
+                  <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-colors">
+                    Subir
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  </label>
+                </div>
+              </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nombre del Club / Empresa</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Razón Social</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <input 
+                    type="text" 
+                    value={companyInfo.razonSocial}
+                    onChange={e => setCompanyInfo({...companyInfo, razonSocial: e.target.value})}
+                    className="w-full bg-slate-50 border-0 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                    placeholder="Ej: Mi Club S.A."
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nombre del Club (Fantasía)</label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                     <Briefcase className="w-4 h-4" />
@@ -295,6 +380,38 @@ const AdminSettings = () => {
                     onChange={e => setCompanyInfo({...companyInfo, name: e.target.value})}
                     className="w-full bg-slate-50 border-0 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
                   />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">CUIT Emisor</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Hash className="w-4 h-4" />
+                  </div>
+                  <input 
+                    type="text" 
+                    value={companyInfo.cuit}
+                    onChange={e => setCompanyInfo({...companyInfo, cuit: e.target.value})}
+                    className="w-full bg-slate-50 border-0 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                    placeholder="Sin guiones"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Condición IVA</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <select 
+                    value={companyInfo.condicionIva}
+                    onChange={e => setCompanyInfo({...companyInfo, condicionIva: e.target.value})}
+                    className="w-full bg-slate-50 border-0 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all appearance-none"
+                  >
+                    <option value="Responsable Inscripto">Responsable Inscripto</option>
+                    <option value="Monotributo">Monotributo</option>
+                    <option value="Sujeto Exento">Sujeto Exento</option>
+                  </select>
                 </div>
               </div>
               <div className="space-y-2">

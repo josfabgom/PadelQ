@@ -15,5 +15,6 @@ namespace PadelQ.Domain.Entities
 
         public string? IconName { get; set; } // For Lucide icons in frontend
         public string? HexColor { get; set; }
+        public bool InvoiceAutomatically { get; set; } = true;
     }
 }

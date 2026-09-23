@@ -19,6 +19,19 @@ namespace PadelQ.Domain.Entities
         [Required]
         public DateTime Date { get; set; } = DateTime.UtcNow;
 
+        // ARCA (AFIP) Billing fields
+        [StringLength(50)]
+        public string? Cae { get; set; }
+
+        public DateTime? CaeExpiration { get; set; }
+
+        public long? InvoiceNumber { get; set; }
+
+        public int? InvoiceType { get; set; }
+
+        [StringLength(20)]
+        public string? ArcaStatus { get; set; } // "Pendiente", "Aprobado", "Rechazado", "Error"
+
         [Required]
         public TransactionType Type { get; set; }
 

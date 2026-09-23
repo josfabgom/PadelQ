@@ -246,6 +246,7 @@ namespace PadelQ.Api.Controllers
             }
 
             var itemsSummary = itemDescriptions.Any() ? string.Join(", ", itemDescriptions) : "Bulk";
+            var paymentGroupId = Guid.NewGuid();
 
             // Registrar pagos si es venta pagada
             if (request.IsPaid && !request.IsInternal)
@@ -262,7 +263,8 @@ namespace PadelQ.Api.Controllers
                             Type = TransactionType.Payment,
                             Description = $"Venta Directa (Pago Dividido): {itemsSummary}",
                             PaymentMethodId = payment.PaymentMethodId,
-                            ProcessedBy = User.Identity?.Name ?? "Admin"
+                            ProcessedBy = User.Identity?.Name ?? "Admin",
+                            PaymentGroupId = paymentGroupId
                         };
                         _context.Transactions.Add(transaction);
                     }
@@ -277,7 +279,8 @@ namespace PadelQ.Api.Controllers
                         Type = TransactionType.Payment,
                         Description = $"Venta Directa: {itemsSummary}",
                         PaymentMethodId = request.PaymentMethodId.Value,
-                        ProcessedBy = User.Identity?.Name ?? "Admin"
+                        ProcessedBy = User.Identity?.Name ?? "Admin",
+                        PaymentGroupId = paymentGroupId
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -286,6 +289,15 @@ namespace PadelQ.Api.Controllers
             _context.BookingConsumptions.AddRange(consumptions);
             await _context.SaveChangesAsync();
             
+            if (request.IsPaid && !request.IsInternal)
+            {
+                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                if (arcaService != null)
+                {
+                    await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+                }
+            }
+
             await CheckAndCreateKitchenOrderAsync(consumptions, request.CustomerName);
 
             return Ok(new { Message = "Venta bulk procesada", Total = totalAmount, ItemsCount = consumptions.Count });

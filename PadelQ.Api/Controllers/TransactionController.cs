@@ -132,6 +132,13 @@ namespace PadelQ.Api.Controllers
                 request.UserId = user.Id;
             }
 
+            bool shouldFinalize = false;
+            if (request.PaymentGroupId == null)
+            {
+                request.PaymentGroupId = Guid.NewGuid();
+                shouldFinalize = true;
+            }
+
             var transaction = new Transaction
             {
                 UserId = request.UserId,
@@ -150,6 +157,15 @@ namespace PadelQ.Api.Controllers
 
             _context.Transactions.Add(transaction);
             await _context.SaveChangesAsync();
+
+            if (shouldFinalize)
+            {
+                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                if (arcaService != null)
+                {
+                    await arcaService.RequestElectronicInvoiceAsync(request.PaymentGroupId.Value);
+                }
+            }
 
             return Ok(transaction);
         }
@@ -630,7 +646,15 @@ namespace PadelQ.Api.Controllers
             return NoContent();
         }
 
+        [HttpPost("finalize-payment-group/{groupId}")]
         [Authorize(Roles = "Admin,Staff")]
+        public async Task<IActionResult> FinalizePaymentGroup(Guid groupId, [FromServices] PadelQ.Application.Common.Interfaces.IArcaService arcaService)
+        {
+            var result = await arcaService.RequestElectronicInvoiceAsync(groupId);
+            if (!result) return BadRequest("Error al generar factura electrónica");
+            return Ok(new { success = true });
+        }
+
         [HttpDelete("group/{groupId}")]
         public async Task<IActionResult> DeleteTransactionGroup(Guid groupId)
         {

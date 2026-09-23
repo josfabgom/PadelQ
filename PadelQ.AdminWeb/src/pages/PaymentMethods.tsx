@@ -12,6 +12,7 @@ interface PaymentMethod {
   isActive: boolean;
   iconName?: string;
   hexColor?: string;
+  invoiceAutomatically?: boolean;
 }
 
 const PaymentMethods = () => {
@@ -28,7 +29,8 @@ const PaymentMethods = () => {
     name: '',
     isActive: true,
     hexColor: '#000000',
-    iconName: 'CreditCard'
+    iconName: 'CreditCard',
+    invoiceAutomatically: true
   });
 
   const fetchMethods = async () => {
@@ -55,7 +57,8 @@ const PaymentMethods = () => {
         name: method.name,
         isActive: method.isActive,
         hexColor: method.hexColor || '#000000',
-        iconName: method.iconName || 'CreditCard'
+        iconName: method.iconName || 'CreditCard',
+        invoiceAutomatically: method.invoiceAutomatically ?? true
       });
     } else {
       setEditingMethod(null);
@@ -63,7 +66,8 @@ const PaymentMethods = () => {
         name: '',
         isActive: true,
         hexColor: '#000000',
-        iconName: 'CreditCard'
+        iconName: 'CreditCard',
+        invoiceAutomatically: true
       });
     }
     setIsModalOpen(true);
@@ -229,6 +233,18 @@ const PaymentMethods = () => {
                     {formData.isActive ? 'Activo' : 'Inactivo'}
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-3 block italic">Facturación Electrónica (AFIP)</label>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, invoiceAutomatically: !formData.invoiceAutomatically})}
+                  className={`w-full py-5 rounded-[24px] text-[10px] font-black uppercase tracking-widest border transition-all flex items-center justify-center gap-2 ${formData.invoiceAutomatically ? 'bg-sky-50 border-sky-100 text-sky-600' : 'bg-zinc-50 border-zinc-100 text-zinc-400'}`}
+                >
+                  {formData.invoiceAutomatically ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                  {formData.invoiceAutomatically ? 'Generar Factura Automáticamente' : 'No Facturar Automáticamente'}
+                </button>
               </div>
 
               <div className="p-8 bg-zinc-50 rounded-[30px] border border-zinc-100 flex items-start gap-4">

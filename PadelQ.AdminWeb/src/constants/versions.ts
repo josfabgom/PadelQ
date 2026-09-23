@@ -1,4 +1,4 @@
-export const SYSTEM_VERSION = "3.5.0 LIVE";
+export const SYSTEM_VERSION = "3.6.0 LIVE";
 
 export interface UpdateRecord {
     version: string;
@@ -8,6 +8,12 @@ export interface UpdateRecord {
 }
 
 export const UPDATE_HISTORY: UpdateRecord[] = [
+    {
+        version: "3.6.0 LIVE",
+        date: "2026-09-22",
+        description: "Integración del módulo de Facturación Electrónica ARCA (AFIP). Automatización de pagos y emisión de comprobantes CAE asíncronos. Rediseño optimizado del dashboard.",
+        author: "Antigravity AI"
+    },
     {
         version: "3.5.0 LIVE",
         date: "2026-04-22",

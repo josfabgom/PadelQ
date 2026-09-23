@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
@@ -33,7 +33,7 @@ namespace PadelQ.Api.Controllers
             var todayUtc = DateTime.UtcNow;
             var fallbackToday = todayUtc.AddHours(-3).Date; 
             
-            // Buscar la ÚLTIMA caja (abierta o cerrada)
+            // Buscar la ÃšLTIMA caja (abierta o cerrada)
             var latestClosure = await _context.CashClosures
                 .OrderByDescending(c => c.OpeningDate)
                 .FirstOrDefaultAsync();
@@ -46,20 +46,20 @@ namespace PadelQ.Api.Controllers
             DateTime today = fallbackToday;
             DateTime tomorrow = fallbackToday.AddDays(1).AddHours(6);
 
-            // Para la caja (dinero cobrado) usamos el horario de la última caja
+            // Para la caja (dinero cobrado) usamos el horario de la Ãºltima caja
             if (latestClosure != null)
             {
                 today = latestClosure.OpeningDate;
                 tomorrow = latestClosure.ClosingDate ?? DateTime.UtcNow.AddHours(24);
             }
 
-            // Para la proyección (Reservas del Día) usamos el día calendario (desde 00:00)
+            // Para la proyecciÃ³n (Reservas del DÃ­a) usamos el dÃ­a calendario (desde 00:00)
             DateTime calendarToday = fallbackToday;
             DateTime calendarTomorrow = fallbackToday.AddDays(1).AddHours(6);
 
             var startOfMonth = new DateTime(todayUtc.Year, todayUtc.Month, 1);
             
-            // 1. Reservas de Hoy (Filtramos usando el calendario del día)
+            // 1. Reservas de Hoy (Filtramos usando el calendario del dÃ­a)
             var todayBookingsList = await _context.Bookings
                 .Include(b => b.Court)
                 .Include(b => b.User)
@@ -74,10 +74,10 @@ namespace PadelQ.Api.Controllers
 
             var todayBookingsCount = todayBookingsList.Count + todaySpaceBookingsList.Count;
             
-            // 2. Ingreso del día (Lo alquilado teóricamente, todas las reservas)
+            // 2. Ingreso del dÃ­a (Lo alquilado teÃ³ricamente, todas las reservas)
             var todayBookingsRevenue = todayBookingsList.Sum(b => b.Price) + todaySpaceBookingsList.Sum(b => b.Price);
 
-            // 3. Consumiciones del día (Solo lo COBRADO, según lo solicitado)
+            // 3. Consumiciones del dÃ­a (Solo lo COBRADO, segÃºn lo solicitado)
             var transactions = await _context.Transactions
                 .Where(t => t.Date >= today && t.Date < tomorrow && (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment || t.Type == TransactionType.CashIn || t.Type == TransactionType.CashOut))
                 .ToListAsync();
@@ -283,7 +283,7 @@ namespace PadelQ.Api.Controllers
                 .OrderByDescending(x => x.totalQuantity)
                 .ToListAsync();
 
-            // Si no hay ventas hoy, devolvemos también un resumen de los últimos 7 días para que el usuario vea que hay datos
+            // Si no hay ventas hoy, devolvemos tambiÃ©n un resumen de los Ãºltimos 7 dÃ­as para que el usuario vea que hay datos
             if (!sales.Any() && startDate == null && endDate == null)
             {
                 var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
@@ -570,7 +570,7 @@ namespace PadelQ.Api.Controllers
                 return Ok(new { Closures = new List<object>(), Products = new List<object>() });
             }
 
-            // Ordenar cronológicamente de izquierda a derecha (más antiguos a más recientes)
+            // Ordenar cronolÃ³gicamente de izquierda a derecha (mÃ¡s antiguos a mÃ¡s recientes)
             closures = closures.OrderBy(c => c.OpeningDate).ToList();
 
             var start = closures.Min(c => c.OpeningDate);
@@ -612,6 +612,39 @@ namespace PadelQ.Api.Controllers
                 products = products
             });
         }
+        [Authorize(Roles = "Admin,Staff,Cocinero")]
+        [HttpGet("sales-by-category")]
+        public async Task<IActionResult> GetSalesByCategory([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var filterStartLocal = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date;
+            var filterEndLocal = (endDate?.Date ?? filterStartLocal).AddDays(1);
+            
+            var filterStartUtc = filterStartLocal.AddHours(3);
+            var filterEndUtc = filterEndLocal.AddHours(3);
+
+            var salesRaw = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Include(c => c.Booking)
+                .Include(c => c.SpaceBooking)
+                .Where(c => c.Product != null && c.CreatedAt >= filterStartUtc && c.CreatedAt < filterEndUtc)
+                .ToListAsync();
+
+            var sales = salesRaw
+                .Where(c => (c.Booking == null || c.Booking.Status != BookingStatus.Cancelled) &&
+                            (c.SpaceBooking == null || c.SpaceBooking.Status != BookingStatus.Cancelled))
+                .GroupBy(c => string.IsNullOrEmpty(c.Product.Category) ? "Sin Categoría" : c.Product.Category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    totalQuantity = g.Sum(x => x.Quantity),
+                    totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity)
+                })
+                .OrderByDescending(x => x.totalRevenue)
+                .ToList();
+
+            return Ok(sales);
+        }
+
         [Authorize(Roles = "Admin,Cocinero")]
         [HttpGet("kitchen-sales")]
         public async Task<IActionResult> GetKitchenSales([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
@@ -648,3 +681,4 @@ namespace PadelQ.Api.Controllers
         }
     }
 }
+

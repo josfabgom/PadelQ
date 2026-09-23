@@ -69,7 +69,7 @@ namespace PadelQ.Api.Controllers
                 return BadRequest("Solo el administrador puede asignar roles especiales.");
             }
 
-            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber, assignedRole);
+            var (succeeded, result) = await _identityService.CreateUserAsync(request.Email, request.Email, request.Password, request.FullName, request.Dni, request.PhoneNumber, assignedRole, request.Cuit, request.IvaCondition);
             if (!succeeded) return BadRequest(result ?? "No se pudo crear el usuario.");
             return Ok(new { Id = result });
         }
@@ -87,7 +87,7 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
-            var (succeeded, message) = await _identityService.UpdateUserAsync(id, request.FullName, request.Email, request.PhoneNumber, request.IsActive, request.Dni, request.Address, request.City, request.Province, request.PhotoUrl, request.Role, request.CanAccessActivities, request.CanAccessBookings);
+            var (succeeded, message) = await _identityService.UpdateUserAsync(id, request.FullName, request.Email, request.PhoneNumber, request.IsActive, request.Dni, request.Address, request.City, request.Province, request.PhotoUrl, request.Role, request.CanAccessActivities, request.CanAccessBookings, request.Cuit, request.IvaCondition);
             if (!succeeded) return BadRequest(message ?? "No se pudo actualizar el usuario.");
             return NoContent();
         }
@@ -126,7 +126,7 @@ namespace PadelQ.Api.Controllers
         }
     }
 
-    public record CreateUserRequest(string FullName, string Email, string Password, string? Dni, string? PhoneNumber, string? Role);
-    public record UpdateUserRequest(string FullName, string Email, string? PhoneNumber, bool IsActive, string? Dni, string? Address, string? City, string? Province, string? PhotoUrl, string? Role, bool CanAccessActivities = true, bool CanAccessBookings = true);
+    public record CreateUserRequest(string FullName, string Email, string Password, string? Dni, string? PhoneNumber, string? Role, string? Cuit, string? IvaCondition);
+    public record UpdateUserRequest(string FullName, string Email, string? PhoneNumber, bool IsActive, string? Dni, string? Address, string? City, string? Province, string? PhotoUrl, string? Role, bool CanAccessActivities = true, bool CanAccessBookings = true, string? Cuit = null, string? IvaCondition = null);
     public record ChangePasswordRequest(string NewPassword);
 }

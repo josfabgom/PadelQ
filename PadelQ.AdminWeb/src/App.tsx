@@ -22,7 +22,8 @@ import CashManagementPage from './pages/CashManagement';
 import PurchaseReceptionPage from './pages/PurchaseReception';
 import MercadoPagoAuditPage from './pages/MercadoPagoAudit';
 import KitchenOrders from './pages/KitchenOrders';
-
+import ArcaSettingsPage from './pages/ArcaSettings';
+import ArcaAuditPage from './pages/ArcaAudit';
 
 function App() {
   const isAuthenticated = !!localStorage.getItem('padelq_token');
@@ -115,6 +116,14 @@ function App() {
         <Route 
           path="/kitchen-orders" 
           element={isAuthenticated ? <KitchenOrders /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/arca-settings" 
+          element={isAuthenticated ? <ArcaSettingsPage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/arca-audit" 
+          element={isAuthenticated ? <ArcaAuditPage /> : <Navigate to="/login" />} 
         />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

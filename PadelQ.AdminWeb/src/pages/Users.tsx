@@ -9,6 +9,8 @@ interface User {
   email: string;
   phoneNumber?: string;
   dni?: string;
+  cuit?: string;
+  ivaCondition?: string;
   address?: string;
   city?: string;
   province?: string;
@@ -41,6 +43,8 @@ const UsersPage = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [dni, setDni] = useState('');
+  const [cuit, setCuit] = useState('');
+  const [ivaCondition, setIvaCondition] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
@@ -92,6 +96,8 @@ const UsersPage = () => {
     setEmail('');
     setPhone('');
     setDni('');
+    setCuit('');
+    setIvaCondition('');
     setAddress('');
     setCity('');
     setProvince('');
@@ -178,6 +184,8 @@ const UsersPage = () => {
         email,
         password,
         dni,
+        cuit,
+        ivaCondition,
         phoneNumber: phone,
         role,
         canAccessActivities,
@@ -211,6 +219,8 @@ const UsersPage = () => {
         phoneNumber: phone,
         isActive,
         dni,
+        cuit,
+        ivaCondition,
         address,
         city,
         province,
@@ -267,6 +277,8 @@ const UsersPage = () => {
     setEmail(user.email);
     setPhone(user.phoneNumber || '');
     setDni(user.dni || '');
+    setCuit(user.cuit || '');
+    setIvaCondition(user.ivaCondition || '');
     setAddress(user.address || '');
     setCity(user.city || '');
     setProvince(user.province || '');
@@ -573,25 +585,42 @@ const UsersPage = () => {
                   <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">DNI (Clave Única)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={dni} 
-                    onChange={(e) => setDni(e.target.value)} 
-                    className={`w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none transition-all ${
-                        dniExists ? 'border-rose-300 ring-4 ring-rose-500/5' : 'border-slate-200'
-                    }`}
-                  />
-                  {dniExists && (
-                    <div className="mt-2 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
-                        <ShieldAlert className="w-4 h-4 text-rose-600" />
-                        <div>
-                            <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">DNI YA REGISTRADO</p>
-                            <p className="text-[9px] text-rose-600 font-bold uppercase tracking-tight leading-none">Pertenece a: {dniExists.fullName}</p>
-                        </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">DNI (Clave Única)</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={dni} 
+                      onChange={(e) => setDni(e.target.value)} 
+                      className={`w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none transition-all ${
+                          dniExists ? 'border-rose-300 ring-4 ring-rose-500/5' : 'border-slate-200'
+                      }`}
+                    />
+                    {dniExists && (
+                      <div className="mt-2 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                          <ShieldAlert className="w-4 h-4 text-rose-600" />
+                          <div>
+                              <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">DNI YA REGISTRADO</p>
+                              <p className="text-[9px] text-rose-600 font-bold uppercase tracking-tight leading-none">Pertenece a: {dniExists.fullName}</p>
+                          </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">CUIT (Opcional)</label>
+                      <input type="text" value={cuit} onChange={(e) => setCuit(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" placeholder="Sin guiones" />
                     </div>
-                  )}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Condición IVA</label>
+                      <select value={ivaCondition} onChange={(e) => setIvaCondition(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm">
+                        <option value="">Consumidor Final</option>
+                        <option value="Responsable Inscripto">Responsable Inscripto</option>
+                        <option value="Monotributo">Monotributo</option>
+                        <option value="Exento">Exento</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
@@ -671,6 +700,21 @@ const UsersPage = () => {
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">DNI</label>
                     <input type="text" required value={dni} onChange={(e) => setDni(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">CUIT (Opcional)</label>
+                      <input type="text" value={cuit} onChange={(e) => setCuit(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Condición IVA</label>
+                      <select value={ivaCondition} onChange={(e) => setIvaCondition(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-xs">
+                        <option value="">Consumidor Final</option>
+                        <option value="Responsable Inscripto">Responsable Inscripto</option>
+                        <option value="Monotributo">Monotributo</option>
+                        <option value="Exento">Exento</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Email</label>

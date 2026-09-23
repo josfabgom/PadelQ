@@ -1,3 +1,4 @@
 --- USER DIAGNOSTIC ---
+User: particular@padelq.com, Email: particular@padelq.com, Name: Consumidor Final (Particular), DNI: 
 User: Admin, Email: admin@padelq.com, Name: Administrador Sistema, DNI: 
 ------------------------

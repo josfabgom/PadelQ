@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import { 
     Package, Plus, Edit2, Trash2, DollarSign, ArrowLeft, Tag, Search, X, 
@@ -91,7 +91,7 @@ const ProductsPage = () => {
 
   const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success', title?: string) => {
       setCustomAlert({
-          title: title || (type === 'success' ? 'ÉXITO' : type === 'error' ? 'ERROR' : 'ATENCIÓN'),
+          title: title || (type === 'success' ? 'Ãƒâ€°XITO' : type === 'error' ? 'ERROR' : 'ATENCIÃƒâ€œN'),
           message,
           type
       });
@@ -264,15 +264,7 @@ const ProductsPage = () => {
     }
   };
 
-  const getSortedRankingData = () => {
-    return [...rankingData].sort((a, b) => {
-      const valA = a[rankingSortColumn] || 0;
-      const valB = b[rankingSortColumn] || 0;
-      if (valA < valB) return rankingSortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return rankingSortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  };
+  
 
   const fetchStockAlerts = async () => {
     try {
@@ -284,79 +276,7 @@ const ProductsPage = () => {
     }
   };
 
-  const generateSalesReportPDF = () => {
-    try {
-      const doc = new jsPDF();
-      const isRecent = salesReport.length > 0 && salesReport[0].isRecentOnly;
-      
-      // Header
-      doc.setFillColor(30, 30, 30);
-      doc.rect(0, 0, 210, 45, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(22);
-      doc.setFont('helvetica', 'bold');
-      doc.text(companyInfo.name.toUpperCase(), 15, 20);
-      
-      doc.setFontSize(14);
-      doc.text('REPORTE DE VENTAS', 15, 30);
-      
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(200, 200, 200);
-      const headerInfo = [
-        companyInfo.address,
-        companyInfo.phone ? `Tel: ${companyInfo.phone}` : '',
-        companyInfo.email
-      ].filter(Boolean).join(' | ');
-      doc.text(headerInfo, 15, 38);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
-      const dateText = isRecent 
-        ? 'MOSTRANDO ÚLTIMOS 7 DÍAS (ACUMULADO)' 
-        : `FECHA: ${format(new Date(reportStartDate + 'T00:00:00'), 'dd/MM/yyyy')} al ${format(new Date(reportEndDate + 'T00:00:00'), 'dd/MM/yyyy')}`;
-      doc.text(dateText, 195, 38, { align: 'right' });
-      
-      const tableData = salesReport.map(sale => [
-        sale.productName,
-        sale.category,
-        sale.totalQuantity.toString(),
-        formatARS(sale.totalRevenue),
-        formatARS(sale.totalRevenue - sale.totalCost)
-      ]);
-      
-      autoTable(doc, {
-        startY: 50,
-        head: [['Producto', 'Categoría', 'Cant.', 'Recaudado', 'Utilidad']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        styles: { fontSize: 9, cellPadding: 5 },
-        columnStyles: {
-          2: { halign: 'center' },
-          3: { halign: 'right' },
-          4: { halign: 'right', fontStyle: 'bold' }
-        }
-      });
-      
-      const finalY = (doc as any).lastAutoTable.finalY;
-      const totalRevenue = salesReport.reduce((acc, s) => acc + s.totalRevenue, 0);
-      const totalUtility = salesReport.reduce((acc, s) => acc + (s.totalRevenue - s.totalCost), 0);
-      
-      doc.setFontSize(12);
-      doc.setTextColor(30, 30, 30);
-      doc.text(`TOTAL RECAUDADO: ${formatARS(totalRevenue)}`, 140, finalY + 15, { align: 'right' });
-      doc.setFont('helvetica', 'bold');
-      doc.text(`UTILIDAD ESTIMADA: ${formatARS(totalUtility)}`, 140, finalY + 22, { align: 'right' });
-      
-      doc.save(`Reporte_Ventas_${reportStartDate}_al_${reportEndDate}.pdf`);
-    } catch (error) {
-      console.error("Error al generar PDF de ventas:", error);
-      alert("Hubo un error al generar el PDF. Revisa la consola.");
-    }
-  };
+  
 
   const generateStockAlertsPDF = () => {
     try {
@@ -513,7 +433,7 @@ const ProductsPage = () => {
             <ArrowLeft className="w-5 h-5 text-black group-hover:-translate-x-1 transition-transform" />
           </a>
           <div>
-            <h1 className="text-3xl font-black text-black tracking-tight uppercase italic">Venta de Productos</h1>
+            <h1 className="text-3xl font-black text-black tracking-tight uppercase italic">Gestión de Producto</h1>
             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">CONTROL INTEGRAL DE PRODUCTOS E INVENTARIO</p>
           </div>
         </div>
@@ -546,21 +466,9 @@ const ProductsPage = () => {
             <RefreshCcw className={`w-5 h-5 text-black ${loading ? 'animate-spin' : ''}`} />
           </button>
 
-          <button 
-            onClick={fetchSalesReport}
-            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
-          >
-            <TrendingUp className="w-5 h-5 text-blue-500" />
-            Ventas Diarias
-          </button>
+          
 
-          <button 
-            onClick={fetchRankingData}
-            className="flex items-center gap-3 px-6 py-4 bg-white border border-black/5 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all active:scale-95"
-          >
-            <BarChart2 className="w-5 h-5 text-purple-500" />
-            Ranking Semanal
-          </button>
+          
 
           <button 
             onClick={fetchStockAlerts}
@@ -751,7 +659,7 @@ const ProductsPage = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-black italic uppercase tracking-tight leading-none mb-1">{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}</h2>
-                  <p className="text-white/40 text-[9px] font-black uppercase tracking-[0.3em]">FICHA TÉCNICA Y PRECIOS</p>
+                  <p className="text-white/40 text-[9px] font-black uppercase tracking-[0.3em]">FICHA TÃƒâ€°CNICA Y PRECIOS</p>
                 </div>
               </div>
             </div>
@@ -1030,118 +938,6 @@ const ProductsPage = () => {
         </div>
       )}
 
-      {/* Daily Sales Report Modal */}
-      {isSalesReportOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6 overflow-y-auto">
-          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-3xl my-auto animate-in fade-in zoom-in duration-300 border border-black/5">
-            <div className="p-8 bg-zinc-900 text-white flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
-                  <TrendingUp className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black italic uppercase tracking-tight">Reporte de Ventas</h2>
-                  <p className="text-blue-400/60 text-[9px] font-black uppercase tracking-widest">Lo que más sale hoy</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
-                  <span className="text-[10px] font-bold text-white/50 uppercase">Desde</span>
-                  <input 
-                    type="date" 
-                    value={reportStartDate}
-                    onChange={(e) => setReportStartDate(e.target.value)}
-                    onBlur={fetchSalesReport}
-                    className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                  />
-                </div>
-                <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
-                  <span className="text-[10px] font-bold text-white/50 uppercase">Hasta</span>
-                  <input 
-                    type="date" 
-                    value={reportEndDate}
-                    onChange={(e) => setReportEndDate(e.target.value)}
-                    onBlur={fetchSalesReport}
-                    className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                  />
-                </div>
-                <button onClick={() => setIsSalesReportOpen(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-8">
-              {salesReport.length > 0 ? (
-                <div className="space-y-4">
-                  {salesReport.length > 0 && salesReport[0].isRecentOnly && (
-                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
-                      <Info className="w-5 h-5 text-blue-500" />
-                      <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">
-                        Sin ventas hoy. Mostrando acumulado de los últimos 7 días.
-                      </p>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-100">
-                    <div className="col-span-6">Producto</div>
-                    <div className="col-span-2 text-center">Cant.</div>
-                    <div className="col-span-2 text-right">Recaudado</div>
-                    <div className="col-span-2 text-right">Utilidad</div>
-                  </div>
-                  <div className="max-h-[400px] overflow-y-auto pr-2 space-y-2">
-                    {salesReport.map((sale, i) => {
-                      const utility = sale.totalRevenue - sale.totalCost;
-                      return (
-                        <div key={i} className="grid grid-cols-12 gap-4 items-center p-4 bg-zinc-50 rounded-2xl border border-zinc-100 hover:border-blue-200 transition-colors">
-                          <div className="col-span-6">
-                            <p className="font-black italic text-sm">{sale.productName}</p>
-                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{sale.category}</p>
-                          </div>
-                          <div className="col-span-2 text-center">
-                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg font-black text-xs">
-                              {sale.totalQuantity}
-                            </span>
-                          </div>
-                          <div className="col-span-2 text-right font-bold text-zinc-600">
-                            {formatARS(sale.totalRevenue)}
-                          </div>
-                          <div className="col-span-2 text-right font-black text-emerald-500 italic">
-                            {formatARS(utility)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-zinc-100">
-                    <button 
-                      onClick={generateSalesReportPDF}
-                      className="col-span-2 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20"
-                    >
-                      Descargar Reporte PDF
-                    </button>
-                    <div className="p-6 bg-zinc-900 rounded-3xl text-white border border-white/5">
-                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Total Recaudado</p>
-                      <p className="text-3xl font-black italic">{formatARS(salesReport.reduce((acc, s) => acc + s.totalRevenue, 0))}</p>
-                    </div>
-                    <div className="p-6 bg-emerald-500 rounded-3xl text-white">
-                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Utilidad Estimada</p>
-                      <p className="text-3xl font-black italic">{formatARS(salesReport.reduce((acc, s) => acc + (s.totalRevenue - s.totalCost), 0))}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-20 text-center">
-                  <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <TrendingUp className="w-10 h-10 text-zinc-200" />
-                  </div>
-                  <p className="text-zinc-400 font-black uppercase tracking-[0.2em] text-xs">No hubo ventas registradas este día</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Stock Alert Report Modal */}
       {isStockAlertsOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[70] p-6 overflow-y-auto">
@@ -1223,7 +1019,7 @@ const ProductsPage = () => {
                   <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle className="w-10 h-10 text-emerald-400" />
                   </div>
-                  <p className="text-emerald-600 font-black uppercase tracking-[0.2em] text-xs italic">¡Excelente! Todos los productos tienen stock suficiente</p>
+                  <p className="text-emerald-600 font-black uppercase tracking-[0.2em] text-xs italic">Ã‚Â¡Excelente! Todos los productos tienen stock suficiente</p>
                   <p className="text-zinc-400 text-[10px] mt-2 font-medium">Ningún producto está por debajo de su límite mínimo.</p>
                 </div>
               )}
@@ -1243,7 +1039,7 @@ const ProductsPage = () => {
                           </div>
                           <h3 className="text-xl font-black italic uppercase tracking-tight">ELIMINAR PRODUCTO</h3>
                       </div>
-                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS ELIMINAR ESTE PRODUCTO?</p>
+                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Ã‚Â¿ESTÃƒÂS SEGURO QUE DESEAS ELIMINAR ESTE PRODUCTO?</p>
                   </div>
                   
                   <div className="p-8 space-y-6">
@@ -1253,7 +1049,7 @@ const ProductsPage = () => {
                           </div>
                           <div>
                               <p className="font-black italic text-sm">{productToDelete.name}</p>
-                              <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{productToDelete.category} • STOCK: {productToDelete.stock}</p>
+                              <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{productToDelete.category} Ã¢â‚¬Â¢ STOCK: {productToDelete.stock}</p>
                           </div>
                       </div>
 
@@ -1379,129 +1175,6 @@ const ProductsPage = () => {
         </div>
       )}
 
-      {/* Ranking Modal */}
-      {isRankingModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[100] p-6">
-          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh]">
-            <div className="p-10 bg-black text-white relative shrink-0">
-              <button onClick={() => setIsRankingModalOpen(false)} className="absolute right-8 top-8 p-3 hover:bg-white/10 rounded-2xl transition-colors">
-                <X className="w-6 h-6" />
-              </button>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-500/20 text-purple-400 rounded-2xl">
-                    <BarChart2 className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-black italic uppercase tracking-tight">Ranking de Ventas por Día</h2>
-                    <p className="text-white/60 font-bold uppercase tracking-widest text-xs mt-1">Mapa de calor de consumo</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4 mr-16">
-                  <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
-                    <span className="text-[10px] font-bold text-white/50 uppercase">Desde</span>
-                    <input 
-                      type="date" 
-                      value={rankingStartDate}
-                      onChange={(e) => setRankingStartDate(e.target.value)}
-                      onBlur={fetchRankingData}
-                      className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2">
-                    <span className="text-[10px] font-bold text-white/50 uppercase">Hasta</span>
-                    <input 
-                      type="date" 
-                      value={rankingEndDate}
-                      onChange={(e) => setRankingEndDate(e.target.value)}
-                      onBlur={fetchRankingData}
-                      className="bg-transparent text-xs font-bold outline-none text-white [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="overflow-auto bg-zinc-50 flex-1">
-              {loadingRanking ? (
-                <div className="flex flex-col items-center justify-center py-20 h-full">
-                  <RefreshCcw className="w-10 h-10 animate-spin text-zinc-300 mb-4" />
-                  <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Calculando ranking...</p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-white sticky top-0 z-10 shadow-sm">
-                    <tr>
-                      <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5 whitespace-nowrap">Producto</th>
-                      {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'totalQuantity'].map((col) => {
-                        const labels: Record<string, string> = {
-                          monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue', friday: 'Vie', saturday: 'Sáb', sunday: 'Dom', totalQuantity: 'Total'
-                        };
-                        return (
-                          <th 
-                            key={col} 
-                            onClick={() => handleSortRanking(col)}
-                            className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-black/5 cursor-pointer hover:bg-zinc-50 transition-colors text-center group whitespace-nowrap"
-                          >
-                            <div className="flex items-center justify-center gap-1">
-                              {labels[col]}
-                              {rankingSortColumn === col ? (
-                                rankingSortDirection === 'asc' ? <ChevronDown className="w-3 h-3 rotate-180" /> : <ChevronDown className="w-3 h-3" />
-                              ) : (
-                                <ChevronDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />
-                              )}
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-black/5">
-                    {getSortedRankingData().map((item, idx) => {
-                      const maxDaily = Math.max(item.monday, item.tuesday, item.wednesday, item.thursday, item.friday, item.saturday, item.sunday);
-                      
-                      const getCellColor = (val: number) => {
-                        if (val === 0) return 'text-zinc-300';
-                        if (maxDaily > 0 && val === maxDaily) return 'bg-purple-100 text-purple-700 font-black';
-                        if (maxDaily > 0 && val >= maxDaily * 0.7) return 'bg-purple-50 text-purple-600 font-bold';
-                        return 'text-zinc-600';
-                      };
-
-                      return (
-                        <tr key={item.productId} className="hover:bg-white transition-colors">
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <span className="text-[10px] font-black text-zinc-400 w-4 text-right">#{idx + 1}</span>
-                              <div>
-                                <p className="font-bold text-sm text-black uppercase">{item.productName}</p>
-                                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{item.category}</p>
-                              </div>
-                            </div>
-                          </td>
-                          {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
-                            <td key={day} className="p-2 text-center align-middle">
-                              <div className={`mx-auto w-10 h-10 flex items-center justify-center rounded-xl text-xs transition-colors ${getCellColor(item[day])}`}>
-                                {item[day]}
-                              </div>
-                            </td>
-                          ))}
-                          <td className="p-4 text-center">
-                            <div className="inline-flex items-center justify-center px-4 py-2 bg-black text-white rounded-xl text-xs font-black">
-                              {item.totalQuantity}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Custom Alert Modal */}
       {customAlert && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[90] p-6">
@@ -1536,3 +1209,7 @@ const ProductsPage = () => {
 };
 
 export default ProductsPage;
+
+
+
+

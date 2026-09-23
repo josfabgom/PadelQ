@@ -7,6 +7,8 @@ namespace PadelQ.Application.Common.Models
         public string Email { get; set; } = string.Empty;
         public string? PhoneNumber { get; set; }
         public string? Dni { get; set; }
+        public string? Cuit { get; set; }
+        public string? IvaCondition { get; set; }
         public string? Address { get; set; }
         public string? City { get; set; }
         public string? Province { get; set; }

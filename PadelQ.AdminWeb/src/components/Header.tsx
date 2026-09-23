@@ -1,14 +1,37 @@
 import { LogOut, User as UserIcon, Clock } from 'lucide-react';
 import { VERSION } from '../version';
 import React, { useState, useEffect } from 'react';
+import api, { getAuthConfig } from '../api/api';
 
 const Header = () => {
   const userName = localStorage.getItem('padelq_user_name') || 'Administrador';
   const userEmail = localStorage.getItem('padelq_user_email') || '';
   const [time, setTime] = useState(new Date());
+  const [logoUrl, setLogoUrl] = useState<string | null>(localStorage.getItem('padelq_company_logo'));
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
+    
+    // Fetch logo
+    const fetchLogo = async () => {
+      try {
+        const res = await api.get('/api/SystemSettings', getAuthConfig());
+        const logoSetting = res.data.find((s: any) => s.key === 'CompanyLogoUrl');
+        if (logoSetting && logoSetting.value) {
+          setLogoUrl(logoSetting.value);
+          localStorage.setItem('padelq_company_logo', logoSetting.value);
+        } else {
+          setLogoUrl(null);
+          localStorage.removeItem('padelq_company_logo');
+        }
+      } catch (err) {
+        console.error("Error fetching logo", err);
+      }
+    };
+    
+    // Only fetch if we don't have it cached, or fetch in background to update cache
+    fetchLogo();
+
     return () => clearInterval(timer);
   }, []);
 
@@ -22,6 +45,9 @@ const Header = () => {
   return (
     <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[32px] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
       <div className="flex items-center gap-6 min-w-[200px]">
+        {logoUrl && (
+          <img src={logoUrl} alt="Company Logo" className="h-12 w-auto object-contain drop-shadow-sm pr-2 border-r border-slate-100" />
+        )}
         <div className="w-12 h-12 bg-black rounded-[16px] flex items-center justify-center text-white shadow-lg">
           <UserIcon className="w-6 h-6" />
         </div>

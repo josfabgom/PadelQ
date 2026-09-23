@@ -36,6 +36,7 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<KitchenOrder> KitchenOrders { get; set; } = null!;
         public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; } = null!;
         public DbSet<KitchenOrderAudit> KitchenOrderAudits { get; set; } = null!;
+        public DbSet<ArcaSetting> ArcaSettings { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {

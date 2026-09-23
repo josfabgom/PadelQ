@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PadelQ.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using PadelQ.Infrastructure.Persistence;
 namespace PadelQ.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922222453_AddArcaSettings")]
+    partial class AddArcaSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -249,9 +252,6 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Cuit")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Dni")
                         .HasColumnType("nvarchar(450)");
 
@@ -267,9 +267,6 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
-
-                    b.Property<string>("IvaCondition")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
@@ -838,9 +835,6 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.Property<string>("IconName")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("InvoiceAutomatically")
-                        .HasColumnType("bit");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");

@@ -35,7 +35,7 @@ namespace PadelQ.Infrastructure.Identity
             _context = context;
         }
 
-        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string userName, string email, string password, string fullName, string? dni, string? phoneNumber, string? role = "User")
+        public async Task<(bool Succeeded, string UserId)> CreateUserAsync(string userName, string email, string password, string fullName, string? dni, string? phoneNumber, string? role = "User", string? cuit = null, string? ivaCondition = null)
         {
             if (!string.IsNullOrEmpty(dni))
             {
@@ -50,6 +50,8 @@ namespace PadelQ.Infrastructure.Identity
                 FullName = fullName,
                 Dni = dni,
                 PhoneNumber = phoneNumber,
+                Cuit = cuit,
+                IvaCondition = ivaCondition,
                 IsActive = true
             };
 
@@ -137,6 +139,8 @@ namespace PadelQ.Infrastructure.Identity
                     Email = u.Email ?? "",
                     PhoneNumber = u.PhoneNumber,
                     Dni = u.Dni,
+                    Cuit = u.Cuit,
+                    IvaCondition = u.IvaCondition,
                     Address = u.Address,
                     City = u.City,
                     Province = u.Province,
@@ -192,6 +196,8 @@ namespace PadelQ.Infrastructure.Identity
                 Email = user.Email ?? "",
                 PhoneNumber = user.PhoneNumber,
                 Dni = user.Dni,
+                Cuit = user.Cuit,
+                IvaCondition = user.IvaCondition,
                 Address = user.Address,
                 City = user.City,
                 Province = user.Province,
@@ -210,7 +216,7 @@ namespace PadelQ.Infrastructure.Identity
             };
         }
 
-        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role, bool canAccessActivities, bool canAccessBookings)
+        public async Task<(bool Succeeded, string Message)> UpdateUserAsync(string userId, string fullName, string email, string? phoneNumber, bool isActive, string? dni, string? address, string? city, string? province, string? photoUrl, string? role, bool canAccessActivities, bool canAccessBookings, string? cuit = null, string? ivaCondition = null)
         {
             if (!string.IsNullOrEmpty(dni))
             {
@@ -227,6 +233,8 @@ namespace PadelQ.Infrastructure.Identity
             user.PhoneNumber = phoneNumber;
             user.IsActive = isActive;
             user.Dni = dni;
+            user.Cuit = cuit;
+            user.IvaCondition = ivaCondition;
             user.Address = address;
             user.City = city;
             user.Province = province;

@@ -164,6 +164,24 @@ const Dashboard = () => {
       color: 'text-orange-600 group-hover:text-white',
       bgHover: 'group-hover:bg-orange-600',
       show: isAdmin || isCocinero || isStaff
+    },
+    {
+      href: '/arca-settings',
+      icon: <Settings className="w-5 h-5" />,
+      label: 'Facturación AFIP (ARCA)',
+      desc: 'Configuración de certificados, puntos de venta y credenciales para Factura Electrónica.',
+      color: 'text-cyan-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-cyan-600',
+      show: isAdmin
+    },
+    {
+      href: '/arca-audit',
+      icon: <CreditCard className="w-5 h-5" />,
+      label: 'Auditoría Facturas',
+      desc: 'Revisión y estado de las facturas electrónicas emitidas o pendientes de AFIP.',
+      color: 'text-cyan-600 group-hover:text-white',
+      bgHover: 'group-hover:bg-cyan-600',
+      show: isAdmin
     }
   ];
 
@@ -184,30 +202,31 @@ const Dashboard = () => {
           <a
             key={idx}
             href={item.href}
-            className="group bg-white p-6 rounded-[28px] border border-black/5 hover:border-black/10 hover:shadow-[0_15px_35px_rgba(0,0,0,0.03)] transition-all duration-300 flex flex-col justify-between h-[230px] relative overflow-hidden"
+            className="group bg-white p-5 rounded-[20px] border border-black/5 hover:border-black/10 hover:shadow-[0_10px_25px_rgba(0,0,0,0.03)] transition-all duration-300 flex flex-col justify-between h-[180px] relative overflow-hidden"
           >
-            {/* Top Row with Curated Curving Background accent */}
-            <div className="space-y-4">
-              <div className={`w-12 h-12 rounded-[16px] flex items-center justify-center bg-zinc-50 border border-zinc-100/50 ${item.color} ${item.bgHover} transition-all duration-300 shadow-sm`}>
-                {item.icon}
+            {/* Top Row */}
+            <div className="space-y-3">
+              <div className={`w-10 h-10 rounded-[12px] flex items-center justify-center bg-zinc-50 border border-zinc-100/50 ${item.color} ${item.bgHover} transition-all duration-300 shadow-sm`}>
+                {/* Clone icon to make it slightly smaller */}
+                {React.cloneElement(item.icon as React.ReactElement, { className: "w-4 h-4" })}
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-black italic uppercase text-black tracking-tight group-hover:translate-x-1 transition-transform duration-300">
+                <h3 className="text-sm font-black italic uppercase text-black tracking-tight group-hover:translate-x-1 transition-transform duration-300">
                   {item.label}
                 </h3>
-                <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider leading-relaxed pr-2 line-clamp-2">
+                <p className="text-zinc-400 text-[9px] font-bold uppercase tracking-wider leading-relaxed pr-2 line-clamp-2">
                   {item.desc}
                 </p>
               </div>
             </div>
 
             {/* Bottom Row showing Access Action */}
-            <div className="flex items-center justify-between pt-3 border-t border-zinc-50">
-              <span className="text-[9px] font-black text-black uppercase tracking-[0.2em] group-hover:text-zinc-500 transition-colors">
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-50">
+              <span className="text-[8px] font-black text-black uppercase tracking-[0.2em] group-hover:text-zinc-500 transition-colors">
                 Ingresar al módulo
               </span>
-              <div className="w-8 h-8 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center group-hover:bg-black group-hover:text-white group-hover:border-black group-hover:translate-x-1 transition-all duration-300 shadow-sm">
-                <ArrowRight className="w-3.5 h-3.5" />
+              <div className="w-6 h-6 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center group-hover:bg-black group-hover:text-white group-hover:border-black group-hover:translate-x-1 transition-all duration-300 shadow-sm">
+                <ArrowRight className="w-3 h-3" />
               </div>
             </div>
           </a>
