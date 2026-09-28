@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PadelQ.Application.Common.Interfaces;
 using PadelQ.Domain.Entities;
@@ -637,7 +637,18 @@ namespace PadelQ.Api.Controllers
                 {
                     category = g.Key,
                     totalQuantity = g.Sum(x => x.Quantity),
-                    totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity)
+                    totalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
+                    details = g.Select(c => new
+                    {
+                        date = c.CreatedAt.AddHours(-3).ToString("dd/MM/yyyy HH:mm"),
+                        productName = c.Product.Name,
+                        quantity = c.Quantity,
+                        unitPrice = c.UnitPrice,
+                        total = c.Quantity * c.UnitPrice,
+                        stock = c.Product.Stock
+                    })
+                    .OrderByDescending(c => c.date)
+                    .ToList()
                 })
                 .OrderByDescending(x => x.totalRevenue)
                 .ToList();

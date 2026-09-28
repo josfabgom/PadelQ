@@ -356,6 +356,9 @@ namespace PadelQ.Infrastructure.Migrations
                     b.Property<bool>("IsProduction")
                         .HasColumnType("bit");
 
+                    b.Property<decimal>("MontoMaximoAnonimo")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("PrivateKeyPem")
                         .HasColumnType("nvarchar(max)");
 
@@ -1288,6 +1291,15 @@ namespace PadelQ.Infrastructure.Migrations
 
                     b.Property<int?>("InvoiceType")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("IvaAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("IvaPercentage")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<Guid?>("PaymentGroupId")
                         .HasColumnType("uniqueidentifier");

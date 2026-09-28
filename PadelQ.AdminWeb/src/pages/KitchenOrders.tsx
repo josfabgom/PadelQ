@@ -33,7 +33,7 @@ const KitchenOrders = () => {
     const fetchHistory = async (start = historyStartDate, end = historyEndDate) => {
         try {
             const token = localStorage.getItem('padelq_token');
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5041';
             const url = new URL(`${apiUrl}/api/kitchen-orders/history`);
             if (start) url.searchParams.append('startDate', start);
             if (end) url.searchParams.append('endDate', end);
@@ -56,7 +56,7 @@ const KitchenOrders = () => {
     const fetchOrders = async () => {
         try {
             const token = localStorage.getItem('padelq_token');
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5041';
             const response = await fetch(`${apiUrl}/api/kitchen-orders/active`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -74,7 +74,7 @@ const KitchenOrders = () => {
     const updateStatus = async (id: string, newStatus: string) => {
         try {
             const token = localStorage.getItem('padelq_token');
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5041';
             await fetch(`${apiUrl}/api/kitchen-orders/${id}/status`, {
                 method: 'PUT',
                 headers: {
@@ -110,7 +110,7 @@ const KitchenOrders = () => {
     useEffect(() => {
         fetchOrders();
 
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5041';
         const hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(`${apiUrl}/kitchenHub`)
             .withAutomaticReconnect()
@@ -139,7 +139,7 @@ const KitchenOrders = () => {
     const openAuditModal = async (orderId: string, orderNumber: number) => {
         try {
             const token = localStorage.getItem('padelq_token');
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5041';
             const response = await fetch(`${apiUrl}/api/kitchen-orders/${orderId}/audit`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -340,3 +340,4 @@ const KitchenOrders = () => {
 };
 
 export default KitchenOrders;
+

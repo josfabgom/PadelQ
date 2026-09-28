@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using PadelQ.Application.Common.Interfaces;
@@ -37,7 +37,7 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
-                // Si viene asignación de cobro, la persistimos en SystemSettings
+                // Si viene asignaciÃ³n de cobro, la persistimos en SystemSettings
                 if (request.RentAllocations != null || request.ConsumptionAllocations != null || request.PreviousDebt > 0 || request.DirectSalePayload != null)
                 {
                     string actualReference = request.ReferenceId;
@@ -48,7 +48,12 @@ namespace PadelQ.Api.Controllers
                     if (actualReference.Length > 2)
                     {
                         var bookingIdStr = actualReference.Substring(2);
-                        var key = $"MP_Alloc_{bookingIdStr}";
+                        string allocKeySuffix = bookingIdStr;
+                        if (bookingIdStr.Contains("@"))
+                        {
+                            allocKeySuffix = bookingIdStr.Split('@')[1];
+                        }
+                        var key = $"MP_Alloc_{allocKeySuffix}";
                         string allocationJson = "";
                         
                         if (actualReference.StartsWith("D-"))
@@ -231,12 +236,12 @@ namespace PadelQ.Api.Controllers
                             }
 
                             await ProcessApprovedPaymentAsync(actualReference, paymentId, amount, processedBy);
-                            return Ok(new { Success = true, Message = "Pago verificado y procesado con éxito.", PaymentId = paymentId });
+                            return Ok(new { Success = true, Message = "Pago verificado y procesado con Ã©xito.", PaymentId = paymentId });
                         }
                     }
                 }
 
-                return Ok(new { Success = false, Message = "No se encontró ningún pago aprobado reciente para esta reserva en Mercado Pago." });
+                return Ok(new { Success = false, Message = "No se encontrÃ³ ningÃºn pago aprobado reciente para esta reserva en Mercado Pago." });
             }
             catch (Exception ex)
             {
@@ -257,7 +262,7 @@ namespace PadelQ.Api.Controllers
                     return;
                 }
 
-            // Buscar el usuario por email si processedBy parece un correo electrónico.
+            // Buscar el usuario por email si processedBy parece un correo electrÃ³nico.
             // Si lo encuentra, usamos el UserName del usuario para que coincida con lo esperado por CashClosures (ej. "Admin").
             if (!string.IsNullOrEmpty(processedBy) && processedBy.Contains("@"))
             {
@@ -276,12 +281,23 @@ namespace PadelQ.Api.Controllers
                            ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => m.IsActive);
 
             string bookingIdStr = "";
+            string allocIdStr = "";
             if (referenceId.StartsWith("B-") || referenceId.StartsWith("S-") || referenceId.StartsWith("D-"))
             {
-                bookingIdStr = referenceId.Substring(2);
+                var refPart = referenceId.Substring(2);
+                if (refPart.Contains("@"))
+                {
+                    var split = refPart.Split('@');
+                    bookingIdStr = split[0];
+                    allocIdStr = split[1];
+                }
+                else
+                {
+                    bookingIdStr = refPart;
+                }
             }
 
-            var allocKey = $"MP_Alloc_{bookingIdStr}";
+            var allocKey = !string.IsNullOrEmpty(allocIdStr) ? $"MP_Alloc_{allocIdStr}" : $"MP_Alloc_{bookingIdStr}";
             var allocSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == allocKey);
             bool allocationApplied = false;
             var paymentGroupId = Guid.NewGuid();
@@ -326,6 +342,32 @@ namespace PadelQ.Api.Controllers
                     {
                         if (prevDebtProp.ValueKind == JsonValueKind.Number)
                             previousDebt = prevDebtProp.GetDecimal();
+                    }
+
+                    decimal totalAllocated = previousDebt;
+                    foreach (var r in rentAllocations) totalAllocated += r.Amount;
+                    foreach (var c in consumptionAllocations) totalAllocated += c.Amount;
+
+                    if (amount < totalAllocated)
+                    {
+                        throw new Exception($"El pago de Mercado Pago ({amount}) es menor que el total asignado ({totalAllocated}). No se proceso por seguridad.");
+                    }
+
+                    if (amount > totalAllocated)
+                    {
+                        var remainingAmount = amount - totalAllocated;
+                        var userId = await GetOrCreateParticularUserIdAsync();
+                        _context.Transactions.Add(new Transaction
+                        {
+                            Amount = remainingAmount,
+                            Type = TransactionType.CashIn,
+                            Date = TimeZoneHelper.GetArgNow(),
+                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Excedente no asignado",
+                            UserId = userId,
+                            PaymentMethodId = mpMethod?.Id,
+                            ProcessedBy = processedBy,
+                            PaymentGroupId = paymentGroupId
+                        });
                     }
 
                     // 1. Aplicar pagos a rentas (canchas o espacios)
@@ -413,7 +455,7 @@ namespace PadelQ.Api.Controllers
                                 Amount = consAlloc.Amount,
                                 Type = TransactionType.Payment,
                                 Date = TimeZoneHelper.GetArgNow(),
-                                Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Consumo: {consumption.Product?.Name ?? "Artículo"} (Cant: {consumption.Quantity})",
+                                Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Consumo: {consumption.Product?.Name ?? "ArtÃ­culo"} (Cant: {consumption.Quantity})",
                                 UserId = userId,
                                 PaymentMethodId = mpMethod?.Id,
                                 BookingId = targetBookingId,
@@ -455,11 +497,11 @@ namespace PadelQ.Api.Controllers
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error al aplicar asignación QR, rebotando a fallback: {ex.Message}");
+                    Console.WriteLine($"Error al aplicar asignaciÃ³n QR, rebotando a fallback: {ex.Message}");
                 }
             }
 
-            // Fallback (si no existía asignación o falló el procesamiento específico)
+            // Fallback (si no existÃ­a asignaciÃ³n o fallÃ³ el procesamiento especÃ­fico)
             if (!allocationApplied)
             {
                 if (referenceId.StartsWith("B-"))
@@ -516,7 +558,7 @@ namespace PadelQ.Api.Controllers
                                 userId = await GetOrCreateParticularUserIdAsync();
                             }
 
-                            // Registrar la transacción de pago total
+                            // Registrar la transacciÃ³n de pago total
                             var transaction = new Transaction
                             {
                                 Amount = amount,
@@ -587,7 +629,7 @@ namespace PadelQ.Api.Controllers
                                 userId = await GetOrCreateParticularUserIdAsync();
                             }
 
-                            // Registrar la transacción de pago total
+                            // Registrar la transacciÃ³n de pago total
                             var transaction = new Transaction
                             {
                                 Amount = amount,
@@ -625,11 +667,11 @@ namespace PadelQ.Api.Controllers
         {
             try
             {
-                // El callback oficial que registrará el token en el backend
+                // El callback oficial que registrarÃ¡ el token en el backend
                 var scheme = Request.Headers["X-Forwarded-Proto"].ToString();
                 if (string.IsNullOrEmpty(scheme)) scheme = Request.Scheme;
                 
-                // Forzar HTTPS en producción
+                // Forzar HTTPS en producciÃ³n
                 if (Request.Host.Host.Contains("blackclubdepadel.com.ar"))
                 {
                     scheme = "https";
@@ -654,7 +696,7 @@ namespace PadelQ.Api.Controllers
                 var scheme = Request.Headers["X-Forwarded-Proto"].ToString();
                 if (string.IsNullOrEmpty(scheme)) scheme = Request.Scheme;
 
-                // Forzar HTTPS en producción
+                // Forzar HTTPS en producciÃ³n
                 if (Request.Host.Host.Contains("blackclubdepadel.com.ar"))
                 {
                     scheme = "https";
@@ -662,7 +704,7 @@ namespace PadelQ.Api.Controllers
                 var backendCallbackUri = Url.Action("OAuthCallback", "MercadoPago", null, scheme);
                 await _mercadoPagoService.ExchangeCodeForTokenAsync(code, backendCallbackUri);
                 
-                // Redirigir de vuelta al frontend con indicador de éxito
+                // Redirigir de vuelta al frontend con indicador de Ã©xito
                 var redirectUrl = state;
                 if (redirectUrl.Contains("?"))
                     redirectUrl += "&mp_connect=success";
@@ -715,7 +757,7 @@ namespace PadelQ.Api.Controllers
             if (expirySetting != null) _context.SystemSettings.Remove(expirySetting);
 
             await _context.SaveChangesAsync();
-            return Ok(new { Message = "Mercado Pago desconectado con éxito." });
+            return Ok(new { Message = "Mercado Pago desconectado con Ã©xito." });
         }
 
                 [HttpGet("audit-transactions")]
@@ -866,7 +908,7 @@ namespace PadelQ.Api.Controllers
                 var success = await _mercadoPagoService.RefundPaymentAsync(paymentId);
                 if (success)
                 {
-                    return Ok(new { Message = "Pago reembolsado con éxito en Mercado Pago." });
+                    return Ok(new { Message = "Pago reembolsado con Ã©xito en Mercado Pago." });
                 }
                 return BadRequest(new { Message = "No se pudo procesar el reembolso en Mercado Pago." });
             }
@@ -926,7 +968,7 @@ namespace PadelQ.Api.Controllers
                 })
                 .ToListAsync();
 
-            // Simulación de GetCurrentStatus para "Admin"
+            // SimulaciÃ³n de GetCurrentStatus para "Admin"
             var targetUser = "Admin";
             var simActiveClosure = await _context.CashClosures
                 .Where(c => c.OpenedBy == targetUser && c.IsOpen)

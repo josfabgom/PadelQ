@@ -29,7 +29,7 @@ namespace PadelQ.Api.Controllers
         [HttpGet("active")]
         public async Task<IActionResult> GetActiveOrders()
         {
-            var activeStatuses = new[] { KitchenOrderStatus.Pending, KitchenOrderStatus.Preparing, KitchenOrderStatus.Ready };
+            var activeStatuses = new List<KitchenOrderStatus> { KitchenOrderStatus.Pending, KitchenOrderStatus.Preparing, KitchenOrderStatus.Ready };
             
             var orders = await _context.KitchenOrders
                 .Include(ko => ko.Items)

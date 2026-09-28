@@ -7,5 +7,6 @@ namespace PadelQ.Application.Common.Interfaces
         Task<bool> TestConnectionAsync();
         Task<(string PrivateKeyPem, string CsrPem)> GenerateCsrAsync(string cuit, string commonName);
         Task<bool> RequestElectronicInvoiceAsync(Guid paymentGroupId);
+        Task<object> VerifyInvoiceWithAfipAsync(int transactionId);
     }
 }

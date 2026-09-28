@@ -29,6 +29,8 @@ namespace PadelQ.Domain.Entities
         
         public DateTime? WsaaExpiration { get; set; }
         
+        public decimal MontoMaximoAnonimo { get; set; } = 344488m;
+        
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

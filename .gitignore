@@ -52,3 +52,10 @@ brain/
 scratch/
 .gemini/
 .antigravity/
+# Ignorar scripts temporales y llaves SSH
+temp_key_*
+*.js
+*.py
+!patch.py
+*.txt
+!*.md

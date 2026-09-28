@@ -97,7 +97,7 @@ namespace PadelQ.Infrastructure.Services
             }
 
             decimal totalAmount = transactions.Sum(t => t.Amount);
-            decimal afipThreshold = 344000m; // AFIP Limit for anonymous
+            decimal afipThreshold = arcaSettings.MontoMaximoAnonimo > 0 ? arcaSettings.MontoMaximoAnonimo : 344488m; // Dynamic threshold
             var user = transactions.FirstOrDefault(t => t.User != null)?.User;
 
             string docTipo = "99"; // Consumidor Final
@@ -130,17 +130,30 @@ namespace PadelQ.Infrastructure.Services
             }
 
             // Determine CbteTipo
-            int cbteTipo = 6; // Factura B
-            if (arcaSettings.CondicionIva == "Monotributo")
+            int cbteTipo = 6; // Factura B (Consumidor Final, Exento, etc)
+            
+            if (arcaSettings.CondicionIva == "Monotributo" || arcaSettings.CondicionIva == "Exento")
             {
-                cbteTipo = 11; // Factura C
+                cbteTipo = 11; // Factura C (Monotributistas y Exentos siempre emiten C)
             }
             else if (arcaSettings.CondicionIva == "Responsable Inscripto")
             {
-                if (user != null && user.IvaCondition == "Responsable Inscripto" && docTipo == "80")
+                if (user != null && docTipo == "80")
                 {
-                    cbteTipo = 1; // Factura A
+                    // ARCA / AFIP (RG 5003/2021): RI issues Factura A to both RI and Monotributistas
+                    if (user.IvaCondition == "Responsable Inscripto" || user.IvaCondition == "Monotributo")
+                    {
+                        cbteTipo = 1; // Factura A
+                    }
                 }
+            }
+
+            // Validate that Factura A has CUIT
+            if (cbteTipo == 1 && docTipo != "80")
+            {
+                foreach (var tx in transactions) { tx.ArcaStatus = "Error: Factura A requiere CUIT válido"; }
+                await _context.SaveChangesAsync();
+                return false;
             }
 
             // Here we would build the XML and call the real WSFE SOAP endpoint using WSAA token.
@@ -161,6 +174,65 @@ namespace PadelQ.Infrastructure.Services
 
             await _context.SaveChangesAsync();
             return true;
+        }
+        public async Task<object> VerifyInvoiceWithAfipAsync(int transactionId)
+        {
+            var tx = await _context.Transactions
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+
+            if (tx == null || tx.InvoiceNumber == null || tx.InvoiceType == null)
+                throw new Exception("Comprobante no válido para verificación.");
+
+            var groupTransactions = await _context.Transactions
+                .Where(t => t.PaymentGroupId == tx.PaymentGroupId)
+                .ToListAsync();
+
+            decimal totalAmount = groupTransactions.Sum(t => t.Amount);
+
+            string docTipoName = "Consumidor Final";
+            string docNro = "0";
+            if (tx.User != null)
+            {
+                if (!string.IsNullOrEmpty(tx.User.Cuit))
+                {
+                    docTipoName = "CUIT";
+                    docNro = tx.User.Cuit;
+                }
+                else if (!string.IsNullOrEmpty(tx.User.Dni))
+                {
+                    docTipoName = "DNI";
+                    docNro = tx.User.Dni;
+                }
+            }
+
+            string cbteTipoStr = tx.InvoiceType switch
+            {
+                1 => "Factura A",
+                6 => "Factura B",
+                11 => "Factura C",
+                _ => $"Tipo {tx.InvoiceType}"
+            };
+
+            // Simulating network delay to AFIP WSFE
+            await Task.Delay(500);
+
+            return new
+            {
+                afipStatus = "Aprobado",
+                afipCae = tx.Cae,
+                afipVtoCae = tx.CaeExpiration?.ToString("dd/MM/yyyy") ?? "-",
+                afipTotal = totalAmount,
+                afipDate = tx.Date.ToString("dd/MM/yyyy HH:mm:ss"),
+                afipPtoVta = 1, // Asumimos PtoVta 1 por ahora
+                afipCbteNro = tx.InvoiceNumber,
+                afipCbteTipoStr = cbteTipoStr,
+                afipDocTipo = docTipoName,
+                afipDocNro = docNro,
+                afipClientName = tx.User?.FullName ?? "Consumidor Final",
+                isMocked = true,
+                message = "Verificación exitosa. (Modo Simulador de AFIP activo en el servidor)"
+            };
         }
     }
 }

@@ -31,13 +31,46 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet("booking/{bookingId}")]
-        public async Task<ActionResult<IEnumerable<BookingConsumption>>> GetByBooking(Guid bookingId)
+        public async Task<ActionResult<IEnumerable<object>>> GetByBooking(Guid bookingId)
         {
-            return await _context.BookingConsumptions
+            var consumptions = await _context.BookingConsumptions
                 .Include(c => c.Product)
                 .Where(c => c.BookingId == bookingId || c.SpaceBookingId == bookingId)
                 .OrderBy(c => c.CreatedAt)
                 .ToListAsync();
+
+            var consumptionIds = consumptions.Select(c => c.Id).ToList();
+            var kitchenOrderItems = await _context.KitchenOrderItems
+                .Include(koi => koi.KitchenOrder)
+                .Where(koi => consumptionIds.Contains(koi.BookingConsumptionId))
+                .Select(koi => new { koi.BookingConsumptionId, koi.KitchenOrderId, koi.KitchenOrder.Status })
+                .ToListAsync();
+
+            return consumptions.Select(c => {
+                var koi = kitchenOrderItems.FirstOrDefault(k => k.BookingConsumptionId == c.Id);
+                return new
+                {
+                    c.Id,
+                    c.BookingId,
+                    c.SpaceBookingId,
+                    c.UserId,
+                    c.ProductId,
+                    c.Quantity,
+                    c.UnitPrice,
+                    c.TotalPrice,
+                    c.Notes,
+                    c.IsPaid,
+                    c.DepositPaid,
+                    c.Fractions,
+                    c.IsComboRedeemed,
+                    c.CreatedAt,
+                    Product = c.Product,
+                    User = c.User,
+                    IsKitchenOrderCreated = koi != null,
+                    KitchenOrderId = koi?.KitchenOrderId,
+                    KitchenOrderStatus = koi?.Status.ToString()
+                };
+            }).ToList();
         }
 
         [HttpGet("user/{userId}/pending")]
@@ -120,9 +153,25 @@ namespace PadelQ.Api.Controllers
 
             await _context.SaveChangesAsync();
 
-            await CheckAndCreateKitchenOrderAsync(new List<BookingConsumption> { consumption }, request.CustomerName);
-
             return Ok(consumption);
+        }
+
+        [HttpPost("create-kitchen-order")]
+        public async Task<IActionResult> CreateKitchenOrder([FromBody] CreateKitchenOrderRequest request)
+        {
+            if (request.ConsumptionIds == null || !request.ConsumptionIds.Any()) return BadRequest("No consumptions selected.");
+            
+            var consumptions = await _context.BookingConsumptions
+                .Include(c => c.Product)
+                .Where(c => request.ConsumptionIds.Contains(c.Id))
+                .ToListAsync();
+
+            if (!consumptions.Any()) return NotFound("No valid consumptions found.");
+
+            // Create unconditionally a new kitchen order for the selected consumptions
+            await CheckAndCreateKitchenOrderAsync(consumptions, request.CustomerName, forceNew: true);
+            
+            return Ok(new { Message = "Kitchen order created." });
         }
 
         [HttpDelete("{id}")]
@@ -562,7 +611,7 @@ namespace PadelQ.Api.Controllers
             }
         }
 
-        private async Task CheckAndCreateKitchenOrderAsync(List<BookingConsumption> consumptions, string? customerName)
+        private async Task CheckAndCreateKitchenOrderAsync(List<BookingConsumption> consumptions, string? customerName, bool forceNew = false)
         {
             var kitchenItems = new List<KitchenOrderItem>();
             
@@ -585,44 +634,12 @@ namespace PadelQ.Api.Controllers
             if (kitchenItems.Any())
             {
                 var firstConsumption = consumptions.First();
-                
-                // Find existing active KitchenOrder for this booking/customer
-                var existingOrder = await _context.KitchenOrders
-                    .Include(ko => ko.Items)
-                    .Where(ko => ko.Status != KitchenOrderStatus.Delivered && ko.Status != KitchenOrderStatus.Cancelled)
-                    .Where(ko => 
-                        (firstConsumption.BookingId != null && ko.BookingId == firstConsumption.BookingId) ||
-                        (firstConsumption.SpaceBookingId != null && ko.SpaceBookingId == firstConsumption.SpaceBookingId) ||
-                        (firstConsumption.BookingId == null && firstConsumption.SpaceBookingId == null && firstConsumption.UserId != null && ko.UserId == firstConsumption.UserId) ||
-                        (firstConsumption.BookingId == null && firstConsumption.SpaceBookingId == null && firstConsumption.UserId == null && ko.CustomerName == customerName)
-                    )
-                    .OrderByDescending(ko => ko.CreatedAt)
-                    .FirstOrDefaultAsync();
+                KitchenOrder kitchenOrder;
 
-                Guid orderIdToNotify;
-
-                if (existingOrder != null)
+                if (forceNew)
                 {
-                    // Append to existing
-                    foreach (var ki in kitchenItems) { 
-                        ki.KitchenOrderId = existingOrder.Id;
-                        _context.KitchenOrderItems.Add(ki); 
-                    }
-                    orderIdToNotify = existingOrder.Id;
-                    
-                    var audit = new KitchenOrderAudit
-                    {
-                        KitchenOrder = existingOrder,
-                        FromStatus = existingOrder.Status,
-                        ToStatus = existingOrder.Status, // Appended items
-                        ChangedBy = User.Identity?.Name ?? "Sistema"
-                    };
-                    _context.KitchenOrderAudits.Add(audit);
-                }
-                else
-                {
-                    // Create new
-                    var kitchenOrder = new KitchenOrder
+                    // Create new unconditionally
+                    kitchenOrder = new KitchenOrder
                     {
                         BookingId = firstConsumption.BookingId,
                         SpaceBookingId = firstConsumption.SpaceBookingId,
@@ -641,8 +658,62 @@ namespace PadelQ.Api.Controllers
                         ChangedBy = User.Identity?.Name ?? "Sistema"
                     };
                     _context.KitchenOrderAudits.Add(audit);
-                    
-                    orderIdToNotify = kitchenOrder.Id;
+                }
+                else
+                {
+                    // Existing logic for Direct Sales
+                    var existingOrder = await _context.KitchenOrders
+                        .Include(ko => ko.Items)
+                        .Where(ko => ko.Status != KitchenOrderStatus.Delivered && ko.Status != KitchenOrderStatus.Cancelled)
+                        .Where(ko => 
+                            (firstConsumption.BookingId != null && ko.BookingId == firstConsumption.BookingId) ||
+                            (firstConsumption.SpaceBookingId != null && ko.SpaceBookingId == firstConsumption.SpaceBookingId) ||
+                            (firstConsumption.BookingId == null && firstConsumption.SpaceBookingId == null && firstConsumption.UserId != null && ko.UserId == firstConsumption.UserId) ||
+                            (firstConsumption.BookingId == null && firstConsumption.SpaceBookingId == null && firstConsumption.UserId == null && ko.CustomerName == customerName)
+                        )
+                        .OrderByDescending(ko => ko.CreatedAt)
+                        .FirstOrDefaultAsync();
+
+                    if (existingOrder != null)
+                    {
+                        // Append to existing
+                        foreach (var ki in kitchenItems) { 
+                            ki.KitchenOrderId = existingOrder.Id;
+                            _context.KitchenOrderItems.Add(ki); 
+                        }
+                        kitchenOrder = existingOrder;
+                        
+                        var audit = new KitchenOrderAudit
+                        {
+                            KitchenOrder = existingOrder,
+                            FromStatus = existingOrder.Status,
+                            ToStatus = existingOrder.Status, // Appended items
+                            ChangedBy = User.Identity?.Name ?? "Sistema"
+                        };
+                        _context.KitchenOrderAudits.Add(audit);
+                    }
+                    else
+                    {
+                        kitchenOrder = new KitchenOrder
+                        {
+                            BookingId = firstConsumption.BookingId,
+                            SpaceBookingId = firstConsumption.SpaceBookingId,
+                            UserId = firstConsumption.UserId,
+                            CustomerName = customerName,
+                            Items = kitchenItems
+                        };
+
+                        _context.KitchenOrders.Add(kitchenOrder);
+                        
+                        var audit = new KitchenOrderAudit
+                        {
+                            KitchenOrder = kitchenOrder,
+                            FromStatus = null,
+                            ToStatus = KitchenOrderStatus.Pending,
+                            ChangedBy = User.Identity?.Name ?? "Sistema"
+                        };
+                        _context.KitchenOrderAudits.Add(audit);
+                    }
                 }
 
                 await _context.SaveChangesAsync();
@@ -651,7 +722,7 @@ namespace PadelQ.Api.Controllers
                 var orderToNotify = await _context.KitchenOrders
                     .Include(ko => ko.Items)
                         .ThenInclude(i => i.Product)
-                    .FirstOrDefaultAsync(ko => ko.Id == orderIdToNotify);
+                    .FirstOrDefaultAsync(ko => ko.Id == kitchenOrder.Id);
 
                 if (orderToNotify != null)
                 {
@@ -677,6 +748,7 @@ namespace PadelQ.Api.Controllers
                 }
             }
         }
+
 
     } public class AddConsumptionRequest
     {
@@ -729,5 +801,11 @@ namespace PadelQ.Api.Controllers
     {
         public int PaymentMethodId { get; set; }
         public decimal Amount { get; set; }
+    }
+
+    public class CreateKitchenOrderRequest
+    {
+        public List<Guid> ConsumptionIds { get; set; } = new();
+        public string? CustomerName { get; set; }
     }
 }

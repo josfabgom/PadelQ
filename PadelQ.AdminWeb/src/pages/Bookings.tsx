@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { v4 as uuidv4 } from 'uuid';
 import api, { getAuthConfig } from '../api/api';
@@ -269,7 +269,7 @@ const BookingsPage = () => {
 
     const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success', title?: string) => {
         setCustomAlert({
-            title: title || (type === 'success' ? 'Ã‰XITO' : type === 'error' ? 'ERROR' : 'ATENCIÓN'),
+            title: title || (type === 'success' ? 'ÉXITO' : type === 'error' ? 'ERROR' : 'ATENCIÓN'),
             message,
             type
         });
@@ -299,6 +299,7 @@ const BookingsPage = () => {
     const [relatedBookings, setRelatedBookings] = useState<any[]>([]);
     const [selectedRelatedBookingIds, setSelectedRelatedBookingIds] = useState<string[]>([]);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
+    const [consumptionCart, setConsumptionCart] = useState<{product: any, quantity: number, notes: string}[]>([]);
     const [isAddingConsumption, setIsAddingConsumption] = useState<number | null>(null);
     const [productForObservation, setProductForObservation] = useState<any | null>(null);
     const [consumptionToDelete, setConsumptionToDelete] = useState<any | null>(null);
@@ -558,7 +559,7 @@ const BookingsPage = () => {
             }
 
             setIsActivityChargeModalOpen(false);
-            alert("Â¡Cobro de actividad registrado con éxito!");
+            alert("¡Cobro de actividad registrado con éxito!");
             fetchData();
         } catch (err) {
             console.error("Error activity charge:", err);
@@ -712,7 +713,7 @@ const BookingsPage = () => {
                     terminalId: selectedMpTerminal,
                     amount: totalToPay,
                     description: `Venta Directa PadelQ - ${directSaleId.substring(0, 8)}`,
-                    referenceId: `D-${directSaleId};${activeUserEmail}`,
+                    referenceId: `D-${directSaleId}@${uuidv4()};${activeUserEmail}`,
                     directSalePayload: payload
                 });
 
@@ -751,7 +752,7 @@ const BookingsPage = () => {
                 showAlert("Venta registrada como PENDIENTE. Queda cargada a la cuenta del cliente.", 'warning');
                 fetchDebtors(); // Refrescar lista de deudores
             } else {
-                showAlert("Â¡Venta directa registrada y cobrada con éxito!", 'success');
+                showAlert("¡Venta directa registrada y cobrada con éxito!", 'success');
             }
             
             fetchData();
@@ -814,7 +815,7 @@ const BookingsPage = () => {
                 await api.post(`/api/consumptions/pay-pending/${userId}`, payload, config);
             }
 
-            alert("Â¡Operación realizada con éxito!");
+            alert("¡Operación realizada con éxito!");
             setIsPendingModalOpen(false);
             setSelectedPendingUser(null);
             fetchDebtors();
@@ -919,7 +920,7 @@ const BookingsPage = () => {
             if (!cashRes.data.activeClosure || !cashRes.data.activeClosure.isOpen) {
                 return new Promise<boolean>((resolve) => {
                     setCashDrawerConfirm({
-                        message: "ATENCIÓN: No tienes una caja abierta. Para registrar este cobro, debes abrir tu caja diaria.\n\nÂ¿Deseas abrir tu caja ahora automáticamente (con saldo inicial $0)?",
+                        message: "ATENCIÓN: No tienes una caja abierta. Para registrar este cobro, debes abrir tu caja diaria.\n\n¿Deseas abrir tu caja ahora automáticamente (con saldo inicial $0)?",
                         resolve: async (result) => {
                             setCashDrawerConfirm(null);
                             if (result) {
@@ -941,7 +942,7 @@ const BookingsPage = () => {
             console.error("Error al verificar la caja", err);
             return new Promise<boolean>((resolve) => {
                 setCashDrawerConfirm({
-                    message: "No se pudo verificar el estado de la caja. Â¿Deseas intentar procesar el cobro de todas formas?",
+                    message: "No se pudo verificar el estado de la caja. ¿Deseas intentar procesar el cobro de todas formas?",
                     resolve: (result) => {
                         setCashDrawerConfirm(null);
                         resolve(result);
@@ -1536,7 +1537,7 @@ const BookingsPage = () => {
         const isActuallyNextDay = endObj.getDate() !== startObj.getDate() && (endObj.getHours() > 0 || endObj.getMinutes() > 0);
 
         if (isActuallyNextDay) {
-            if (!window.confirm(`ATENCIÓN: Esta reserva termina el día siguiente (${format(endObj, 'dd/MM HH:mm')} hs). Â¿Deseas continuar?`)) {
+            if (!window.confirm(`ATENCIÓN: Esta reserva termina el día siguiente (${format(endObj, 'dd/MM HH:mm')} hs). ¿Deseas continuar?`)) {
                 setLoading(false);
                 return;
             }
@@ -1602,7 +1603,7 @@ const BookingsPage = () => {
             if (suggestionData) {
                 setMultiCourtSuggestion(suggestionData as any);
             } else {
-                alert("Â¡Reserva creada con éxito!");
+                alert("¡Reserva creada con éxito!");
             }
 
         } catch (err: any) {
@@ -1689,7 +1690,7 @@ const BookingsPage = () => {
             if (isSpace) setSelectedSpaceBooking(res.data);
             else setSelectedBooking(res.data);
 
-            showAlert(`Â¡Tiempo extendido +${minutes} min!`);
+            showAlert(`¡Tiempo extendido +${minutes} min!`);
         } catch (err: any) {
             console.error("Error al extender tiempo", err);
             const errorMsg = err.response?.data?.message || err.response?.data || "Error al extender el tiempo";
@@ -1809,7 +1810,7 @@ const BookingsPage = () => {
                     mpQrPollingTimerRef.current = null;
                     setIsMpQrModalOpen(false);
                     
-                    alert("Â¡Pago aprobado por Mercado Pago!");
+                    alert("¡Pago aprobado por Mercado Pago!");
                     
                     if (isSpace) setSelectedSpaceBooking(updatedBooking);
                     else setSelectedBooking(updatedBooking);
@@ -1840,7 +1841,7 @@ const BookingsPage = () => {
                     setIsMpQrModalOpen(false);
                     setIsDirectSaleModalOpen(false);
                     
-                    alert("Â¡Pago de venta directa aprobado por Mercado Pago!");
+                    alert("¡Pago de venta directa aprobado por Mercado Pago!");
                     fetchData();
                 }
             } catch (err) {
@@ -1868,13 +1869,13 @@ const BookingsPage = () => {
             return;
         }
 
-        // --- CÃLCULO DE PAGO GRANULAR ---
+        // --- CÁLCULO DE PAGO GRANULAR ---
         let totalRentPayment = 0;
         let totalConsumptionsPayment = 0;
         const groupPayments: { productId: number, amount: number, desc: string, ids: string[] }[] = [];
         const relatedBookingsPayments: { id: string, amount: number, desc: string }[] = [];
 
-        // --- CÃLCULO DE PAGO DE RENTA (CONSOLIDADA O INDIVIDUAL) ---
+        // --- CÁLCULO DE PAGO DE RENTA (CONSOLIDADA O INDIVIDUAL) ---
         const selectedRentals = [booking, ...relatedBookings.filter(rb => selectedRelatedBookingIds.includes(rb.id))];
         const isConsolidated = selectedRelatedBookingIds.length > 0;
         
@@ -2037,7 +2038,7 @@ const BookingsPage = () => {
                         terminalId: selectedMpTerminal,
                         amount: currentTransactionTotal,
                         description: `Pago Reserva PadelQ - ${booking.id.substring(0, 8)}`,
-                        referenceId: `${isSpace ? 'S-' : 'B-'}${booking.id};${activeUserEmail}`,
+                        referenceId: `${isSpace ? 'S-' : 'B-'}${booking.id}@${uuidv4()};${activeUserEmail}`,
                         rentAllocations,
                         consumptionAllocations,
                         previousDebt: previousDebtPayment
@@ -2518,7 +2519,7 @@ const BookingsPage = () => {
                 
                 <div class="footer">
                     Presente este ticket en barra/mostrador para retirar su unidad restante.<br/><br/>
-                    Â¡Muchas gracias!
+                    ¡Muchas gracias!
                 </div>
                 <div style="height: 15mm;"></div>
                 
@@ -2662,7 +2663,7 @@ const BookingsPage = () => {
                 </style>
             </head>
             <body><div class="center">${companyInfo.logo ? `<img src="${companyInfo.logo}" style="max-width: 100px; max-height: 100px; margin-bottom: 5px; border-radius: 8px;" /><br/>` : ''}
-                    <div class="no-fiscal bold">DOCUMENTO NO VÃLIDO COMO FACTURA</div>
+                    <div class="no-fiscal bold">DOCUMENTO NO VÁLIDO COMO FACTURA</div>
                     <div class="title bold">${companyInfo.name.toUpperCase()}</div>
                     <div style="font-size: 10px; margin-bottom: 5px;">
                         ${companyInfo.address ? `<div>${companyInfo.address}</div>` : ''}
@@ -2738,8 +2739,8 @@ const BookingsPage = () => {
 
                 <div class="line"></div>
                 <div class="footer">
-                    <div class="bold">DOCUMENTO NO VÃLIDO COMO FACTURA</div>
-                    <div>Â¡Gracias por elegir PadelQ!</div>
+                    <div class="bold">DOCUMENTO NO VÁLIDO COMO FACTURA</div>
+                    <div>¡Gracias por elegir PadelQ!</div>
                 </div>
                 <div style="height: 10px;"></div> <!-- Pequeño espacio final para que el corte no toque el texto -->
 
@@ -3006,7 +3007,7 @@ const BookingsPage = () => {
                                             }`}>
                                             <span className="font-black italic text-sm leading-none">{hour.toString().padStart(2, '0')}:00</span>
                                             <span className={`text-[8px] font-bold uppercase tracking-widest mt-1.5 opacity-50`}>
-                                                âž” {(hour + 1).toString().padStart(2, '0')}:00
+                                                ➔ {(hour + 1).toString().padStart(2, '0')}:00
                                             </span>
                                         </div>
                                         {courts.map((court, idx) => {
@@ -3455,7 +3456,7 @@ const BookingsPage = () => {
                                                     </div>
                                                     <div>
                                                         <p className="text-[11px] font-black uppercase italic tracking-tight text-black">{c.fullName}</p>
-                                                        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} â€¢ {c.membershipName || 'PARTICULAR'}</p>
+                                                        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} • {c.membershipName || 'PARTICULAR'}</p>
                                                     </div>
                                                 </div>
                                                 <ChevronRight className="w-4 h-4 text-zinc-300" />
@@ -3520,7 +3521,7 @@ const BookingsPage = () => {
                                         {existingUser && (
                                             <div className="px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl animate-in fade-in slide-in-from-top-1">
                                                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">
-                                                    âœ… CLIENTE IDENTIFICADO: <span className="font-black italic">{existingUser.fullName}</span>
+                                                    ✅ CLIENTE IDENTIFICADO: <span className="font-black italic">{existingUser.fullName}</span>
                                                 </p>
                                                 <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-tight leading-none mt-1">
                                                     {existingUser.membershipName || 'Particular'}. Datos cargados automáticamente.
@@ -3530,7 +3531,7 @@ const BookingsPage = () => {
                                         {!existingUser && guestDni.length > 5 && !isNaN(Number(guestDni)) && (
                                             <div className="px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in slide-in-from-top-1">
                                                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
-                                                    âœ¨ NUEVO CLIENTE
+                                                    ✨ NUEVO CLIENTE
                                                 </p>
                                                 <p className="text-[8px] text-blue-400 font-bold uppercase tracking-tight leading-none mt-1">
                                                     Complete los datos para registrarlo en el sistema.
@@ -3657,7 +3658,7 @@ const BookingsPage = () => {
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Tipo de Reserva</p>
-                                            <p className="text-xs font-black uppercase italic">Â¿Es una serie semanal?</p>
+                                            <p className="text-xs font-black uppercase italic">¿Es una serie semanal?</p>
                                         </div>
                                     </div>
                                     <button
@@ -3747,7 +3748,7 @@ const BookingsPage = () => {
                                 <X className="w-4 h-4" />
                             </button>
                             <h3 className="text-xl font-black italic uppercase tracking-tight text-white">OPCIONES DE IMPRESIÓN</h3>
-                            <p className="text-[10px] text-white/60 uppercase tracking-widest mt-1">Â¿Cómo desea obtener el ticket?</p>
+                            <p className="text-[10px] text-white/60 uppercase tracking-widest mt-1">¿Cómo desea obtener el ticket?</p>
                         </div>
                         <div className="p-6 space-y-4 bg-zinc-50">
                             <button
@@ -3764,28 +3765,7 @@ const BookingsPage = () => {
                             </button>
                             
                             <button
-                                onClick={() => {
-                                    const booking = selectedBooking || selectedSpaceBooking;
-                                    if (booking) {
-                                        // Find kitchen items
-                                        const kitchenItems = bookingConsumptions
-                                            .map(c => {
-                                                const prod = allProducts.find(p => p.id === c.productId);
-                                                return prod && (prod.recipeId || (prod.category && prod.category.toLowerCase() === 'comida'))
-                                                    ? { productName: prod.name, quantity: c.quantity, notes: c.notes }
-                                                    : null;
-                                            })
-                                            .filter(i => i !== null);
-                                            
-                                        if (kitchenItems.length > 0) {
-                                            const clientName = booking.user?.fullName || booking.guestName || 'Particular';
-                                            handlePrintKitchenTicket("ACTUALIZADA", kitchenItems, clientName);
-                                        } else {
-                                            alert("No hay productos de cocina en esta reserva.");
-                                        }
-                                    }
-                                    setIsPrintChoiceModalOpen(false);
-                                }}
+                                onClick={async () => { const booking = selectedBooking || selectedSpaceBooking; if (booking) { const pendingKitchenConsumptions = bookingConsumptions.filter(c => !c.isKitchenOrderCreated && ((() => { const prod = allProducts.find(p => p.id === c.productId); return prod && (prod.recipeId || (prod.category && prod.category.toLowerCase() === 'comida')); })())); if (pendingKitchenConsumptions.length === 0) { alert("No hay productos de cocina pendientes de enviar a preparación."); return; } const kitchenItems = pendingKitchenConsumptions.map(c => { const prod = allProducts.find(p => p.id === c.productId); return { productName: prod?.name, quantity: c.quantity, notes: c.notes }; }); const clientName = booking.user?.fullName || booking.guestName || 'Particular'; try { await api.post('/api/consumptions/create-kitchen-order', { consumptionIds: pendingKitchenConsumptions.map(c => c.id), customerName: clientName }, getAuthConfig()); handlePrintKitchenTicket("NUEVA COMANDA", kitchenItems, clientName); const consRes = await api.get(`/api/consumptions/booking/${booking.id}`, getAuthConfig()); setBookingConsumptions(consRes.data || []); } catch (error) { console.error("Error al enviar a cocina", error); alert("Error al enviar a cocina."); } } setIsPrintChoiceModalOpen(false); }}
                                 className="w-full flex items-center gap-4 p-5 bg-white rounded-[24px] border border-zinc-200 hover:border-orange-500 hover:ring-4 hover:ring-orange-500/10 transition-all group shadow-sm hover:shadow-md"
                             >
                                 <div className="p-3 bg-orange-500 text-white rounded-xl group-hover:scale-110 transition-transform">
@@ -3850,7 +3830,7 @@ const BookingsPage = () => {
                                             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full">
                                                 <div className="w-1 h-1 rounded-full bg-amber-400"></div>
                                                 <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest">
-                                                    SIN MEMBRESÃA ACTIVA
+                                                    SIN MEMBRESÍA ACTIVA
                                                 </span>
                                             </div>
                                         ) : (
@@ -3868,7 +3848,7 @@ const BookingsPage = () => {
                                 </div>
                                 <p className="text-emerald-400 text-xs font-black uppercase tracking-[0.2em] bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
                                     {selectedBooking ? selectedBooking.court.name : selectedSpaceBooking?.space.name}
-                                    <span className="mx-2 opacity-50">â€¢</span>
+                                    <span className="mx-2 opacity-50">•</span>
                                     {format(parseISO((selectedBooking || selectedSpaceBooking)!.startTime), 'HH:mm')} A {format(parseISO((selectedBooking || selectedSpaceBooking)!.endTime), 'HH:mm')} HS
                                 </p>
                             </div>
@@ -3902,6 +3882,7 @@ const BookingsPage = () => {
                                                     onClick={async () => {
                                                         const res = await api.get('/api/products', config);
                                                         setAllProducts(res.data);
+                                                        setConsumptionCart([]);
                                                         setIsConsumptionModalOpen(true);
                                                     }}
                                                     className="px-5 py-2.5 bg-black text-white rounded-2xl font-black uppercase text-[9px] tracking-[0.1em] transition-all flex items-center justify-center gap-2 hover:bg-zinc-800 shadow-lg shadow-black/10 active:scale-95 shrink-0 whitespace-nowrap"
@@ -3933,6 +3914,27 @@ const BookingsPage = () => {
                                                             <div className="flex items-center gap-6 shrink-0 ml-4">
                                                                 <span className="text-xl font-black italic tracking-tighter text-black">${c.totalPrice.toLocaleString()}</span>
                                                                 
+                                                                {c.kitchenOrderStatus === 'Ready' && (
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            try {
+                                                                                await api.put(`/api/kitchen-orders/${c.kitchenOrderId}/status`, { status: 'Delivered' }, getAuthConfig());
+                                                                                const bookingId = (selectedBooking || selectedSpaceBooking)?.id;
+                                                                                if (bookingId) {
+                                                                                    const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
+                                                                                    setBookingConsumptions(consRes.data || []);
+                                                                                }
+                                                                            } catch (err: any) {
+                                                                                console.error("Error al entregar:", err);
+                                                                                alert("Error al entregar.");
+                                                                            }
+                                                                        }}
+                                                                        className="px-3 py-1.5 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all shadow-md shrink-0"
+                                                                    >
+                                                                        Entregar
+                                                                    </button>
+                                                                )}
+
                                                                 {c.isPaid ? (
                                                                     <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black tracking-widest uppercase rounded-full whitespace-nowrap">
                                                                         Pagado
@@ -4302,7 +4304,7 @@ const BookingsPage = () => {
                                         const unpaidConsumptions = (bookingConsumptions || []).filter(c => !c.isPaid);
                                         const paidConsumptionsTotal = (bookingConsumptions || []).filter(c => c.isPaid).reduce((acc, c) => acc + (c.totalPrice || 0), 0);
 
-                                        // --- CÃLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
+                                        // --- CÁLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
                                         let currentTransactionTotal = 0;
 
                                         // 1 & 2. Rentas (Consolidada o Individual)
@@ -4489,7 +4491,7 @@ const BookingsPage = () => {
                                                         }}
                                                         className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${isMixedPayment ? 'bg-black text-white' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'}`}
                                                     >
-                                                        {isMixedPayment ? 'âœ“ Editar Pago Mixto' : '+ Dividir Pago'}
+                                                        {isMixedPayment ? '✓ Editar Pago Mixto' : '+ Dividir Pago'}
                                                     </button>
                                                 </div>
 
@@ -4528,7 +4530,7 @@ const BookingsPage = () => {
                                                                     </div>
                                                                     {isCtaCte && selectedCtaCteUser && selectedPaymentMethod === method.id.toString() && (
                                                                         <span className="text-[7px] text-emerald-400 font-bold lowercase truncate max-w-full px-2">
-                                                                            â†’ {selectedCtaCteUser.fullName}
+                                                                            → {selectedCtaCteUser.fullName}
                                                                         </span>
                                                                     )}
                                                                 </button>
@@ -4613,7 +4615,7 @@ const BookingsPage = () => {
                                                             : 'border-zinc-200 text-zinc-400 hover:border-rose-200 hover:text-rose-500'
                                                             }`}
                                                     >
-                                                        {isConfirmingSeriesCancel ? 'Â¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
+                                                        {isConfirmingSeriesCancel ? '¡CONFIRMAR ANULACIÓN DE SERIE!' : <><X className="w-4 h-4" /> Anular toda la serie recurrente</>}
                                                     </button>
                                                 )}
                                                 </div>
@@ -4630,8 +4632,8 @@ const BookingsPage = () => {
             {/* Add Consumption Modal */}
             {isConsumptionModalOpen && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[60] p-6">
-                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 bg-zinc-900 text-white relative">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 bg-zinc-900 text-white relative shrink-0">
                             <button onClick={() => setIsConsumptionModalOpen(false)} className="absolute right-8 top-8 p-2 hover:bg-white/10 rounded-xl transition-colors">
                                 <X className="w-4 h-4" />
                             </button>
@@ -4654,7 +4656,7 @@ const BookingsPage = () => {
                             </div>
                         </div>
 
-                        <div className="p-8 max-h-[60vh] overflow-y-auto">
+                        <div className="p-8 overflow-y-auto flex-1">
                             {Object.entries(
                                 allProducts
                                     .filter(p => p.isSellable !== false && (
@@ -4707,6 +4709,82 @@ const BookingsPage = () => {
                                 </div>
                             ))}
                         </div>
+                        {consumptionCart.length > 0 && (
+                            <div className="p-6 bg-zinc-100 border-t border-zinc-200 shadow-inner shrink-0">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-4">Comanda Unificada ({consumptionCart.length} ítems)</h3>
+                                <div className="space-y-2 mb-4 max-h-[150px] overflow-y-auto">
+                                    {consumptionCart.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-black/5">
+                                            <div>
+                                                <p className="text-xs font-bold uppercase">{item.product.name}</p>
+                                                {item.notes && <p className="text-[9px] text-zinc-400">Obs: {item.notes}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-sm font-black">${item.product.finalPrice || item.product.FinalPrice}</span>
+                                                <button onClick={() => {
+                                                    const newCart = [...consumptionCart];
+                                                    newCart.splice(idx, 1);
+                                                    setConsumptionCart(newCart);
+                                                }} className="p-1 hover:bg-rose-50 text-rose-400 rounded-lg">
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            setIsAddingConsumption(-1); // dummy id to show loading
+                                            const booking = selectedBooking || selectedSpaceBooking;
+                                            const bookingId = booking?.id;
+                                            if (!bookingId) return;
+                                            
+                                            const clientName = booking.user?.fullName || booking.guestName || 'Particular';
+                                            
+                                            // Send each item
+                                            for (const item of consumptionCart) {
+                                                const res = await api.post('/api/consumptions', {
+                                                    bookingId: bookingId,
+                                                    productId: item.product.id,
+                                                    quantity: item.quantity,
+                                                    notes: item.notes,
+                                                    customerName: clientName
+                                                }, getAuthConfig());
+
+                                                if (item.product.isDoubleUnitCombo) {
+                                                    handlePrintComboTicket({
+                                                        productName: item.product.name,
+                                                        quantity: 1
+                                                    }, clientName, res.data?.id);
+                                                }
+                                            }
+
+                                            const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
+                                            setBookingConsumptions(consRes.data || []);
+                                            
+                                            setConsumptionCart([]);
+                                            setIsConsumptionModalOpen(false);
+                                        } catch (err: any) {
+                                            console.error("Error al confirmar comanda:", err);
+                                            alert("Error: " + (err.response?.data?.message || err.message));
+                                        } finally {
+                                            setIsAddingConsumption(null);
+                                        }
+                                    }}
+                                    className="w-full py-4 bg-emerald-500 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isAddingConsumption === -1 ? (
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Check className="w-4 h-4" />
+                                            Confirmar Comanda (${consumptionCart.reduce((acc, item) => acc + (item.product.finalPrice || item.product.FinalPrice), 0).toLocaleString()})
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -4789,7 +4867,7 @@ const BookingsPage = () => {
                                 </div>
                                 <h3 className="text-xl font-black italic uppercase tracking-tight">ELIMINAR CONSUMO</h3>
                             </div>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Â¿ESTÃS SEGURO QUE DESEAS ELIMINAR ESTE CONSUMO PENDIENTE?</p>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS ELIMINAR ESTE CONSUMO PENDIENTE?</p>
                         </div>
                         
                         <div className="p-8 space-y-6">
@@ -4799,7 +4877,7 @@ const BookingsPage = () => {
                                 </div>
                                 <div>
                                     <p className="font-black italic text-sm">{pendingConsumptionToDelete.productName || pendingConsumptionToDelete.product?.name || "Consumo"}</p>
-                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">CANTIDAD: {pendingConsumptionToDelete.quantity} â€¢ PRECIO: ${pendingConsumptionToDelete.totalPrice}</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">CANTIDAD: {pendingConsumptionToDelete.quantity} • PRECIO: ${pendingConsumptionToDelete.totalPrice}</p>
                                 </div>
                             </div>
 
@@ -4840,7 +4918,7 @@ const BookingsPage = () => {
                                 </div>
                                 <h3 className="text-xl font-black italic uppercase tracking-tight">DESHACER EXTENSIÓN</h3>
                             </div>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Â¿ESTÃS SEGURO QUE DESEAS REVERTIR ESTA ACCIÓN?</p>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS REVERTIR ESTA ACCIÓN?</p>
                         </div>
                         
                         <div className="p-8 space-y-6">
@@ -4885,7 +4963,7 @@ const BookingsPage = () => {
                                 </div>
                                 <h3 className="text-xl font-black italic uppercase tracking-tight">QUITAR ITEM</h3>
                             </div>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Â¿ESTÃS SEGURO QUE DESEAS QUITAR ESTE ITEM?</p>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿ESTÁS SEGURO QUE DESEAS QUITAR ESTE ITEM?</p>
                         </div>
                         
                         <div className="p-8 space-y-6">
@@ -4895,7 +4973,7 @@ const BookingsPage = () => {
                                 </div>
                                 <div>
                                     <p className="font-black italic text-sm">{consumptionToDelete.product?.name}</p>
-                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{consumptionToDelete.quantity} UNIDAD(ES) â€¢ ${(consumptionToDelete.totalPrice || 0).toLocaleString()}</p>
+                                    <p className="text-[10px] font-bold text-zinc-400 mt-0.5">{consumptionToDelete.quantity} UNIDAD(ES) • ${(consumptionToDelete.totalPrice || 0).toLocaleString()}</p>
                                 </div>
                             </div>
 
@@ -4950,7 +5028,7 @@ const BookingsPage = () => {
                                 </div>
                                 <h3 className="text-xl font-black italic uppercase tracking-tight">{productForObservation.name}</h3>
                             </div>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Â¿Deseas agregar alguna nota u observación?</p>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">¿Deseas agregar alguna nota u observación?</p>
                         </div>
                         
                         <div className="p-8 space-y-6">
@@ -4973,61 +5051,23 @@ const BookingsPage = () => {
                                     Cancelar
                                 </button>
                                 <button
-                                    disabled={isAddingConsumption !== null}
-                                    onClick={async () => {
-                                        try {
-                                            setIsAddingConsumption(productForObservation.id);
-                                            const booking = selectedBooking || selectedSpaceBooking;
-                                            const bookingId = booking?.id;
-                                            if (!bookingId) return;
-                                            
-                                            const clientName = booking.user?.fullName || booking.guestName || 'Particular';
-                                            const res = await api.post('/api/consumptions', {
-                                                bookingId: bookingId,
-                                                productId: productForObservation.id,
-                                                quantity: 1,
-                                                notes: tempObservation,
-                                                customerName: clientName
-                                            }, getAuthConfig());
-
-                                            if (productForObservation.isDoubleUnitCombo) {
-                                                handlePrintComboTicket({
-                                                    productName: productForObservation.name,
-                                                    quantity: 1
-                                                }, clientName, res.data?.id);
-                                            }
-
-
-
-                                            const consRes = await api.get(`/api/consumptions/booking/${bookingId}`, getAuthConfig());
-                                            setBookingConsumptions(consRes.data || []);
-                                            
-                                            setProductForObservation(null);
-                                            setIsConsumptionModalOpen(false);
-                                        } catch (err: any) {
-                                            console.error("Error al agregar:", err);
-                                            alert("Error: " + (err.response?.data?.message || err.message));
-                                        } finally {
-                                            setIsAddingConsumption(null);
-                                        }
+                                    onClick={() => {
+                                        setConsumptionCart([...consumptionCart, { product: productForObservation, quantity: 1, notes: tempObservation }]);
+                                        setProductForObservation(null);
                                     }}
                                     className="flex-[2] py-5 bg-black text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-xl shadow-black/20 hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
                                 >
-                                    {isAddingConsumption === productForObservation.id ? (
-                                        <RefreshCw className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <Check className="w-4 h-4" />
-                                            Confirmar
-                                        </>
-                                    )}
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Agregar al Pedido
+                                    </>
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-            {/* Modal de Ã‰xito de Pago */}
+            {/* Modal de Éxito de Pago */}
             {/* Mixed Payment Modal */}
             {isMixedPaymentModalOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-[110] p-6">
@@ -5049,7 +5089,7 @@ const BookingsPage = () => {
                             const booking = selectedBooking || selectedSpaceBooking;
                             if (!booking) return null;
 
-                            // --- CÃLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
+                            // --- CÁLCULO DE TOTAL BASADO EN SELECCIONES GRANULARES ---
                             let transactionTotal = 0;
 
                             // 1. Renta Principal
@@ -5219,7 +5259,7 @@ const BookingsPage = () => {
                 </div>
             )}
 
-            {/* MODAL DE CONFIRMACIÓN DE PAGO (POPUP TÃCTIL) */}
+            {/* MODAL DE CONFIRMACIÓN DE PAGO (POPUP TÁCTIL) */}
             {isConfirmPaymentModalOpen && (selectedBooking || selectedSpaceBooking) && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-xl flex items-center justify-center z-[110] p-6 font-outfit">
                     <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300 border border-black/10 flex flex-col">
@@ -5312,7 +5352,7 @@ const BookingsPage = () => {
                                 <textarea
                                     value={paymentObservation}
                                     onChange={(e) => setPaymentObservation(e.target.value)}
-                                    placeholder="EJ: PAGÓ JUAN EL TOTAL, DEJA SEÃ‘A PARA LA PRÓXIMA..."
+                                    placeholder="EJ: PAGÓ JUAN EL TOTAL, DEJA SEÑA PARA LA PRÓXIMA..."
                                     rows={3}
                                     className="w-full p-4 bg-zinc-100 border-none rounded-2xl text-xs font-black uppercase focus:ring-4 focus:ring-black/5 outline-none transition-all resize-none custom-scrollbar"
                                 />
@@ -5413,7 +5453,7 @@ const BookingsPage = () => {
                                                 mpQrPollingTimerRef.current = null;
                                                 setIsMpQrModalOpen(false);
                                                 setIsDirectSaleModalOpen(false);
-                                                alert("Â¡Pago de venta directa aprobado por Mercado Pago!");
+                                                alert("¡Pago de venta directa aprobado por Mercado Pago!");
                                                 fetchData();
                                             } else {
                                                 alert("No se encontró ningún pago aprobado reciente para esta venta en Mercado Pago.");
@@ -5453,7 +5493,7 @@ const BookingsPage = () => {
                                                 if (mpQrPollingTimerRef.current) clearInterval(mpQrPollingTimerRef.current);
                                                 mpQrPollingTimerRef.current = null;
                                                 setIsMpQrModalOpen(false);
-                                                alert("Â¡Pago aprobado por Mercado Pago!");
+                                                alert("¡Pago aprobado por Mercado Pago!");
                                                 if (isSpace) setSelectedSpaceBooking(updatedBooking);
                                                 else setSelectedBooking(updatedBooking);
                                                 setBookingConsumptions(consumptions);
@@ -5487,8 +5527,8 @@ const BookingsPage = () => {
                             <div className="w-16 h-16 bg-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/20">
                                 <Check className="w-8 h-8 text-white" />
                             </div>
-                            <h2 className="text-2xl font-black italic uppercase tracking-tight mb-2">Â¡Turno Reservado!</h2>
-                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">Â¿Deseas alquilar otra cancha a la misma hora?</p>
+                            <h2 className="text-2xl font-black italic uppercase tracking-tight mb-2">¡Turno Reservado!</h2>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.2em]">¿Deseas alquilar otra cancha a la misma hora?</p>
                         </div>
 
                         <div className="p-8 space-y-6">
@@ -5549,7 +5589,7 @@ const BookingsPage = () => {
                                                             // o simplemente dejando que el filtro isBusy actúe tras el fetchData.
                                                             // Pero como fetchData es asíncrono y los bookings tardan en actualizarse en el state local:
                                                             setBookings(prev => [...prev, { ...payload, id: 'temp-' + Date.now(), court: { name: c.name }, endTime: addMinutes(parseISO(payload.startTime), payload.durationMinutes).toISOString(), status: 1 } as any]);
-                                                            alert(`Â¡Turno en ${c.name} reservado con éxito!`);
+                                                            alert(`¡Turno en ${c.name} reservado con éxito!`);
                                                         } catch (err: any) {
                                                             alert("Error: " + (err.response?.data || err.message));
                                                         } finally {
@@ -5960,7 +6000,7 @@ const BookingsPage = () => {
                                                     }}
                                                     className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all border ${directSaleData.isSplitPayment ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
                                                 >
-                                                    {directSaleData.isSplitPayment ? 'âœ“ Pago Dividido' : '+ Dividir Pago'}
+                                                    {directSaleData.isSplitPayment ? '✓ Pago Dividido' : '+ Dividir Pago'}
                                                 </button>
                                             </div>
 
@@ -6027,7 +6067,7 @@ const BookingsPage = () => {
                                                                     {diff > 0 ? `Restante: $${diff.toLocaleString()}` : `Exceso: $${Math.abs(diff).toLocaleString()}`}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto âœ“</span>
+                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto ✓</span>
                                                             );
                                                         })()}
                                                     </div>
@@ -6337,7 +6377,7 @@ const BookingsPage = () => {
                                                     }}
                                                     className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${directSaleData.isSplitPayment ? 'bg-black text-white' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'}`}
                                                 >
-                                                    {directSaleData.isSplitPayment ? 'âœ“ Pago Dividido' : '+ Dividir Pago'}
+                                                    {directSaleData.isSplitPayment ? '✓ Pago Dividido' : '+ Dividir Pago'}
                                                 </button>
                                             </div>
 
@@ -6404,7 +6444,7 @@ const BookingsPage = () => {
                                                                     {diff > 0 ? `Restante: $${diff.toLocaleString()}` : `Exceso: $${Math.abs(diff).toLocaleString()}`}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto âœ“</span>
+                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monto Cubierto ✓</span>
                                                             );
                                                         })()}
                                                     </div>
@@ -6436,7 +6476,7 @@ const BookingsPage = () => {
                                                                     </div>
                                                                     {isCtaCte && selectedCtaCteUser && directSaleData.paymentMethodId === m.id && (
                                                                         <span className="text-[7px] text-emerald-400 font-bold lowercase truncate max-w-full px-2">
-                                                                            â†’ {selectedCtaCteUser.fullName}
+                                                                            → {selectedCtaCteUser.fullName}
                                                                         </span>
                                                                     )}
                                                                 </button>
@@ -6657,7 +6697,7 @@ const BookingsPage = () => {
                                         >
                                             <div>
                                                 <p className="text-[11px] font-black uppercase italic tracking-tight">{c.fullName}</p>
-                                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} â€¢ {c.membershipName || 'PARTICULAR'}</p>
+                                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">DNI: {c.dni || 'S/D'} • {c.membershipName || 'PARTICULAR'}</p>
                                             </div>
                                             <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
                                                 <ChevronRight className="w-4 h-4 text-zinc-400" />
@@ -6746,7 +6786,7 @@ const BookingsPage = () => {
                                                     <p className="text-sm font-black text-zinc-800">{sale.description}</p>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">{format(new Date(sale.date), 'HH:mm')}hs</span>
-                                                        <span className="text-[10px] font-bold text-zinc-300">â€¢</span>
+                                                        <span className="text-[10px] font-bold text-zinc-300">•</span>
                                                         <span className="text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider" style={{ backgroundColor: `${sale.color}15`, color: sale.color }}>
                                                             {sale.method}
                                                         </span>
@@ -6777,6 +6817,8 @@ const BookingsPage = () => {
 };
 
 export default BookingsPage;
+
+
 
 
 

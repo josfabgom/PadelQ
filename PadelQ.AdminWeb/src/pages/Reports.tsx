@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import Header from '../components/Header';
 import ProductsMatrixByClosure from '../components/ProductsMatrixByClosure';
@@ -50,6 +50,7 @@ const ReportsPage = () => {
   const [data, setData] = useState<ReportItem[]>([]);
   const [kitchenData, setKitchenData] = useState<KitchenSale[]>([]);
   const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0],
@@ -110,6 +111,7 @@ const ReportsPage = () => {
   };
 
   useEffect(() => {
+    setSelectedCategory(null);
     fetchReport();
   }, [dateRange, activeTab]);
 
@@ -425,27 +427,78 @@ const ReportsPage = () => {
         <ProductsMatrixByClosure dateRange={dateRange} />
       ) : activeTab === 'categories' ? (
         <div className="bg-white rounded-[40px] border border-black/5 shadow-sm overflow-hidden p-10">
-           <h3 className="text-2xl font-black text-black uppercase italic tracking-tight mb-8">Ventas por Categoría</h3>
-           <div className="overflow-x-auto">
-             <table className="w-full text-left">
-               <thead>
-                 <tr className="border-b border-zinc-100">
-                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categoría</th>
-                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Cant. Vendida</th>
-                   <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Total Ingresos</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-zinc-50">
-                 {categoryData.map((cat, i) => (
-                   <tr key={i} className="hover:bg-zinc-50/50 transition-colors">
-                     <td className="py-4 text-sm font-bold text-black uppercase">{cat.category}</td>
-                     <td className="py-4 text-sm font-bold text-black text-center">{cat.totalQuantity}</td>
-                     <td className="py-4 text-sm font-black text-emerald-500 text-right">{formatARS(cat.totalRevenue)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
+           {selectedCategory ? (
+             <>
+               <div className="flex items-center gap-4 mb-8">
+                 <button 
+                   onClick={() => setSelectedCategory(null)}
+                   className="p-2 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors"
+                 >
+                   <ArrowLeft className="w-5 h-5 text-black" />
+                 </button>
+                 <h3 className="text-2xl font-black text-black uppercase italic tracking-tight">Detalle de Categoría: {selectedCategory}</h3>
+               </div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                   <thead>
+                     <tr className="border-b border-zinc-100">
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Producto</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Cant. Vendida</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Stock Actual</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Precio Unit.</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Total</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-zinc-50">
+                     {categoryData.find(c => c.category === selectedCategory)?.details?.map((sale: any, i: number) => (
+                       <tr key={i} className="hover:bg-zinc-50/50 transition-colors">
+                         <td className="py-4 text-sm font-bold text-black">{sale.date}</td>
+                         <td className="py-4 text-sm font-bold text-black">{sale.productName}</td>
+                         <td className="py-4 text-sm font-bold text-zinc-500 text-center">{sale.quantity}</td>
+                         <td className="py-4 text-sm font-bold text-zinc-500 text-center">{sale.stock}</td>
+                         <td className="py-4 text-sm font-bold text-zinc-500 text-right">{formatARS(sale.unitPrice)}</td>
+                         <td className="py-4 text-sm font-black text-black italic text-right">{formatARS(sale.total)}</td>
+                       </tr>
+                     ))}
+                     {(!categoryData.find(c => c.category === selectedCategory)?.details || categoryData.find(c => c.category === selectedCategory)?.details?.length === 0) && (
+                       <tr>
+                         <td colSpan={6} className="py-8 text-center text-sm font-bold text-zinc-400">No hay detalles disponibles.</td>
+                       </tr>
+                     )}
+                   </tbody>
+                 </table>
+               </div>
+             </>
+           ) : (
+             <>
+               <h3 className="text-2xl font-black text-black uppercase italic tracking-tight mb-8">Ventas por Categoría</h3>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                   <thead>
+                     <tr className="border-b border-zinc-100">
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categoría</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Cant. Vendida</th>
+                       <th className="py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Total Ingresos</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-zinc-50">
+                     {categoryData.map((cat, i) => (
+                       <tr 
+                         key={i} 
+                         onClick={() => setSelectedCategory(cat.category)}
+                         className="hover:bg-zinc-50 transition-colors cursor-pointer group"
+                       >
+                         <td className="py-4 text-sm font-bold text-black uppercase group-hover:text-emerald-600 transition-colors">{cat.category}</td>
+                         <td className="py-4 text-sm font-bold text-black text-center group-hover:text-emerald-600 transition-colors">{cat.totalQuantity}</td>
+                         <td className="py-4 text-sm font-black text-emerald-500 text-right">{formatARS(cat.totalRevenue)}</td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             </>
+           )}
         </div>
       ) : (
         <div className="bg-white rounded-[40px] border border-black/5 shadow-sm overflow-hidden p-10">

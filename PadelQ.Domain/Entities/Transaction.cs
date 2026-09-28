@@ -16,6 +16,15 @@ namespace PadelQ.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal Amount { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal NetAmount { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal IvaPercentage { get; set; } = 21m;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal IvaAmount { get; set; } = 0;
+
         [Required]
         public DateTime Date { get; set; } = DateTime.UtcNow;
 

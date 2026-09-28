@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PadelQ.Domain.Entities;
@@ -8,6 +12,26 @@ namespace PadelQ.Infrastructure.Persistence
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
+        }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            var entries = ChangeTracker.Entries<Transaction>()
+                .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified);
+
+            foreach (var entry in entries)
+            {
+                var tx = entry.Entity;
+                // Si el monto total es mayor a cero y no se calculó aún el neto...
+                if (tx.Amount != 0 && tx.NetAmount == 0 && tx.IvaAmount == 0)
+                {
+                    decimal divider = 1 + (tx.IvaPercentage / 100m);
+                    tx.NetAmount = Math.Round(tx.Amount / divider, 2);
+                    tx.IvaAmount = tx.Amount - tx.NetAmount;
+                }
+            }
+
+            return base.SaveChangesAsync(cancellationToken);
         }
 
         public DbSet<Booking> Bookings { get; set; } = null!;

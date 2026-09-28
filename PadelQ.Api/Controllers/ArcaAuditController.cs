@@ -6,6 +6,8 @@ using PadelQ.Infrastructure.Persistence;
 using System.Linq;
 using System.Threading.Tasks;
 
+using PadelQ.Application.Common.Interfaces;
+
 namespace PadelQ.Api.Controllers
 {
     [ApiController]
@@ -13,10 +15,12 @@ namespace PadelQ.Api.Controllers
     public class ArcaAuditController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IArcaService _arcaService;
 
-        public ArcaAuditController(ApplicationDbContext context)
+        public ArcaAuditController(ApplicationDbContext context, IArcaService arcaService)
         {
             _context = context;
+            _arcaService = arcaService;
         }
 
         [HttpGet]
@@ -66,6 +70,95 @@ namespace PadelQ.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok();
+        }
+
+        [HttpGet("{id}/verify")]
+        public async Task<IActionResult> VerifyInvoice(int id)
+        {
+            try
+            {
+                var result = await _arcaService.VerifyInvoiceWithAfipAsync(id);
+                return Ok(result);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("export-iva")]
+        public async Task<IActionResult> ExportLibroIva([FromQuery] int year, [FromQuery] int month)
+        {
+            var transactions = await _context.Transactions
+                .Include(t => t.User)
+                .Where(t => t.ArcaStatus == "Aprobado" && t.Date.Year == year && t.Date.Month == month)
+                .ToListAsync();
+
+            var grouped = transactions
+                .GroupBy(t => t.PaymentGroupId)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    decimal totalAmount = g.Sum(t => t.Amount);
+                    
+                    string docTipo = "Consumidor Final";
+                    string docNro = "0";
+                    if (first.User != null)
+                    {
+                        if (!string.IsNullOrEmpty(first.User.Cuit))
+                        {
+                            docTipo = "CUIT";
+                            docNro = first.User.Cuit;
+                        }
+                        else if (!string.IsNullOrEmpty(first.User.Dni))
+                        {
+                            docTipo = "DNI";
+                            docNro = first.User.Dni;
+                        }
+                    }
+
+                    string cbteTipoStr = first.InvoiceType switch
+                    {
+                        1 => "Factura A",
+                        6 => "Factura B",
+                        11 => "Factura C",
+                        _ => $"Tipo {first.InvoiceType}"
+                    };
+
+                    return new
+                    {
+                        Fecha = first.Date.ToString("dd/MM/yyyy"),
+                        TipoComprobante = cbteTipoStr,
+                        PuntoVenta = "00001",
+                        NumeroComprobante = first.InvoiceNumber?.ToString("D8") ?? "",
+                        TipoDocumento = docTipo,
+                        NumeroDocumento = docNro,
+                        Cliente = first.User?.FullName ?? "Consumidor Final",
+                        ImporteTotal = totalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        CAE = first.Cae ?? ""
+                    };
+                })
+                .OrderBy(x => x.Fecha).ThenBy(x => x.NumeroComprobante)
+                .ToList();
+
+            var csvBuilder = new System.Text.StringBuilder();
+            csvBuilder.AppendLine("Fecha,Tipo Comprobante,Punto de Venta,Nro Comprobante,Doc Tipo,Doc Nro,Cliente,Importe Total,CAE");
+
+            foreach (var item in grouped)
+            {
+                string clientSafe = item.Cliente.Contains(",") ? $"\"{item.Cliente}\"" : item.Cliente;
+                csvBuilder.AppendLine($"{item.Fecha},{item.TipoComprobante},{item.PuntoVenta},{item.NumeroComprobante},{item.TipoDocumento},{item.NumeroDocumento},{clientSafe},{item.ImporteTotal},{item.CAE}");
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csvBuilder.ToString());
+            var bytesWithBom = new byte[bytes.Length + 3];
+            bytesWithBom[0] = 0xEF;
+            bytesWithBom[1] = 0xBB;
+            bytesWithBom[2] = 0xBF;
+            System.Array.Copy(bytes, 0, bytesWithBom, 3, bytes.Length);
+
+            string fileName = $"Libro_IVA_Ventas_{month:D2}_{year}.csv";
+            return File(bytesWithBom, "text/csv", fileName);
         }
 
         [HttpGet("{id}/print")]
@@ -130,6 +223,8 @@ namespace PadelQ.Api.Controllers
     </div>";
             }
 
+            string ivaConditionStr = settings?.CondicionIva ?? "Responsable Inscripto";
+
             string html = $@"
 <!DOCTYPE html>
 <html>
@@ -148,7 +243,7 @@ namespace PadelQ.Api.Controllers
 <body onload='setTimeout(function() {{ window.print(); }}, 500)'>
     <h2>{companyName}</h2>
     <div class='text-center'>CUIT: {cuit}</div>
-    <div class='text-center'>IVA Responsable Inscripto</div>
+    <div class='text-center'>IVA {ivaConditionStr}</div>
     <div class='divider'></div>
     
     <div class='text-center bold'>FACTURA ""{invoiceTypeStr}""</div>
