@@ -314,8 +314,9 @@ namespace PadelQ.Api.Controllers
             return Ok(sales);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Staff")]
         [HttpGet("products-ranking-by-day")]
+        [HttpGet("product-sales-ranking")]
         public async Task<IActionResult> GetProductsRankingByDay([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
             var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date.AddDays(-30);
@@ -689,6 +690,91 @@ namespace PadelQ.Api.Controllers
                 .ToList();
 
             return Ok(sales);
+        }
+
+        [Authorize(Roles = "Admin,Staff")]
+        [HttpGet("courts-usage")]
+        public async Task<IActionResult> GetCourtsUsage([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var filterStart = startDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date.AddDays(-30);
+            var filterEnd = (endDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date).AddDays(1);
+
+            var courts = await _context.Courts
+                .OrderBy(c => c.Id)
+                .ToListAsync();
+
+            var bookings = await _context.Bookings
+                .Where(b => b.Status != BookingStatus.Cancelled &&
+                            b.StartTime >= filterStart && b.StartTime < filterEnd)
+                .Select(b => new
+                {
+                    b.CourtId,
+                    b.StartTime,
+                    b.EndTime,
+                    b.Price
+                })
+                .ToListAsync();
+
+            var courtStats = courts.Select(court =>
+            {
+                var courtBookings = bookings.Where(b => b.CourtId == court.Id).ToList();
+                var count = courtBookings.Count;
+                var totalHours = courtBookings.Sum(b => (b.EndTime - b.StartTime).TotalHours);
+                var totalRevenue = courtBookings.Sum(b => b.Price);
+                var avgHourlyRevenue = totalHours > 0 ? totalRevenue / (decimal)totalHours : 0;
+
+                return new
+                {
+                    courtId = court.Id,
+                    courtName = court.Name,
+                    isIndoor = court.IsIndoor,
+                    surfaceType = court.SurfaceType,
+                    pricePerHour = court.PricePerHour,
+                    totalBookings = count,
+                    totalHours = Math.Round(totalHours, 2),
+                    totalRevenue = totalRevenue,
+                    averageHourlyRevenue = Math.Round(avgHourlyRevenue, 2)
+                };
+            }).ToList();
+
+            var grandTotalHours = courtStats.Sum(c => c.totalHours);
+            var grandTotalRevenue = courtStats.Sum(c => c.totalRevenue);
+            var grandTotalBookings = courtStats.Sum(c => c.totalBookings);
+
+            var resultList = courtStats.Select(c => new
+            {
+                c.courtId,
+                c.courtName,
+                c.isIndoor,
+                c.surfaceType,
+                c.pricePerHour,
+                c.totalBookings,
+                c.totalHours,
+                c.totalRevenue,
+                c.averageHourlyRevenue,
+                sharePercentage = grandTotalHours > 0 ? Math.Round((c.totalHours / grandTotalHours) * 100, 1) : 0
+            })
+            .OrderByDescending(c => c.totalHours)
+            .ThenByDescending(c => c.totalRevenue)
+            .ToList();
+
+            var mostUsed = resultList.FirstOrDefault(c => c.totalHours > 0);
+            var leastUsed = resultList.LastOrDefault();
+
+            return Ok(new
+            {
+                summary = new
+                {
+                    totalBookings = grandTotalBookings,
+                    totalHours = Math.Round(grandTotalHours, 2),
+                    totalRevenue = grandTotalRevenue,
+                    mostUsedCourt = mostUsed != null ? mostUsed.courtName : "-",
+                    mostUsedHours = mostUsed != null ? mostUsed.totalHours : 0,
+                    leastUsedCourt = leastUsed != null && leastUsed.courtId != mostUsed?.courtId ? leastUsed.courtName : "-",
+                    leastUsedHours = leastUsed != null && leastUsed.courtId != mostUsed?.courtId ? leastUsed.totalHours : 0
+                },
+                courts = resultList
+            });
         }
     }
 }

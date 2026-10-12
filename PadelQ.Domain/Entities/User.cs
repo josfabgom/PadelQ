@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace PadelQ.Domain.Entities
 {
@@ -14,6 +15,10 @@ namespace PadelQ.Domain.Entities
         public string? PhotoUrl { get; set; }
         public string? Cuit { get; set; }
         public string? IvaCondition { get; set; } // e.g. "Consumidor Final", "Responsable Inscripto", "Monotributo"
+        
+        [StringLength(100)]
+        public string? CloverDeviceId { get; set; }
+
         public decimal PlayerLevel { get; set; } = 1.0m;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;

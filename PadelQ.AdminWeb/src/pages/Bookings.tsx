@@ -700,6 +700,23 @@ const BookingsPage = () => {
             };
 
             const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
+            const isClover = method?.name?.toUpperCase() === "CLOVER";
+
+            if (isClover) {
+                try {
+                    await api.post('/api/clover/charge', {
+                        amount: currentTransactionTotal,
+                        orderId: booking.id
+                    }, getAuthConfig());
+                    alert("Se envió el cobro a la terminal Clover exitosamente.");
+                } catch (error: any) {
+                    console.error("Error al conectar con Clover", error);
+                    alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+                    setLoading(false);
+                    return;
+                }
+            }
+
             if (isPaid && !isInternal && !directSaleData.isSplitPayment && isMp) {
                 if (!selectedMpTerminal) {
                     alert("Por favor, seleccione una terminal Mercado Pago.");
@@ -1996,6 +2013,23 @@ const BookingsPage = () => {
             const method2 = isMixedPayment ? paymentMethods.find(m => m.id.toString() === secondPaymentMethod) : null;
 
             const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
+            const isClover = method?.name?.toUpperCase() === "CLOVER";
+
+            if (isClover) {
+                try {
+                    await api.post('/api/clover/charge', {
+                        amount: currentTransactionTotal,
+                        orderId: booking.id
+                    }, getAuthConfig());
+                    alert("Se envió el cobro a la terminal Clover exitosamente.");
+                } catch (error: any) {
+                    console.error("Error al conectar con Clover", error);
+                    alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+                    setLoading(false);
+                    return;
+                }
+            }
+
             if (isMp) {
                 if (!selectedMpTerminal) {
                     alert("Por favor, seleccione una terminal Mercado Pago.");
@@ -6817,6 +6851,8 @@ const BookingsPage = () => {
 };
 
 export default BookingsPage;
+
+
 
 
 

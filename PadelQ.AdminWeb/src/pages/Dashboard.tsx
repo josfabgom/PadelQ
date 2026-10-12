@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, 
   Settings, CreditCard, QrCode, ShieldCheck, Box, ArrowRight, Utensils, Coffee
@@ -166,7 +166,16 @@ const Dashboard = () => {
       show: isAdmin || isCocinero || isStaff
     },
     {
-      href: '/arca-settings',
+        href: '/clover-settings',
+        icon: <CreditCard className="w-5 h-5" />,
+        label: 'Configuracion Clover',
+        desc: 'Configuracion de terminales fisicos, credenciales y pagos con tarjeta.',
+        color: 'text-green-600 group-hover:text-white',
+        bgHover: 'group-hover:bg-green-600',
+        show: isAdmin
+      },
+      {
+        href: '/arca-settings',
       icon: <Settings className="w-5 h-5" />,
       label: 'Facturación AFIP (ARCA)',
       desc: 'Configuración de certificados, puntos de venta y credenciales para Factura Electrónica.',
@@ -237,3 +246,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
+

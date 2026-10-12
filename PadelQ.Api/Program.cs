@@ -74,6 +74,7 @@ builder.Services.AddScoped<IQrService, QrService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IChatbotService, ChatbotService>();
 builder.Services.AddScoped<IArcaService, ArcaService>();
+builder.Services.AddHttpClient<ICloverService, CloverService>();
 builder.Services.AddHttpClient<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddHostedService<BillingBackgroundService>();
 builder.Services.AddMemoryCache();

@@ -5,7 +5,8 @@ import ProductsMatrixByClosure from '../components/ProductsMatrixByClosure';
 import { 
   BarChart as BarChartIcon, TrendingUp, Calendar, 
   ArrowLeft, Download, Filter, DollarSign, PieChart as PieChartIcon,
-  X, Info, BarChart2, ChevronDown, RefreshCcw
+  X, Info, BarChart2, ChevronDown, RefreshCcw,
+  Clock, Trophy, AlertTriangle, Layers
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -40,14 +41,41 @@ interface KitchenSale {
   stock: number;
 }
 
+interface CourtUsageItem {
+  courtId: number;
+  courtName: string;
+  isIndoor: boolean;
+  surfaceType: string;
+  pricePerHour: number;
+  totalBookings: number;
+  totalHours: number;
+  totalRevenue: number;
+  averageHourlyRevenue: number;
+  sharePercentage: number;
+}
+
+interface CourtsUsageSummary {
+  totalBookings: number;
+  totalHours: number;
+  totalRevenue: number;
+  mostUsedCourt: string;
+  mostUsedHours: number;
+  leastUsedCourt: string;
+  leastUsedHours: number;
+}
+
 const ReportsPage = () => {
   const roles = JSON.parse(localStorage.getItem('padelq_user_roles') || '[]');
   const isAdmin = roles.includes('Admin');
   const isCocinero = roles.includes('Cocinero');
   const initialTab = (isCocinero && !isAdmin) ? 'kitchen' : 'dates';
 
-  const [activeTab, setActiveTab] = useState<'dates' | 'products' | 'kitchen' | 'categories'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'dates' | 'courts' | 'products' | 'kitchen' | 'categories'>(initialTab);
   const [data, setData] = useState<ReportItem[]>([]);
+  const [courtsUsageData, setCourtsUsageData] = useState<{
+    summary: CourtsUsageSummary;
+    courts: CourtUsageItem[];
+  } | null>(null);
   const [kitchenData, setKitchenData] = useState<KitchenSale[]>([]);
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -73,6 +101,19 @@ const ReportsPage = () => {
   const [loadingRanking, setLoadingRanking] = useState(false);
 
   const fetchReport = async () => {
+    if (activeTab === 'courts') {
+      try {
+        setLoading(true);
+        const res = await api.get(`/api/reports/courts-usage?startDate=${dateRange.start}&endDate=${dateRange.end}`, getAuthConfig());
+        setCourtsUsageData(res.data);
+      } catch (err) {
+        console.error("Error fetching courts usage report", err);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (activeTab === 'categories') {
       try {
         setLoading(true);
@@ -132,7 +173,7 @@ const ReportsPage = () => {
     try {
       setLoadingRanking(true);
       setIsRankingModalOpen(true);
-      const res = await api.get(`/api/reports/product-sales-ranking?startDate=${rankingStartDate}&endDate=${rankingEndDate}`, getAuthConfig());
+      const res = await api.get(`/api/reports/products-ranking-by-day?startDate=${rankingStartDate}&endDate=${rankingEndDate}`, getAuthConfig());
       setRankingData(res.data);
     } catch (err) {
       console.error("Error fetching ranking data", err);
@@ -218,7 +259,7 @@ const ReportsPage = () => {
           <div>
             <h1 className="text-4xl font-black text-black tracking-tight uppercase italic">Reportes</h1>
             <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">
-               {activeTab === 'dates' ? 'Métricas de Ingresos y Cobranzas' : 'Matriz de Productos por Caja'}
+               {activeTab === 'dates' ? 'Métricas de Ingresos y Cobranzas' : activeTab === 'courts' ? 'Estadísticas de Uso y Rentabilidad de Canchas' : activeTab === 'products' ? 'Matriz de Productos por Caja' : activeTab === 'categories' ? 'Ventas por Categoría' : 'Ventas Cocina'}
             </p>
           </div>
         </div>
@@ -251,6 +292,12 @@ const ReportsPage = () => {
                  Por Fechas
                </button>
                <button 
+                 onClick={() => setActiveTab('courts')}
+                 className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'courts' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
+               >
+                 Uso de Canchas
+               </button>
+               <button 
                  onClick={() => setActiveTab('products')}
                  className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-black text-white' : 'text-zinc-400 hover:text-black hover:bg-zinc-50'}`}
                >
@@ -278,7 +325,56 @@ const ReportsPage = () => {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-between items-center gap-4">
+        {/* Quick Presets */}
+        <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-black/5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              const start = new Date(now);
+              start.setDate(now.getDate() - 90);
+              setDateRange({
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
+              });
+            }}
+            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:bg-black hover:text-white transition-all"
+          >
+            Últimos 3 Meses
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              const start = new Date(now);
+              start.setDate(now.getDate() - 30);
+              setDateRange({
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
+              });
+            }}
+            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:bg-black hover:text-white transition-all"
+          >
+            Últimos 30 Días
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              const start = new Date(now);
+              start.setDate(now.getDate() - 7);
+              setDateRange({
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
+              });
+            }}
+            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:bg-black hover:text-white transition-all"
+          >
+            Últimos 7 Días
+          </button>
+        </div>
+
         <div className="flex gap-4 items-center bg-white p-4 rounded-[28px] border border-black/5 shadow-sm">
            <div className="flex items-center gap-3 px-4 border-r border-zinc-100">
               <Calendar className="w-4 h-4 text-zinc-400" />
@@ -423,6 +519,249 @@ const ReportsPage = () => {
          </div>
       </div>
       </div>
+      ) : activeTab === 'courts' ? (
+        <div className="space-y-10">
+          {/* Top KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-black p-8 rounded-[36px] shadow-2xl relative overflow-hidden text-white flex flex-col justify-between">
+              <div className="absolute top-[-20%] right-[-20%] w-[60%] h-[120%] bg-purple-500/10 blur-[80px] rounded-full"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
+                  <Clock className="w-6 h-6 text-purple-400" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/50 mb-2">Total Horas Reservadas</p>
+                <h3 className="text-4xl font-black italic">{courtsUsageData?.summary.totalHours || 0} hrs</h3>
+              </div>
+              <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-between text-xs font-bold text-white/60">
+                <span>{courtsUsageData?.summary.totalBookings || 0} turnos registrados</span>
+              </div>
+            </div>
+
+            <div className="bg-black p-8 rounded-[36px] shadow-2xl relative overflow-hidden text-white flex flex-col justify-between">
+              <div className="absolute top-[-20%] right-[-20%] w-[60%] h-[120%] bg-emerald-500/10 blur-[80px] rounded-full"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
+                  <DollarSign className="w-6 h-6 text-emerald-400" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/50 mb-2">Recaudación Canchas</p>
+                <h3 className="text-4xl font-black italic text-emerald-400">{formatARS(courtsUsageData?.summary.totalRevenue || 0)}</h3>
+              </div>
+              <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-between text-xs font-bold text-white/60">
+                <span>Ingresos por alquiler</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[36px] border border-black/5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
+                  <Trophy className="w-6 h-6" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400 mb-2">Cancha Más Utilizada</p>
+                <h3 className="text-xl font-black text-black uppercase italic tracking-tight line-clamp-2">
+                  {courtsUsageData?.summary.mostUsedCourt || '-'}
+                </h3>
+              </div>
+              <div className="mt-6 pt-6 border-t border-zinc-100 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl">
+                  {courtsUsageData?.summary.mostUsedHours || 0} hrs jugadas
+                </span>
+                <span className="text-xs font-bold text-zinc-400">Mayor demanda</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[36px] border border-black/5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-6">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400 mb-2">Cancha Menos Utilizada</p>
+                <h3 className="text-xl font-black text-black uppercase italic tracking-tight line-clamp-2">
+                  {courtsUsageData?.summary.leastUsedCourt || '-'}
+                </h3>
+              </div>
+              <div className="mt-6 pt-6 border-t border-zinc-100 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl">
+                  {courtsUsageData?.summary.leastUsedHours || 0} hrs jugadas
+                </span>
+                <span className="text-xs font-bold text-zinc-400">Menor demanda</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-white p-10 rounded-[40px] border border-black/5 shadow-sm">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-xl font-black text-black uppercase italic tracking-tight">Horas de Uso por Cancha</h3>
+                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mt-1">Tiempo total ocupado en el período</p>
+                </div>
+              </div>
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={courtsUsageData?.courts || []} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f5" />
+                    <XAxis 
+                      dataKey="courtName" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fontSize: 9, fontWeight: 900, fill: '#71717A'}}
+                      interval={0}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fontSize: 10, fontWeight: 700, fill: '#A1A1AA'}}
+                      unit="h"
+                    />
+                    <Tooltip 
+                      formatter={(val: any) => [`${val} horas`, 'Uso']}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                    />
+                    <Bar dataKey="totalHours" fill="#8B5CF6" radius={[10, 10, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white p-10 rounded-[40px] border border-black/5 shadow-sm">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-xl font-black text-black uppercase italic tracking-tight">Recaudación por Cancha ($)</h3>
+                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mt-1">Ingresos brutos por alquileres</p>
+                </div>
+              </div>
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={courtsUsageData?.courts || []} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f5" />
+                    <XAxis 
+                      dataKey="courtName" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fontSize: 9, fontWeight: 900, fill: '#71717A'}}
+                      interval={0}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fontSize: 10, fontWeight: 700, fill: '#A1A1AA'}}
+                      tickFormatter={(val) => `$${val}`}
+                    />
+                    <Tooltip 
+                      formatter={(val: any) => [formatARS(val), 'Recaudación']}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                    />
+                    <Bar dataKey="totalRevenue" fill="#10B981" radius={[10, 10, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Detailed Table */}
+          <div className="bg-white rounded-[40px] border border-black/5 shadow-sm overflow-hidden p-10">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-black uppercase italic tracking-tight">Detalle Comparativo de Rendimiento</h3>
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mt-1">Ranking de ocupación, horas jugadas y rendimiento financiero</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-zinc-100 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                    <th className="py-4 pl-4">#</th>
+                    <th className="py-4">Cancha</th>
+                    <th className="py-4 text-center">Tipo / Superficie</th>
+                    <th className="py-4 text-center">Turnos</th>
+                    <th className="py-4 text-center">Tiempo Jugado</th>
+                    <th className="py-4 text-right">Recaudado</th>
+                    <th className="py-4 text-right">Promedio / Hora</th>
+                    <th className="py-4 px-6 text-center">Participación (% del total)</th>
+                    <th className="py-4 pr-4 text-center">Diagnóstico</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {courtsUsageData?.courts && courtsUsageData.courts.length > 0 ? (
+                    courtsUsageData.courts.map((court, idx) => {
+                      const isTop = idx === 0 && court.totalHours > 0;
+                      const isZero = court.totalHours === 0;
+
+                      return (
+                        <tr key={court.courtId} className="hover:bg-zinc-50/60 transition-colors">
+                          <td className="py-5 pl-4 font-black text-sm text-zinc-400">
+                            #{idx + 1}
+                          </td>
+                          <td className="py-5">
+                            <div>
+                              <p className="font-black text-black uppercase text-sm">{court.courtName}</p>
+                              <p className="text-[10px] font-bold text-zinc-400">Tarifa base: ${court.pricePerHour}/h</p>
+                            </div>
+                          </td>
+                          <td className="py-5 text-center">
+                            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-xl bg-zinc-100 text-zinc-600">
+                              {court.surfaceType} • {court.isIndoor ? 'Indoor' : 'Outdoor'}
+                            </span>
+                          </td>
+                          <td className="py-5 text-center font-black text-black text-sm">
+                            {court.totalBookings}
+                          </td>
+                          <td className="py-5 text-center">
+                            <span className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-purple-50 text-purple-700">
+                              {court.totalHours} hrs
+                            </span>
+                          </td>
+                          <td className="py-5 text-right font-black text-emerald-600 italic text-base">
+                            {formatARS(court.totalRevenue)}
+                          </td>
+                          <td className="py-5 text-right font-bold text-zinc-600 text-sm">
+                            {formatARS(court.averageHourlyRevenue)}
+                          </td>
+                          <td className="py-5 px-6">
+                            <div className="flex items-center gap-3 justify-center min-w-[140px]">
+                              <div className="flex-1 bg-zinc-100 h-2.5 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full ${isTop ? 'bg-purple-600' : isZero ? 'bg-zinc-300' : 'bg-blue-500'}`}
+                                  style={{ width: `${Math.max(court.sharePercentage, 3)}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs font-black text-zinc-700 w-12 text-right">
+                                {court.sharePercentage}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-5 pr-4 text-center">
+                            {isTop ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-800">
+                                <Trophy className="w-3 h-3" /> Alta Demanda
+                              </span>
+                            ) : isZero ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-zinc-100 text-zinc-400">
+                                Sin Uso
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-700">
+                                Demanda Media
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={9} className="py-16 text-center text-zinc-400 font-bold uppercase tracking-widest text-xs">
+                        No hay canchas registradas o no se encontraron datos en el período seleccionado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       ) : activeTab === 'products' ? (
         <ProductsMatrixByClosure dateRange={dateRange} />
       ) : activeTab === 'categories' ? (
@@ -737,7 +1076,14 @@ const ReportsPage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
-                    {getSortedRankingData().map((item, idx) => {
+                    {getSortedRankingData().length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="py-16 text-center text-zinc-400 font-bold uppercase tracking-widest text-xs">
+                          No hay ventas registradas en el período seleccionado
+                        </td>
+                      </tr>
+                    ) : (
+                      getSortedRankingData().map((item, idx) => {
                       const maxDaily = Math.max(item.monday, item.tuesday, item.wednesday, item.thursday, item.friday, item.saturday, item.sunday);
                       
                       const getCellColor = (val: number) => {
@@ -772,7 +1118,7 @@ const ReportsPage = () => {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               )}
