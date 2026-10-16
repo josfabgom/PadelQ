@@ -56,8 +56,23 @@ namespace PadelQ.Infrastructure.Services
             var court = await _context.Courts.FindAsync(id);
             if (court != null)
             {
-                court.IsActive = false; // Soft delete
-                await _context.SaveChangesAsync();
+                bool hasBookings = await _context.Bookings.AnyAsync(b => b.CourtId == id);
+                bool hasSchedules = await _context.ActivitySchedules.AnyAsync(s => s.CourtId == id);
+
+                if (!hasBookings && !hasSchedules)
+                {
+                    _context.Courts.Remove(court);
+                    await _context.SaveChangesAsync();
+                }
+                else if (court.IsActive)
+                {
+                    court.IsActive = false; // Soft delete si tiene historial
+                    await _context.SaveChangesAsync();
+                }
+                else
+                {
+                    throw new System.InvalidOperationException("No se puede eliminar definitivamente esta cancha porque tiene reservas o actividades asociadas en el historial.");
+                }
             }
         }
     }

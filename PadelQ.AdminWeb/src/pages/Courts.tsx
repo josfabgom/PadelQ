@@ -74,8 +74,9 @@ const CourtsPage = () => {
       try {
         await api.delete(`/api/courts/${id}`, config);
         fetchCourts();
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error al eliminar cancha", err);
+        alert(err.response?.data?.message || "No se pudo eliminar la cancha.");
       }
     }
   };

@@ -705,10 +705,10 @@ const BookingsPage = () => {
             if (isClover) {
                 try {
                     await api.post('/api/clover/charge', {
-                        amount: currentTransactionTotal,
-                        orderId: booking.id
+                        amount: totalToPay,
+                        orderId: uuidv4()
                     }, getAuthConfig());
-                    alert("Se envió el cobro a la terminal Clover exitosamente.");
+                    alert("Se enviÃ³ el cobro a la terminal Clover exitosamente.");
                 } catch (error: any) {
                     console.error("Error al conectar con Clover", error);
                     alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
@@ -2021,7 +2021,7 @@ const BookingsPage = () => {
                         amount: currentTransactionTotal,
                         orderId: booking.id
                     }, getAuthConfig());
-                    alert("Se envió el cobro a la terminal Clover exitosamente.");
+                    alert("Se enviÃ³ el cobro a la terminal Clover exitosamente.");
                 } catch (error: any) {
                     console.error("Error al conectar con Clover", error);
                     alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));

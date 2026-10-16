@@ -3,7 +3,8 @@ import { Save, Upload, Key, Server, CheckCircle2, AlertTriangle, ShieldCheck , A
 import axios from 'axios';
 
 // Assume API_URL is handled via proxy or env
-const API_URL = 'http://localhost:5041/api/arca';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5041';
+const API_URL = `${API_BASE_URL}/api/arca`;
 
 const ArcaSettings = () => {
   const [settings, setSettings] = useState<any>({

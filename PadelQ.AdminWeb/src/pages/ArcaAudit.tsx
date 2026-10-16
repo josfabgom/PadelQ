@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, FileText, CheckCircle2, AlertTriangle, Clock , ArrowLeft, ShieldCheck, X, Info } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5041/api/arcaaudit';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5041';
+const API_URL = `${API_BASE_URL}/api/arcaaudit`;
 
 const ArcaAudit = () => {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -172,7 +173,7 @@ const ArcaAudit = () => {
                             {verifyingId === inv.id ? 'Verificando...' : 'Verificar AFIP'}
                           </button>
                           <a 
-                            href={`http://localhost:5041/api/arcaaudit/${inv.id}/print`}
+                            href={`${API_URL}/${inv.id}/print`}
                             target="_blank"
                             rel="noreferrer"
                             className="px-3 py-1.5 bg-zinc-100 text-zinc-800 text-xs font-bold rounded-lg hover:bg-zinc-200 transition-colors inline-block"

@@ -54,8 +54,15 @@ namespace PadelQ.Api.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteCourt(int id)
         {
-            await _courtService.DeleteAsync(id);
-            return NoContent();
+            try
+            {
+                await _courtService.DeleteAsync(id);
+                return NoContent();
+            }
+            catch (System.InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }

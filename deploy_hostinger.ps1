@@ -43,18 +43,23 @@ if (Test-Path ".\PadelQ.MobileApp\build\web") {
 
 # 3. Empaquetar solo lo necesario (Selectivo)
 Write-Host " Empaquetando archivos para transferencia (Modo Selectivo)..." -ForegroundColor Yellow
-# Definimos los componentes criticos para produccion (Incluyendo 'build' para la app movil)
-$FILES_TO_PACK = "PadelQ.Api", "PadelQ.Application", "PadelQ.Domain", "PadelQ.Infrastructure", "PadelQ.AdminWeb", "dist", "build", ".env", "docker-compose.yml.hostinger", "nginx.conf", "frontend.nginx.conf"
+# Definimos los componentes criticos para produccion (sin pisar .env del servidor y solo incluyendo 'build' si existe)
+$FILES_TO_PACK = @("PadelQ.Api", "PadelQ.Application", "PadelQ.Domain", "PadelQ.Infrastructure", "PadelQ.AdminWeb", "dist", "docker-compose.yml.hostinger", "nginx.conf", "frontend.nginx.conf")
+if (Test-Path ".\build\web") {
+    $FILES_TO_PACK += "build"
+}
 tar -czf $PACKAGE_NAME --exclude="bin" --exclude="obj" --exclude="node_modules" $FILES_TO_PACK
+if ($LASTEXITCODE -ne 0) { Write-Error "Fallo el empaquetado tar"; exit 1 }
 
 # 4. Subir el paquete al servidor
 Write-Host " Subiendo paquete a $USER@$SERVER_IP..." -ForegroundColor Yellow
 $SSH_KEY = "C:\AntiGravity Proyectos\PadelQ\temp_key_deploy"
 scp -o StrictHostKeyChecking=no -i $SSH_KEY $PACKAGE_NAME "$($USER)@$($SERVER_IP):$TARGET_DIR"
+if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la transferencia SCP"; exit 1 }
 
 # 5. Ejecutar comandos remotos por SSH
 Write-Host " Ejecutando comandos de actualizacion y limpieza en Hostinger..." -ForegroundColor Yellow
-$REMOTE_CMD = "cd $TARGET_DIR && tar -xzf $PACKAGE_NAME && docker compose -f docker-compose.yml.hostinger up -d --build && docker image prune -af && docker builder prune -f && rm $PACKAGE_NAME"
+$REMOTE_CMD = "cd $TARGET_DIR && tar -xzf $PACKAGE_NAME && docker compose -f docker-compose.yml.hostinger up -d --build && docker compose -f docker-compose.yml.hostinger restart admin_web padelq_proxy && docker image prune -af && docker builder prune -f && rm $PACKAGE_NAME"
 ssh -o StrictHostKeyChecking=no -i $SSH_KEY "$($USER)@$($SERVER_IP)" "$REMOTE_CMD"
 
 Write-Host "`n DESPLIEGUE COMPLETADO CON EXITO! El sistema ya esta actualizado.`n" -ForegroundColor Green

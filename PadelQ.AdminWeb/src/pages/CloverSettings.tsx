@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Server, ArrowLeft, CreditCard } from 'lucide-react';
 import axios from 'axios';
 
 // Usamos el proxy de vite o la url base del proyecto
-const API_URL = 'http://localhost:5041/api/clover';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5041';
+const API_URL = `${API_BASE_URL}/api/clover`;
 
 const CloverSettings = () => {
   const [settings, setSettings] = useState<any>({

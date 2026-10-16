@@ -700,6 +700,7 @@ namespace PadelQ.Api.Controllers
             var filterEnd = (endDate?.Date ?? DateTime.UtcNow.AddHours(-3).Date).AddDays(1);
 
             var courts = await _context.Courts
+                .Where(c => c.IsActive)
                 .OrderBy(c => c.Id)
                 .ToListAsync();
 
