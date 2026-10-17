@@ -29,8 +29,14 @@ const CloverSettings = () => {
   const fetchSettings = async () => {
     try {
       const token = localStorage.getItem('padelq_token');
-      const res = await axios.get(`${API_URL}/settings`, { headers: { Authorization: `Bearer ${token}` } });
+      const [res, devRes] = await Promise.all([
+        axios.get(`${API_URL}/settings`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/device`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { deviceId: '' } }))
+      ]);
       setSettings(res.data);
+      if (devRes.data?.deviceId) {
+        setDeviceId(devRes.data.deviceId);
+      }
     } catch (err) {
       console.error('Error fetching settings', err);
     }

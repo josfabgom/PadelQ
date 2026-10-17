@@ -38,8 +38,8 @@ namespace PadelQ.Domain.Entities
 
         public int? InvoiceType { get; set; }
 
-        [StringLength(20)]
-        public string? ArcaStatus { get; set; } // "Pendiente", "Aprobado", "Rechazado", "Error"
+        [StringLength(500)]
+        public string? ArcaStatus { get; set; } // "Pendiente", "Aprobado", "Rechazado", "Error..."
 
         [Required]
         public TransactionType Type { get; set; }

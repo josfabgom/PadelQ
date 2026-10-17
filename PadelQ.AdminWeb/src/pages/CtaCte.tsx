@@ -144,6 +144,22 @@ const CtaCte = () => {
     if (!selectedUser || !paymentAmount) return;
 
     try {
+      const m = paymentMethods.find(pm => pm.id?.toString() === selectedPaymentMethodId?.toString());
+      const isClover = m?.name?.trim().toUpperCase().includes("CLOVER");
+      if (isClover && Number(paymentAmount) > 0) {
+        try {
+          await api.post('/api/clover/charge', {
+            amount: Number(paymentAmount),
+            orderId: selectedUser.id
+          }, getAuthConfig());
+          alert("Se envió el cobro a la terminal Clover exitosamente.");
+        } catch (error: any) {
+          console.error("Error al conectar con Clover", error);
+          alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+          return;
+        }
+      }
+
       if (isMembershipPayment) {
         await api.post(`/api/transaction/membership-payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}`, {}, getAuthConfig());
       } else {

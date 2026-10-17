@@ -21,6 +21,8 @@ RUN dotnet publish "PadelQ.Api.csproj" -c Release -o /app/publish /p:UseAppHost=
 
 # Use the runtime image for the final stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+RUN sed -i 's/providers = provider_sect/providers = provider_sect\nssl_conf = ssl_sect/g' /etc/ssl/openssl.cnf && \
+    printf "\n[ssl_sect]\nsystem_default = system_default_sect\n\n[system_default_sect]\nCipherString = DEFAULT:@SECLEVEL=1\n" >> /etc/ssl/openssl.cnf
 WORKDIR /app
 COPY --from=publish /app/publish .
 

@@ -1,4 +1,5 @@
-using System;
+ï»¿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -47,8 +48,8 @@ namespace PadelQ.Api.Controllers
             else
             {
                 settings.IsProduction = updatedSettings.IsProduction;
-                settings.MerchantId = updatedSettings.MerchantId;
-                settings.AccessToken = updatedSettings.AccessToken;
+                settings.MerchantId = updatedSettings.MerchantId?.Trim() ?? string.Empty;
+                settings.AccessToken = updatedSettings.AccessToken?.Trim() ?? string.Empty;
                 settings.AppId = updatedSettings.AppId;
                 settings.AppSecret = updatedSettings.AppSecret;
                 settings.UpdatedAt = DateTime.UtcNow;
@@ -68,13 +69,18 @@ namespace PadelQ.Api.Controllers
                 var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
                 var deviceId = user?.CloverDeviceId;
 
-                if (!string.IsNullOrEmpty(request.DeviceId))
-                    deviceId = request.DeviceId;
+                if (!string.IsNullOrWhiteSpace(request.DeviceId))
+                    deviceId = request.DeviceId.Trim();
 
-                if (string.IsNullOrEmpty(deviceId))
-                    return BadRequest("Este puesto no tiene un terminal Clover asignado. Configúrelo en su perfil.");
+                if (string.IsNullOrWhiteSpace(deviceId))
+                {
+                    deviceId = await _context.Users
+                        .Where(u => u.CloverDeviceId != null && u.CloverDeviceId != "")
+                        .Select(u => u.CloverDeviceId)
+                        .FirstOrDefaultAsync();
+                }
 
-                var result = await _cloverService.SendPaymentToDeviceAsync(request.Amount, request.OrderId, deviceId);
+                var result = await _cloverService.SendPaymentToDeviceAsync(request.Amount, request.OrderId, deviceId ?? string.Empty);
                 
                 if (result)
                     return Ok(new { Message = "Cobro enviado exitosamente al dispositivo Clover." });
@@ -87,6 +93,25 @@ namespace PadelQ.Api.Controllers
             }
         }
 
+        [HttpGet("device")]
+        public async Task<IActionResult> GetCloverDevice()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            var deviceId = user?.CloverDeviceId;
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                deviceId = await _context.Users
+                    .Where(u => u.CloverDeviceId != null && u.CloverDeviceId != "")
+                    .Select(u => u.CloverDeviceId)
+                    .FirstOrDefaultAsync();
+            }
+
+            return Ok(new { deviceId = deviceId ?? string.Empty });
+        }
+
         [HttpPost("device")]
         public async Task<IActionResult> SetCloverDevice([FromBody] SetCloverDeviceRequest request)
         {
@@ -96,7 +121,7 @@ namespace PadelQ.Api.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) return NotFound();
 
-            user.CloverDeviceId = request.DeviceId;
+            user.CloverDeviceId = request.DeviceId?.Trim() ?? string.Empty;
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Dispositivo Clover asignado exitosamente a su puesto." });

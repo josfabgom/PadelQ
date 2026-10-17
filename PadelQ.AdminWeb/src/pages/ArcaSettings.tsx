@@ -98,12 +98,13 @@ const ArcaSettings = () => {
       setTestResult('Probando...');
       const res = await axios.post(`${API_URL}/test-connection`);
       if (res.data.success) {
-        setTestResult('Conexión Exitosa con Servidores AFIP/ARCA.');
+        setTestResult('Conexión Exitosa con Servidores AFIP/ARCA (WSAA y WSFEv1 autenticados).');
       } else {
-        setTestResult('Error: No se pudo conectar.');
+        setTestResult(`Error: ${res.data.message || 'No se pudo conectar.'}`);
       }
-    } catch (err) {
-      setTestResult('Error de red al probar la conexión.');
+    } catch (err: any) {
+      const serverMsg = err.response?.data?.message;
+      setTestResult(serverMsg ? `Error: ${serverMsg}` : 'Error de red al probar la conexión.');
     }
   };
 

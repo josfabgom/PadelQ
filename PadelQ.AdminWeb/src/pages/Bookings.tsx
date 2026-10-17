@@ -700,12 +700,24 @@ const BookingsPage = () => {
             };
 
             const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
-            const isClover = method?.name?.toUpperCase() === "CLOVER";
+            const isClover = isPaid && !isInternal && (
+                !directSaleData.isSplitPayment
+                    ? method?.name?.trim().toUpperCase().includes("CLOVER")
+                    : directSaleData.splitPayments.some(sp => {
+                        const sm = paymentMethods.find(pm => pm.id === sp.paymentMethodId);
+                        return sm?.name?.trim().toUpperCase().includes("CLOVER") && sp.amount > 0;
+                    })
+            );
+            const cloverAmount = !directSaleData.isSplitPayment
+                ? totalToPay
+                : directSaleData.splitPayments
+                    .filter(sp => paymentMethods.find(pm => pm.id === sp.paymentMethodId)?.name?.trim().toUpperCase().includes("CLOVER"))
+                    .reduce((sum, sp) => sum + (Number(sp.amount) || 0), 0);
 
-            if (isClover) {
+            if (isClover && cloverAmount > 0) {
                 try {
                     await api.post('/api/clover/charge', {
-                        amount: totalToPay,
+                        amount: cloverAmount,
                         orderId: uuidv4()
                     }, getAuthConfig());
                     alert("Se envió el cobro a la terminal Clover exitosamente.");
@@ -2013,12 +2025,17 @@ const BookingsPage = () => {
             const method2 = isMixedPayment ? paymentMethods.find(m => m.id.toString() === secondPaymentMethod) : null;
 
             const isMp = method?.name?.toUpperCase().includes("MERCADO PAGO") || method?.name?.toUpperCase().includes("MP") || method?.name?.toUpperCase().includes("QR");
-            const isClover = method?.name?.toUpperCase() === "CLOVER";
+            const isClover1 = method?.name?.trim().toUpperCase().includes("CLOVER");
+            const isClover2 = isMixedPayment && method2?.name?.trim().toUpperCase().includes("CLOVER");
+            const isClover = isClover1 || isClover2;
+            const cloverAmount = isMixedPayment
+                ? (isClover1 ? firstMethodAmount : 0) + (isClover2 ? (currentTransactionTotal - firstMethodAmount) : 0)
+                : currentTransactionTotal;
 
-            if (isClover) {
+            if (isClover && cloverAmount > 0) {
                 try {
                     await api.post('/api/clover/charge', {
-                        amount: currentTransactionTotal,
+                        amount: cloverAmount,
                         orderId: booking.id
                     }, getAuthConfig());
                     alert("Se envió el cobro a la terminal Clover exitosamente.");

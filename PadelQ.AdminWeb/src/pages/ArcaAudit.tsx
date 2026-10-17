@@ -140,7 +140,7 @@ const ArcaAudit = () => {
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-zinc-400" />
                           <span className="text-sm font-bold text-zinc-700">
-                            {getInvoiceTypeName(inv.invoiceType)} {String(inv.invoiceNumber).padStart(8, '0')}
+                            {getInvoiceTypeName(inv.invoiceType)} {String(inv.puntoDeVenta || 3).padStart(5, '0')}-{String(inv.invoiceNumber).padStart(8, '0')}
                           </span>
                         </div>
                       ) : (
@@ -154,7 +154,7 @@ const ArcaAudit = () => {
                       {getStatusBadge(inv.arcaStatus)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {(!inv.arcaStatus || inv.arcaStatus === 'Error' || inv.arcaStatus === 'Pendiente' || inv.arcaStatus === 'No Requiere') && (
+                      {(!inv.arcaStatus || inv.arcaStatus.startsWith('Error') || inv.arcaStatus === 'Pendiente' || inv.arcaStatus === 'No Requiere') && (
                         <button 
                           onClick={() => handleRetry(inv.id)}
                           className="px-3 py-1.5 bg-black text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors"
@@ -245,10 +245,14 @@ const ArcaAudit = () => {
                   </div>
                 </div>
                 
-                {verificationData.isMocked && (
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3 mt-4">
-                    <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs font-bold text-blue-800 leading-relaxed">
+                {verificationData.message && (
+                  <div className={`p-4 rounded-2xl flex items-start gap-3 mt-4 border ${verificationData.isMocked ? 'bg-blue-50 border-blue-100' : 'bg-emerald-50 border-emerald-200'}`}>
+                    {verificationData.isMocked ? (
+                      <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <p className={`text-xs font-bold leading-relaxed ${verificationData.isMocked ? 'text-blue-800' : 'text-emerald-800'}`}>
                       {verificationData.message}
                     </p>
                   </div>

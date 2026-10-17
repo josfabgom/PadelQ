@@ -55,6 +55,13 @@ namespace PadelQ.Api.Controllers
                 _context.ArcaSettings.Add(setting);
             }
 
+            if (setting.IsProduction != dto.IsProduction || setting.CuitEmisor != dto.CuitEmisor)
+            {
+                setting.WsaaToken = null;
+                setting.WsaaSign = null;
+                setting.WsaaExpiration = null;
+            }
+
             setting.IsProduction = dto.IsProduction;
             setting.CuitEmisor = dto.CuitEmisor;
             setting.PuntoDeVenta = dto.PuntoDeVenta;
@@ -82,6 +89,9 @@ namespace PadelQ.Api.Controllers
             
             setting.PrivateKeyPem = privateKey;
             setting.CuitEmisor = dto.Cuit;
+            setting.WsaaToken = null;
+            setting.WsaaSign = null;
+            setting.WsaaExpiration = null;
             await _context.SaveChangesAsync();
 
             var bytes = Encoding.UTF8.GetBytes(csr);
@@ -105,6 +115,9 @@ namespace PadelQ.Api.Controllers
             if (setting == null) return NotFound("Configuración no inicializada.");
 
             setting.CertificateCrtPem = crtContent;
+            setting.WsaaToken = null;
+            setting.WsaaSign = null;
+            setting.WsaaExpiration = null;
             await _context.SaveChangesAsync();
 
             return Ok();

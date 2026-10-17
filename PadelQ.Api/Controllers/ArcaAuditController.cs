@@ -26,6 +26,9 @@ namespace PadelQ.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetInvoices()
         {
+            var settings = await _context.ArcaSettings.FirstOrDefaultAsync();
+            int ptoVta = settings != null && settings.PuntoDeVenta > 0 ? settings.PuntoDeVenta : 1;
+
             var rawTransactions = await _context.Transactions
                 .Include(t => t.User)
                 .OrderByDescending(t => t.Date)
@@ -45,7 +48,8 @@ namespace PadelQ.Api.Controllers
                     ArcaStatus = g.First().ArcaStatus,
                     Cae = g.First().Cae,
                     InvoiceNumber = g.First().InvoiceNumber,
-                    InvoiceType = g.First().InvoiceType
+                    InvoiceType = g.First().InvoiceType,
+                    PuntoDeVenta = ptoVta
                 })
                 .OrderByDescending(g => g.Date)
                 .Take(100)
@@ -69,6 +73,11 @@ namespace PadelQ.Api.Controllers
             }
             await _context.SaveChangesAsync();
 
+            if (refTx.PaymentGroupId.HasValue)
+            {
+                await _arcaService.RequestElectronicInvoiceAsync(refTx.PaymentGroupId.Value);
+            }
+
             return Ok();
         }
 
@@ -89,6 +98,10 @@ namespace PadelQ.Api.Controllers
         [HttpGet("export-iva")]
         public async Task<IActionResult> ExportLibroIva([FromQuery] int year, [FromQuery] int month)
         {
+            var settings = await _context.ArcaSettings.FirstOrDefaultAsync();
+            int ptoVta = settings != null && settings.PuntoDeVenta > 0 ? settings.PuntoDeVenta : 1;
+            string ptoVtaStr = ptoVta.ToString("D5");
+
             var transactions = await _context.Transactions
                 .Include(t => t.User)
                 .Where(t => t.ArcaStatus == "Aprobado" && t.Date.Year == year && t.Date.Month == month)
@@ -129,7 +142,7 @@ namespace PadelQ.Api.Controllers
                     {
                         Fecha = first.Date.ToString("dd/MM/yyyy"),
                         TipoComprobante = cbteTipoStr,
-                        PuntoVenta = "00001",
+                        PuntoVenta = ptoVtaStr,
                         NumeroComprobante = first.InvoiceNumber?.ToString("D8") ?? "",
                         TipoDocumento = docTipo,
                         NumeroDocumento = docNro,
@@ -180,6 +193,7 @@ namespace PadelQ.Api.Controllers
             var settings = await _context.ArcaSettings.FirstOrDefaultAsync();
             string companyName = "PadelQ";
             string cuit = settings?.CuitEmisor ?? "00000000000";
+            int ptoVta = settings != null && settings.PuntoDeVenta > 0 ? settings.PuntoDeVenta : 1;
             
             string invoiceTypeStr = transaction.InvoiceType switch
             {
@@ -193,20 +207,33 @@ namespace PadelQ.Api.Controllers
             string clientDoc = !string.IsNullOrEmpty(transaction.User?.Cuit) ? $"CUIT: {transaction.User.Cuit}" :
                                (!string.IsNullOrEmpty(transaction.User?.Dni) ? $"DNI: {transaction.User.Dni}" : "");
 
+            int tipoDocRec = 99;
+            long nroDocRec = 0;
+            if (!string.IsNullOrEmpty(transaction.User?.Cuit) && long.TryParse(new string(transaction.User.Cuit.Where(char.IsDigit).ToArray()), out long parsedCuit))
+            {
+                tipoDocRec = 80;
+                nroDocRec = parsedCuit;
+            }
+            else if (!string.IsNullOrEmpty(transaction.User?.Dni) && long.TryParse(new string(transaction.User.Dni.Where(char.IsDigit).ToArray()), out long parsedDni))
+            {
+                tipoDocRec = 96;
+                nroDocRec = parsedDni;
+            }
+
             decimal totalAmount = transactions.Sum(t => t.Amount);
 
             string afipJson = $@"{{
   ""ver"": 1,
   ""fecha"": ""{transaction.Date:yyyy-MM-dd}"",
   ""cuit"": {long.Parse(cuit.Replace("-", "").PadRight(11, '0'))},
-  ""ptoVta"": 1,
+  ""ptoVta"": {ptoVta},
   ""tipoCmp"": {transaction.InvoiceType},
   ""nroCmp"": {transaction.InvoiceNumber},
   ""importe"": {totalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)},
   ""moneda"": ""PES"",
   ""ctz"": 1,
-  ""tipoDocRec"": 99,
-  ""nroDocRec"": 0,
+  ""tipoDocRec"": {tipoDocRec},
+  ""nroDocRec"": {nroDocRec},
   ""tipoCodAut"": ""E"",
   ""codAut"": {transaction.Cae ?? "0"}
 }}";
@@ -230,7 +257,7 @@ namespace PadelQ.Api.Controllers
 <html>
 <head>
     <meta charset='utf-8'>
-    <title>Comprobante {invoiceTypeStr} - {transaction.InvoiceNumber:D8}</title>
+    <title>Comprobante {invoiceTypeStr} - {ptoVta:D5}-{transaction.InvoiceNumber:D8}</title>
     <style>
         body {{ font-family: 'Courier New', Courier, monospace; margin: 20px; font-size: 14px; max-width: 350px; }}
         h1, h2, h3 {{ text-align: center; margin: 5px 0; }}
@@ -247,7 +274,7 @@ namespace PadelQ.Api.Controllers
     <div class='divider'></div>
     
     <div class='text-center bold'>FACTURA ""{invoiceTypeStr}""</div>
-    <div class='text-center'>Nro: {transaction.InvoiceNumber:D8}</div>
+    <div class='text-center'>Nro: {ptoVta:D5}-{transaction.InvoiceNumber:D8}</div>
     <div class='text-center'>Fecha: {transaction.Date.ToString("dd/MM/yyyy HH:mm")}</div>
     <div class='divider'></div>
 
