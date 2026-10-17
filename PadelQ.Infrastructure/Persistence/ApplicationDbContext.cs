@@ -62,6 +62,7 @@ namespace PadelQ.Infrastructure.Persistence
         public DbSet<KitchenOrderAudit> KitchenOrderAudits { get; set; } = null!;
         public DbSet<ArcaSetting> ArcaSettings { get; set; } = null!;
         public DbSet<CloverSetting> CloverSettings { get; set; } = null!;
+        public DbSet<CloverPaymentAudit> CloverPaymentAudits { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -78,6 +79,7 @@ namespace PadelQ.Infrastructure.Persistence
             builder.Entity<Booking>().Property(b => b.DepositPaid).HasPrecision(18, 2);
             builder.Entity<Membership>().Property(b => b.MonthlyPrice).HasPrecision(18, 2);
             builder.Entity<Transaction>().Property(b => b.Amount).HasPrecision(18, 2);
+            builder.Entity<CloverPaymentAudit>().Property(b => b.Amount).HasPrecision(18, 2);
             builder.Entity<Space>().Property(b => b.PricePerSlot).HasPrecision(18, 2);
             builder.Entity<SpaceBooking>().Property(b => b.Price).HasPrecision(18, 2);
             builder.Entity<SpaceBooking>().Property(b => b.DepositPaid).HasPrecision(18, 2);

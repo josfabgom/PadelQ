@@ -24,6 +24,7 @@ import MercadoPagoAuditPage from './pages/MercadoPagoAudit';
 import KitchenOrders from './pages/KitchenOrders';
 import ArcaSettingsPage from './pages/ArcaSettings';
 import CloverSettingsPage from './pages/CloverSettings';
+import CloverAuditPage from './pages/CloverAudit';
 import ArcaAuditPage from './pages/ArcaAudit';
 
 function App() {
@@ -119,7 +120,8 @@ function App() {
           element={isAuthenticated ? <KitchenOrders /> : <Navigate to="/login" />} 
         />
         <Route path="/arca-settings" element={isAuthenticated ? <ArcaSettingsPage /> : <Navigate to="/login" />} />
-          <Route path="/clover-settings" element={isAuthenticated ? <CloverSettingsPage /> : <Navigate to="/login" />} />
+        <Route path="/clover-settings" element={isAuthenticated ? <CloverSettingsPage /> : <Navigate to="/login" />} />
+        <Route path="/clover-audit" element={isAuthenticated ? <CloverAuditPage /> : <Navigate to="/login" />} />
         <Route 
           path="/arca-audit" 
           element={isAuthenticated ? <ArcaAuditPage /> : <Navigate to="/login" />} 

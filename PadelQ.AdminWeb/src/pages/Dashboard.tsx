@@ -1,4 +1,4 @@
-﻿import React, { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { 
   DollarSign, Calendar as CalendarIcon, Users, Activity, TrendingUp, 
   Settings, CreditCard, QrCode, ShieldCheck, Box, ArrowRight, Utensils, Coffee
@@ -173,6 +173,15 @@ const Dashboard = () => {
         color: 'text-green-600 group-hover:text-white',
         bgHover: 'group-hover:bg-green-600',
         show: isAdmin
+      },
+      {
+        href: '/clover-audit',
+        icon: <CreditCard className="w-5 h-5" />,
+        label: 'Auditoría Clover',
+        desc: 'Control de pagos aprobados y cancelaciones en la terminal física Clover.',
+        color: 'text-emerald-600 group-hover:text-white',
+        bgHover: 'group-hover:bg-emerald-600',
+        show: isAdmin || isStaff
       },
       {
         href: '/arca-settings',

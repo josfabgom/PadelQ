@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
+import { executeCloverTerminalPayment, linkCloverAuditTransaction } from '../utils/cloverPaymentHelper';
 import Header from '../components/Header';
 import { 
   Users, CreditCard, ArrowLeft, Search, Plus, 
@@ -146,24 +147,32 @@ const CtaCte = () => {
     try {
       const m = paymentMethods.find(pm => pm.id?.toString() === selectedPaymentMethodId?.toString());
       const isClover = m?.name?.trim().toUpperCase().includes("CLOVER");
+      let cloverAuditId: number | undefined;
       if (isClover && Number(paymentAmount) > 0) {
-        try {
-          await api.post('/api/clover/charge', {
-            amount: Number(paymentAmount),
-            orderId: selectedUser.id
-          }, getAuthConfig());
-          alert("Se envió el cobro a la terminal Clover exitosamente.");
-        } catch (error: any) {
-          console.error("Error al conectar con Clover", error);
-          alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+        const cloverRes = await executeCloverTerminalPayment({
+          amount: Number(paymentAmount),
+          orderId: selectedUser.id,
+          sourceModule: 'Cuenta Corriente',
+          clientName: selectedUser.fullName,
+          description: paymentDesc || 'Pago Cuenta Corriente'
+        });
+        if (!cloverRes.approved) {
+          alert(cloverRes.message || "El cobro en la terminal Clover fue cancelado o rechazado.");
           return;
         }
+        cloverAuditId = cloverRes.auditId;
       }
 
       if (isMembershipPayment) {
         await api.post(`/api/transaction/membership-payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}`, {}, getAuthConfig());
       } else {
         await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}&paymentMethodId=${selectedPaymentMethodId}`, {}, getAuthConfig());
+      }
+      if (cloverAuditId) {
+        await linkCloverAuditTransaction(cloverAuditId, {
+          clientName: selectedUser.fullName,
+          description: paymentDesc || 'Pago Cuenta Corriente'
+        });
       }
       setShowPaymentModal(false);
       setPaymentAmount('');

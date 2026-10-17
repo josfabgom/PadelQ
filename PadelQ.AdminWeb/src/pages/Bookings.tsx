@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import { v4 as uuidv4 } from 'uuid';
 import api, { getAuthConfig } from '../api/api';
 import { createMercadoPagoIntent, getPointTerminals, PointTerminal } from '../api/mercadoPagoApi';
+import { executeCloverTerminalPayment, linkCloverAuditTransaction } from '../utils/cloverPaymentHelper';
 import {
     format,
     addDays,
@@ -714,19 +715,21 @@ const BookingsPage = () => {
                     .filter(sp => paymentMethods.find(pm => pm.id === sp.paymentMethodId)?.name?.trim().toUpperCase().includes("CLOVER"))
                     .reduce((sum, sp) => sum + (Number(sp.amount) || 0), 0);
 
+            let directSaleCloverAuditId: number | undefined;
             if (isClover && cloverAmount > 0) {
-                try {
-                    await api.post('/api/clover/charge', {
-                        amount: cloverAmount,
-                        orderId: uuidv4()
-                    }, getAuthConfig());
-                    alert("Se envió el cobro a la terminal Clover exitosamente.");
-                } catch (error: any) {
-                    console.error("Error al conectar con Clover", error);
-                    alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+                const cloverRes = await executeCloverTerminalPayment({
+                    amount: cloverAmount,
+                    orderId: uuidv4(),
+                    sourceModule: 'Venta Directa',
+                    clientName: selectedCtaCteUser?.fullName || directSaleData.clientName || 'Consumidor Final',
+                    description: 'Venta Directa POS'
+                });
+                if (!cloverRes.approved) {
+                    alert(cloverRes.message || "El cobro en la terminal Clover fue cancelado o rechazado.");
                     setLoading(false);
                     return;
                 }
+                directSaleCloverAuditId = cloverRes.auditId;
             }
 
             if (isPaid && !isInternal && !directSaleData.isSplitPayment && isMp) {
@@ -759,6 +762,11 @@ const BookingsPage = () => {
             }
 
             await api.post('/api/consumptions/bulk-direct-sale', payload, config);
+            if (directSaleCloverAuditId) {
+                await linkCloverAuditTransaction(directSaleCloverAuditId, {
+                    clientName: selectedCtaCteUser?.fullName || directSaleData.clientName || 'Consumidor Final'
+                });
+            }
 
             // --- COMBO TICKET PRINT ---
             directSaleData.consumptions.forEach(item => {
@@ -2032,19 +2040,21 @@ const BookingsPage = () => {
                 ? (isClover1 ? firstMethodAmount : 0) + (isClover2 ? (currentTransactionTotal - firstMethodAmount) : 0)
                 : currentTransactionTotal;
 
+            let bookingCloverAuditId: number | undefined;
             if (isClover && cloverAmount > 0) {
-                try {
-                    await api.post('/api/clover/charge', {
-                        amount: cloverAmount,
-                        orderId: booking.id
-                    }, getAuthConfig());
-                    alert("Se envió el cobro a la terminal Clover exitosamente.");
-                } catch (error: any) {
-                    console.error("Error al conectar con Clover", error);
-                    alert("Error al conectar con Clover: " + (error.response?.data || error.message || error));
+                const cloverRes = await executeCloverTerminalPayment({
+                    amount: cloverAmount,
+                    orderId: booking.id,
+                    sourceModule: 'Reserva / Turno',
+                    clientName: (booking as any).userFullName || (booking as any).guestName || 'Consumidor Final',
+                    description: `Cobro Reserva #${booking.id.substring(0, 8)}`
+                });
+                if (!cloverRes.approved) {
+                    alert(cloverRes.message || "El cobro en la terminal Clover fue cancelado o rechazado.");
                     setLoading(false);
                     return;
                 }
+                bookingCloverAuditId = cloverRes.auditId;
             }
 
             if (isMp) {
@@ -2244,6 +2254,12 @@ const BookingsPage = () => {
             // 5. Finalizar facturación electrónica del grupo
             try {
                 await api.post(`/api/transaction/finalize-payment-group/${paymentGroupId}`, {}, config);
+                if (bookingCloverAuditId) {
+                    await linkCloverAuditTransaction(bookingCloverAuditId, {
+                        paymentGroupId: paymentGroupId,
+                        clientName: (booking as any).userFullName || (booking as any).guestName || 'Consumidor Final'
+                    });
+                }
             } catch (err) {
                 console.error("Error finalizando facturación:", err);
             }

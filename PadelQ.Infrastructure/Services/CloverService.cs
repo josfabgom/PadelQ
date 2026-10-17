@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -11,7 +12,9 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PadelQ.Application.Common.Interfaces;
+using PadelQ.Domain.Entities;
 using PadelQ.Infrastructure.Persistence;
 
 namespace PadelQ.Infrastructure.Services
@@ -22,16 +25,33 @@ namespace PadelQ.Infrastructure.Services
         private const string RemoteSourceSdk = "com.clover.cloverconnector.cloud:4.1.2";
         private const string RemoteAppId = "com.padelq.pos:1.0.0";
 
+        private static readonly ConcurrentDictionary<int, ClientWebSocket> ActiveSessions = new();
+
         private readonly HttpClient _httpClient;
         private readonly ApplicationDbContext _context;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public CloverService(HttpClient httpClient, ApplicationDbContext context)
+        public CloverService(HttpClient httpClient, ApplicationDbContext context, IServiceScopeFactory scopeFactory)
         {
             _httpClient = httpClient;
             _context = context;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<bool> SendPaymentToDeviceAsync(decimal amount, string orderId, string deviceId)
+        {
+            int auditId = await InitiatePaymentOnDeviceAsync(amount, orderId, deviceId);
+            return auditId > 0;
+        }
+
+        public async Task<int> InitiatePaymentOnDeviceAsync(
+            decimal amount,
+            string orderId,
+            string deviceId,
+            string sourceModule = "Cobro POS",
+            string? clientName = null,
+            string? description = null,
+            string? processedBy = null)
         {
             var settings = await _context.CloverSettings.FirstOrDefaultAsync();
             if (settings == null || string.IsNullOrWhiteSpace(settings.AccessToken) || string.IsNullOrWhiteSpace(settings.MerchantId))
@@ -49,6 +69,7 @@ namespace PadelQ.Infrastructure.Services
 
             string? activeBaseUrl = null;
             string? resolvedDeviceUuid = null;
+            string? resolvedSerial = null;
 
             foreach (var candidateUrl in candidateBaseUrls)
             {
@@ -73,6 +94,7 @@ namespace PadelQ.Infrastructure.Services
                              string.Equals(id, cleanDeviceInput, StringComparison.OrdinalIgnoreCase)))
                         {
                             resolvedDeviceUuid = id;
+                            resolvedSerial = serial ?? cleanDeviceInput;
                             break;
                         }
                     }
@@ -80,6 +102,7 @@ namespace PadelQ.Infrastructure.Services
                     if (string.IsNullOrEmpty(resolvedDeviceUuid))
                     {
                         resolvedDeviceUuid = elements[0]?["id"]?.GetValue<string>()?.Trim();
+                        resolvedSerial = elements[0]?["serial"]?.GetValue<string>()?.Trim() ?? resolvedDeviceUuid;
                     }
                 }
                 break;
@@ -95,6 +118,24 @@ namespace PadelQ.Infrastructure.Services
                 throw new Exception($"No se encontró la terminal Clover '{cleanDeviceInput}' asociada al comercio {merchantId}.");
             }
 
+            string extPaymentId = "PQ" + Guid.NewGuid().ToString("N").Substring(0, 10).ToUpperInvariant();
+            var audit = new CloverPaymentAudit
+            {
+                ExternalPaymentId = extPaymentId,
+                OrderReference = orderId,
+                SourceModule = string.IsNullOrWhiteSpace(sourceModule) ? "Cobro POS" : sourceModule,
+                ClientName = string.IsNullOrWhiteSpace(clientName) ? "Consumidor Final" : clientName,
+                Description = description,
+                ProcessedBy = processedBy,
+                DeviceId = resolvedSerial ?? cleanDeviceInput,
+                Amount = amount,
+                Status = "PENDING",
+                StatusDetail = "Esperando pago en la terminal Clover...",
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.CloverPaymentAudits.Add(audit);
+            await _context.SaveChangesAsync();
+
             // 1. Notificar a la terminal (remote_pay) y obtener el host WebSocket de Cloud Pay Display
             string cleanUuidNoHyphens = resolvedDeviceUuid.Replace("-", "");
             using var alertReq = new HttpRequestMessage(HttpMethod.Post, $"{activeBaseUrl}/v2/merchant/{merchantId}/remote_pay");
@@ -105,6 +146,10 @@ namespace PadelQ.Infrastructure.Services
             var alertBody = await alertRes.Content.ReadAsStringAsync();
             if (!alertRes.IsSuccessStatusCode)
             {
+                audit.Status = "ERROR";
+                audit.StatusDetail = $"Error remote_pay ({alertRes.StatusCode}): {alertBody}";
+                audit.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
                 throw new Exception($"Error inicializando conexión con Clover ({alertRes.StatusCode}): {alertBody}");
             }
 
@@ -115,6 +160,10 @@ namespace PadelQ.Infrastructure.Services
 
             if (string.IsNullOrEmpty(wsHost) || string.IsNullOrEmpty(wsToken))
             {
+                audit.Status = "ERROR";
+                audit.StatusDetail = "Respuesta incompleta de Clover remote_pay.";
+                audit.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
                 throw new Exception($"Respuesta incompleta de Clover remote_pay: {alertBody}");
             }
 
@@ -159,7 +208,6 @@ namespace PadelQ.Infrastructure.Services
                 bool discoveryReceived = false;
                 bool retriedAfterBreak = false;
                 long amountCents = (long)Math.Round(amount * 100m);
-                string extPaymentId = "PQ" + Guid.NewGuid().ToString("N").Substring(0, 10).ToUpperInvariant();
 
                 while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
                 {
@@ -203,10 +251,9 @@ namespace PadelQ.Infrastructure.Services
 
                             if (string.Equals(result, "SUCCESS", StringComparison.OrdinalIgnoreCase))
                             {
-                                // El cobro ya está en pantalla en la terminal Clover.
-                                // Mantenemos viva la sesión WebSocket en segundo plano mientras el cliente pasa la tarjeta.
-                                _ = KeepSessionAliveDuringPaymentAsync(ws);
-                                return true;
+                                ActiveSessions[audit.Id] = ws;
+                                _ = MonitorPaymentSessionAsync(ws, audit.Id);
+                                return audit.Id;
                             }
 
                             if (!retriedAfterBreak)
@@ -220,11 +267,17 @@ namespace PadelQ.Infrastructure.Services
                                 }, cts.Token);
                                 await Task.Delay(900, cts.Token);
                                 extPaymentId = "PQ" + Guid.NewGuid().ToString("N").Substring(0, 10).ToUpperInvariant();
+                                audit.ExternalPaymentId = extPaymentId;
+                                await _context.SaveChangesAsync();
                                 await SendTxStartAsync(ws, "4", amountCents, extPaymentId, cts.Token);
                                 continue;
                             }
 
                             string reason = payloadNode?["reason"]?.GetValue<string>() ?? payloadNode?["message"]?.GetValue<string>() ?? result ?? "Error desconocido";
+                            audit.Status = "ERROR";
+                            audit.StatusDetail = $"Terminal rechazó iniciar el cobro: {reason}";
+                            audit.CompletedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
                             ws.Dispose();
                             throw new Exception($"La terminal Clover rechazó iniciar el cobro: {reason}");
                         }
@@ -232,14 +285,21 @@ namespace PadelQ.Infrastructure.Services
                         if (string.Equals(method, "UI_STATE", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(method, "TX_STATE", StringComparison.OrdinalIgnoreCase))
                         {
-                            // Si la terminal ya cambió de estado UI hacia el cobro, también es exitoso
-                            _ = KeepSessionAliveDuringPaymentAsync(ws);
-                            return true;
+                            ActiveSessions[audit.Id] = ws;
+                            _ = MonitorPaymentSessionAsync(ws, audit.Id);
+                            return audit.Id;
                         }
                     }
                 }
 
                 ws.Dispose();
+                audit.Status = "ERROR";
+                audit.StatusDetail = !discoveryReceived
+                    ? "La terminal Clover no respondió (verifique Cloud Pay Display)."
+                    : "Se agotó el tiempo de espera inicial con la terminal Clover.";
+                audit.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
                 if (!discoveryReceived)
                 {
                     throw new Exception("La terminal Clover no respondió. Verifique que esté encendida, con internet y con la app 'Cloud Pay Display' abierta.");
@@ -247,57 +307,26 @@ namespace PadelQ.Infrastructure.Services
 
                 throw new Exception("Se agotó el tiempo de espera aguardando respuesta de la terminal Clover.");
             }
-            catch
+            catch (Exception ex)
             {
                 ws.Dispose();
+                if (audit.Status == "PENDING")
+                {
+                    audit.Status = "ERROR";
+                    audit.StatusDetail = ex.Message;
+                    audit.CompletedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
                 throw;
             }
         }
 
-        private static async Task SendTxStartAsync(ClientWebSocket ws, string messageId, long amountCents, string externalPaymentId, CancellationToken ct)
-        {
-            var txStartPayload = new
-            {
-                method = "TX_START",
-                messageId = messageId,
-                version = 2,
-                order = (object?)null,
-                requestInfo = "SALE",
-                payIntent = new
-                {
-                    action = "com.clover.remote.protocol.action.START_REMOTE_PROTOCOL_PAY",
-                    amount = amountCents,
-                    tipAmount = 0,
-                    transactionType = "PAYMENT",
-                    externalPaymentId = externalPaymentId,
-                    requiresRemoteConfirmation = false,
-                    allowPartialAuth = false,
-                    transactionSettings = new
-                    {
-                        cardEntryMethods = 34567,
-                        disableCashBack = true,
-                        cloverShouldHandleReceipts = true,
-                        forcePinEntryOnSwipe = false,
-                        disableRestartTransactionOnFailure = false,
-                        allowOfflinePayment = false,
-                        approveOfflinePaymentWithoutPrompt = false,
-                        forceOfflinePayment = false,
-                        disableReceiptSelection = false,
-                        disableDuplicateCheck = false,
-                        autoAcceptPaymentConfirmations = true,
-                        autoAcceptSignature = true,
-                        returnResultOnTransactionComplete = false
-                    }
-                }
-            };
-
-            await SendRemoteCommandAsync(ws, messageId, "TX_START", txStartPayload, ct);
-        }
-
-        private static async Task KeepSessionAliveDuringPaymentAsync(ClientWebSocket ws)
+        private async Task MonitorPaymentSessionAsync(ClientWebSocket ws, int auditId)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             int msgCounter = 10;
+            bool finalStateRecorded = false;
+
             try
             {
                 while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
@@ -353,9 +382,48 @@ namespace PadelQ.Infrastructure.Services
                             verified = true
                         }, cts.Token);
                     }
-                    else if (string.Equals(method, "FINISH_OK", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(method, "FINISH_CANCEL", StringComparison.OrdinalIgnoreCase))
+                    else if (string.Equals(method, "FINISH_OK", StringComparison.OrdinalIgnoreCase))
                     {
+                        string? cloverPayId = null;
+                        string? cloverOrdId = null;
+                        string? cardBrand = null;
+                        string? cardLast4 = null;
+                        string? authCode = null;
+                        string? entryType = null;
+
+                        if (!string.IsNullOrEmpty(payloadStr))
+                        {
+                            try
+                            {
+                                var payloadNode = JsonNode.Parse(payloadStr);
+                                var paymentNode = payloadNode?["payment"];
+                                cloverPayId = paymentNode?["id"]?.GetValue<string>();
+                                cloverOrdId = paymentNode?["order"]?["id"]?.GetValue<string>();
+                                var cardTx = paymentNode?["cardTransaction"];
+                                cardBrand = cardTx?["cardType"]?.GetValue<string>();
+                                cardLast4 = cardTx?["last4"]?.GetValue<string>();
+                                authCode = cardTx?["authCode"]?.GetValue<string>();
+                                entryType = cardTx?["entryType"]?.GetValue<string>();
+                            }
+                            catch
+                            {
+                                // Continuar aunque algún campo opcional no venga en el JSON
+                            }
+                        }
+
+                        await UpdateAuditRecordAsync(
+                            auditId,
+                            "APPROVED",
+                            "Pago aprobado en la terminal Clover",
+                            cloverPayId,
+                            cloverOrdId,
+                            cardBrand,
+                            cardLast4,
+                            authCode,
+                            entryType);
+
+                        finalStateRecorded = true;
+
                         string nextId = (++msgCounter).ToString();
                         await SendRemoteCommandAsync(ws, nextId, "SHOW_WELCOME_SCREEN", new
                         {
@@ -364,6 +432,35 @@ namespace PadelQ.Infrastructure.Services
                             version = 0
                         }, cts.Token);
                         break;
+                    }
+                    else if (string.Equals(method, "FINISH_CANCEL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await UpdateAuditRecordAsync(
+                            auditId,
+                            "CANCELLED",
+                            "Pago cancelado desde la terminal física Clover");
+
+                        finalStateRecorded = true;
+
+                        string nextId = (++msgCounter).ToString();
+                        await SendRemoteCommandAsync(ws, nextId, "SHOW_WELCOME_SCREEN", new
+                        {
+                            method = "SHOW_WELCOME_SCREEN",
+                            messageId = nextId,
+                            version = 0
+                        }, cts.Token);
+                        break;
+                    }
+                }
+
+                if (!finalStateRecorded)
+                {
+                    if (cts.Token.IsCancellationRequested)
+                    {
+                        await UpdateAuditRecordAsync(
+                            auditId,
+                            "TIMEOUT",
+                            "Tiempo de espera agotado (2 min) sin completar el pago en la terminal.");
                     }
                 }
 
@@ -378,8 +475,247 @@ namespace PadelQ.Infrastructure.Services
             }
             finally
             {
+                ActiveSessions.TryRemove(auditId, out _);
                 ws.Dispose();
             }
+        }
+
+        private async Task UpdateAuditRecordAsync(
+            int auditId,
+            string status,
+            string statusDetail,
+            string? cloverPaymentId = null,
+            string? cloverOrderId = null,
+            string? cardBrand = null,
+            string? cardLast4 = null,
+            string? authCode = null,
+            string? entryType = null)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var audit = await db.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == auditId);
+            if (audit == null) return;
+
+            // No sobreescribir si ya quedó APPROVED
+            if (audit.Status == "APPROVED" && status != "APPROVED") return;
+
+            audit.Status = status;
+            audit.StatusDetail = statusDetail;
+            if (!string.IsNullOrEmpty(cloverPaymentId)) audit.CloverPaymentId = cloverPaymentId;
+            if (!string.IsNullOrEmpty(cloverOrderId)) audit.CloverOrderId = cloverOrderId;
+            if (!string.IsNullOrEmpty(cardBrand)) audit.CardBrand = cardBrand;
+            if (!string.IsNullOrEmpty(cardLast4)) audit.CardLast4 = cardLast4;
+            if (!string.IsNullOrEmpty(authCode)) audit.AuthCode = authCode;
+            if (!string.IsNullOrEmpty(entryType)) audit.EntryType = entryType;
+            audit.CompletedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task<bool> CancelPaymentOnDeviceAsync(int auditId)
+        {
+            var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == auditId);
+            if (audit == null) return false;
+
+            if (ActiveSessions.TryRemove(auditId, out var ws))
+            {
+                try
+                {
+                    if (ws.State == WebSocketState.Open)
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        await SendRemoteCommandAsync(ws, "99", "BREAK", new
+                        {
+                            method = "BREAK",
+                            messageId = "99",
+                            version = 0
+                        }, cts.Token);
+                        await SendRemoteCommandAsync(ws, "100", "SHOW_WELCOME_SCREEN", new
+                        {
+                            method = "SHOW_WELCOME_SCREEN",
+                            messageId = "100",
+                            version = 0
+                        }, cts.Token);
+                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Cancelled by user", CancellationToken.None);
+                    }
+                }
+                catch
+                {
+                    // Ignorar si ya estaba cerrada
+                }
+                finally
+                {
+                    ws.Dispose();
+                }
+            }
+
+            if (audit.Status == "PENDING")
+            {
+                audit.Status = "CANCELLED";
+                audit.StatusDetail = "Cobro cancelado por el operador desde el sistema";
+                audit.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            return true;
+        }
+
+        public async Task<object> VerifyPaymentWithCloverAsync(int auditId)
+        {
+            var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == auditId);
+            if (audit == null)
+                throw new Exception("Registro de auditoría Clover no encontrado.");
+
+            var settings = await _context.CloverSettings.FirstOrDefaultAsync();
+            if (settings == null || string.IsNullOrWhiteSpace(settings.AccessToken) || string.IsNullOrWhiteSpace(settings.MerchantId))
+                throw new Exception("Credenciales de Clover no configuradas.");
+
+            string merchantId = settings.MerchantId.Trim();
+            string accessToken = settings.AccessToken.Trim();
+            string baseUrl = settings.IsProduction ? "https://api.la.clover.com" : "https://apisandbox.dev.clover.com";
+
+            JsonNode? paymentNode = null;
+
+            // 1. Si tenemos CloverPaymentId, consultarlo directo en /v3/merchants/{mId}/payments/{id}
+            if (!string.IsNullOrWhiteSpace(audit.CloverPaymentId))
+            {
+                using var req = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"{baseUrl}/v3/merchants/{merchantId}/payments/{Uri.EscapeDataString(audit.CloverPaymentId)}?expand=cardTransaction");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var res = await _httpClient.SendAsync(req);
+                if (res.IsSuccessStatusCode)
+                {
+                    var json = await res.Content.ReadAsStringAsync();
+                    paymentNode = JsonNode.Parse(json);
+                }
+            }
+
+            // 2. Si no teníamos CloverPaymentId, buscar por externalPaymentId en Clover
+            if (paymentNode == null && !string.IsNullOrWhiteSpace(audit.ExternalPaymentId) && !audit.ExternalPaymentId.StartsWith("HIST-"))
+            {
+                using var req = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"{baseUrl}/v3/merchants/{merchantId}/payments?filter=externalPaymentId={Uri.EscapeDataString(audit.ExternalPaymentId)}&expand=cardTransaction");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var res = await _httpClient.SendAsync(req);
+                if (res.IsSuccessStatusCode)
+                {
+                    var json = await res.Content.ReadAsStringAsync();
+                    var root = JsonNode.Parse(json);
+                    var elements = root?["elements"]?.AsArray();
+                    if (elements != null && elements.Count > 0)
+                    {
+                        paymentNode = elements[0];
+                    }
+                }
+            }
+
+            if (paymentNode != null)
+            {
+                string? cloverPayId = paymentNode["id"]?.GetValue<string>();
+                string? cloverResult = paymentNode["result"]?.GetValue<string>();
+                long? amountCents = paymentNode["amount"]?.GetValue<long>();
+                var cardTx = paymentNode["cardTransaction"];
+                string? cardBrand = cardTx?["cardType"]?.GetValue<string>();
+                string? cardLast4 = cardTx?["last4"]?.GetValue<string>();
+                string? authCode = cardTx?["authCode"]?.GetValue<string>();
+                string? entryType = cardTx?["entryType"]?.GetValue<string>();
+
+                if (!string.IsNullOrEmpty(cloverPayId)) audit.CloverPaymentId = cloverPayId;
+                if (!string.IsNullOrEmpty(cardBrand)) audit.CardBrand = cardBrand;
+                if (!string.IsNullOrEmpty(cardLast4)) audit.CardLast4 = cardLast4;
+                if (!string.IsNullOrEmpty(authCode)) audit.AuthCode = authCode;
+                if (!string.IsNullOrEmpty(entryType)) audit.EntryType = entryType;
+
+                if (string.Equals(cloverResult, "SUCCESS", StringComparison.OrdinalIgnoreCase) && audit.Status != "APPROVED")
+                {
+                    audit.Status = "APPROVED";
+                    audit.StatusDetail = "Pago verificado y aprobado en los servidores de Clover";
+                    audit.CompletedAt ??= DateTime.UtcNow;
+                }
+                await _context.SaveChangesAsync();
+
+                return new
+                {
+                    foundInClover = true,
+                    cloverPaymentId = audit.CloverPaymentId,
+                    externalPaymentId = audit.ExternalPaymentId,
+                    cloverResult = cloverResult ?? "SUCCESS",
+                    amount = amountCents.HasValue ? amountCents.Value / 100m : audit.Amount,
+                    cardBrand = audit.CardBrand ?? "-",
+                    cardLast4 = audit.CardLast4 ?? "-",
+                    authCode = audit.AuthCode ?? "-",
+                    entryType = audit.EntryType ?? "-",
+                    status = audit.Status,
+                    statusDetail = audit.StatusDetail,
+                    deviceId = audit.DeviceId,
+                    date = (audit.CompletedAt ?? audit.CreatedAt).ToString("dd/MM/yyyy HH:mm:ss"),
+                    message = $"Comprobante verificado en tiempo real en los servidores de Clover ({merchantId})."
+                };
+            }
+
+            return new
+            {
+                foundInClover = false,
+                cloverPaymentId = audit.CloverPaymentId ?? "-",
+                externalPaymentId = audit.ExternalPaymentId,
+                cloverResult = audit.Status == "CANCELLED" ? "CANCELLED_ON_TERMINAL" : audit.Status,
+                amount = audit.Amount,
+                cardBrand = audit.CardBrand ?? "-",
+                cardLast4 = audit.CardLast4 ?? "-",
+                authCode = audit.AuthCode ?? "-",
+                entryType = audit.EntryType ?? "-",
+                status = audit.Status,
+                statusDetail = audit.StatusDetail,
+                deviceId = audit.DeviceId,
+                date = (audit.CompletedAt ?? audit.CreatedAt).ToString("dd/MM/yyyy HH:mm:ss"),
+                message = audit.Status == "CANCELLED"
+                    ? "Esta operación fue cancelada en la terminal física antes de procesarse el cargo con tarjeta."
+                    : (audit.ExternalPaymentId.StartsWith("HIST-")
+                        ? "Transacción histórica registrada en PadelQ previo a la activación del detalle de cupón Clover."
+                        : "No se registra cargo cobrado en los servidores de Clover para este intento.")
+            };
+        }
+
+        private static async Task SendTxStartAsync(ClientWebSocket ws, string messageId, long amountCents, string externalPaymentId, CancellationToken ct)
+        {
+            var txStartPayload = new
+            {
+                method = "TX_START",
+                messageId = messageId,
+                version = 2,
+                order = (object?)null,
+                requestInfo = "SALE",
+                payIntent = new
+                {
+                    action = "com.clover.remote.protocol.action.START_REMOTE_PROTOCOL_PAY",
+                    amount = amountCents,
+                    tipAmount = 0,
+                    transactionType = "PAYMENT",
+                    externalPaymentId = externalPaymentId,
+                    requiresRemoteConfirmation = false,
+                    allowPartialAuth = false,
+                    transactionSettings = new
+                    {
+                        cardEntryMethods = 34567,
+                        disableCashBack = true,
+                        cloverShouldHandleReceipts = true,
+                        forcePinEntryOnSwipe = false,
+                        disableRestartTransactionOnFailure = false,
+                        allowOfflinePayment = false,
+                        approveOfflinePaymentWithoutPrompt = false,
+                        forceOfflinePayment = false,
+                        disableReceiptSelection = false,
+                        disableDuplicateCheck = false,
+                        autoAcceptPaymentConfirmations = true,
+                        autoAcceptSignature = true,
+                        returnResultOnTransactionComplete = false
+                    }
+                }
+            };
+
+            await SendRemoteCommandAsync(ws, messageId, "TX_START", txStartPayload, ct);
         }
 
         private static async Task SendRemoteCommandAsync(ClientWebSocket ws, string id, string method, object payloadObj, CancellationToken ct)
@@ -438,7 +774,3 @@ namespace PadelQ.Infrastructure.Services
         }
     }
 }
-
-
-
-

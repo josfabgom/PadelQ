@@ -129,7 +129,80 @@ using (var scope = app.Services.CreateScope())
             
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Products') AND name = 'IsDoubleUnitCombo') ALTER TABLE Products ADD IsDoubleUnitCombo BIT NOT NULL DEFAULT 0;");
             await context.Database.ExecuteSqlRawAsync("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('BookingConsumptions') AND name = 'IsComboRedeemed') ALTER TABLE BookingConsumptions ADD IsComboRedeemed BIT NOT NULL DEFAULT 0;");
-        } catch { }
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE Transactions ALTER COLUMN ArcaStatus NVARCHAR(500) NULL;");
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'CloverPaymentAudits')
+                BEGIN
+                    CREATE TABLE CloverPaymentAudits (
+                        Id INT IDENTITY(1,1) PRIMARY KEY,
+                        ExternalPaymentId NVARCHAR(64) NOT NULL,
+                        CloverPaymentId NVARCHAR(64) NULL,
+                        CloverOrderId NVARCHAR(64) NULL,
+                        OrderReference NVARCHAR(128) NULL,
+                        SourceModule NVARCHAR(64) NOT NULL,
+                        ClientName NVARCHAR(200) NULL,
+                        Description NVARCHAR(500) NULL,
+                        ProcessedBy NVARCHAR(128) NULL,
+                        DeviceId NVARCHAR(64) NOT NULL,
+                        Amount DECIMAL(18,2) NOT NULL,
+                        Status NVARCHAR(32) NOT NULL,
+                        StatusDetail NVARCHAR(500) NULL,
+                        CardBrand NVARCHAR(50) NULL,
+                        CardLast4 NVARCHAR(16) NULL,
+                        AuthCode NVARCHAR(64) NULL,
+                        EntryType NVARCHAR(64) NULL,
+                        PaymentGroupId UNIQUEIDENTIFIER NULL,
+                        CreatedAt DATETIME2 NOT NULL,
+                        CompletedAt DATETIME2 NULL
+                    );
+                END");
+
+            if (!await context.CloverPaymentAudits.AnyAsync())
+            {
+                var histCloverTxs = await context.Transactions
+                    .Include(t => t.User)
+                    .Include(t => t.PaymentMethod)
+                    .Where(t => t.PaymentMethod != null && t.PaymentMethod.Name.ToUpper().Contains("CLOVER"))
+                    .OrderBy(t => t.Date)
+                    .ToListAsync();
+
+                var groupedHist = histCloverTxs
+                    .GroupBy(t => t.PaymentGroupId ?? Guid.NewGuid())
+                    .ToList();
+
+                foreach (var g in groupedHist)
+                {
+                    var first = g.First();
+                    string desc = string.Join(" + ", g.Select(x => x.Description).Where(d => !string.IsNullOrEmpty(d)));
+                    if (desc.Length > 490) desc = desc.Substring(0, 490);
+                    string srcModule = desc.Contains("Venta Directa", StringComparison.OrdinalIgnoreCase)
+                        ? "Venta Directa"
+                        : (first.BookingId.HasValue || first.SpaceBookingId.HasValue || desc.Contains("Cancha", StringComparison.OrdinalIgnoreCase)
+                            ? "Reserva / Turno"
+                            : "Cobro POS");
+
+                    context.CloverPaymentAudits.Add(new PadelQ.Domain.Entities.CloverPaymentAudit
+                    {
+                        ExternalPaymentId = $"HIST-{first.Id}",
+                        OrderReference = (first.BookingId ?? first.SpaceBookingId)?.ToString(),
+                        SourceModule = srcModule,
+                        ClientName = first.User?.FullName ?? "Consumidor Final",
+                        Description = desc,
+                        ProcessedBy = first.ProcessedBy ?? "Sistema",
+                        DeviceId = "C046LT44820603",
+                        Amount = g.Sum(x => x.Amount),
+                        Status = "APPROVED",
+                        StatusDetail = "Pago registrado en terminal Clover",
+                        PaymentGroupId = first.PaymentGroupId,
+                        CreatedAt = first.Date,
+                        CompletedAt = first.Date
+                    });
+                }
+                await context.SaveChangesAsync();
+            }
+        } catch (Exception patchEx) {
+            Console.WriteLine("Aviso en inicialización de tabla CloverPaymentAudits: " + patchEx.Message);
+        }
 
         await DbInitializer.SeedAsync(services);
         PadelQ.Api.UserDiagnostic.PrintUsers(services);
