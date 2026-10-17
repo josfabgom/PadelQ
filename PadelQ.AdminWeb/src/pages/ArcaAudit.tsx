@@ -58,16 +58,21 @@ const ArcaAudit = () => {
 
   const getStatusBadge = (status: string | null) => {
     if (!status || status === 'Pendiente') {
-      return <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold flex items-center gap-1 w-max"><Clock className="w-3 h-3" /> Pendiente</span>;
+      return <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold flex items-center gap-1 w-max"><Clock className="w-3 h-3 flex-shrink-0" /> Pendiente</span>;
     }
     if (status === 'Aprobado') {
-      return <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold flex items-center gap-1 w-max"><CheckCircle2 className="w-3 h-3" /> Aprobado</span>;
+      return <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold flex items-center gap-1 w-max"><CheckCircle2 className="w-3 h-3 flex-shrink-0" /> Aprobado</span>;
     }
     if (status === 'No Requiere') {
-      return <span className="px-3 py-1 bg-zinc-100 text-zinc-500 rounded-full text-xs font-bold flex items-center gap-1 w-max"><FileText className="w-3 h-3" /> No Facturable</span>;
+      return <span className="px-3 py-1 bg-zinc-100 text-zinc-500 rounded-full text-xs font-bold flex items-center gap-1 w-max"><FileText className="w-3 h-3 flex-shrink-0" /> No Facturable</span>;
     }
     // If it's an actual string error from AFIP
-    return <span className="px-3 py-1 bg-rose-100 text-rose-700 rounded-full text-xs font-bold flex items-center gap-1 w-max"><AlertTriangle className="w-3 h-3" /> {status.startsWith('Error') ? status : 'Error'}</span>;
+    return (
+      <span title={status} className="px-3 py-1 bg-rose-100 text-rose-700 rounded-full text-xs font-bold flex items-center gap-1 max-w-[220px]">
+        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+        <span className="truncate">{status.startsWith('Error') ? status : 'Error'}</span>
+      </span>
+    );
   };
 
   const getInvoiceTypeName = (type: number | null) => {
@@ -109,36 +114,36 @@ const ArcaAudit = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-50/50 border-b border-zinc-100">
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Fecha</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Cliente</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Monto</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Comprobante</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">CAE</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Estado AFIP</th>
-                <th className="px-6 py-4 text-xs font-black uppercase tracking-widest text-zinc-500 text-right">Acción</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Fecha</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Cliente</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Monto</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Comprobante</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">CAE</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500">Estado AFIP</th>
+                <th className="px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td colSpan={7} className="px-6 py-10 text-center text-zinc-500">Cargando...</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-zinc-500">Cargando...</td></tr>
               ) : invoices.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-10 text-center text-zinc-500">No hay transacciones recientes.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-zinc-500">No hay transacciones recientes.</td></tr>
               ) : (
                 invoices.map((inv) => (
                   <tr key={inv.id} className="hover:bg-zinc-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-zinc-900">
+                    <td className="px-4 py-4 text-sm font-medium text-zinc-900 whitespace-nowrap">
                       {new Date(inv.date).toLocaleString('es-AR')}
                     </td>
-                    <td className="px-6 py-4 text-sm font-bold text-zinc-900">
+                    <td className="px-4 py-4 text-sm font-bold text-zinc-900">
                       {inv.userName}
                     </td>
-                    <td className="px-6 py-4 text-sm font-black text-zinc-900">
+                    <td className="px-4 py-4 text-sm font-black text-zinc-900 whitespace-nowrap">
                       ${inv.amount.toLocaleString()}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       {inv.invoiceNumber ? (
                         <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-zinc-400" />
+                          <FileText className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                           <span className="text-sm font-bold text-zinc-700">
                             {getInvoiceTypeName(inv.invoiceType)} {String(inv.puntoDeVenta || 3).padStart(5, '0')}-{String(inv.invoiceNumber).padStart(8, '0')}
                           </span>
@@ -147,13 +152,13 @@ const ArcaAudit = () => {
                         <span className="text-sm text-zinc-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm font-mono text-zinc-600">
+                    <td className="px-4 py-4 text-sm font-mono text-zinc-600 whitespace-nowrap">
                       {inv.cae || '-'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       {getStatusBadge(inv.arcaStatus)}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
                       {(!inv.arcaStatus || inv.arcaStatus.startsWith('Error') || inv.arcaStatus === 'Pendiente' || inv.arcaStatus === 'No Requiere') && (
                         <button 
                           onClick={() => handleRetry(inv.id)}
