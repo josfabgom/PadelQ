@@ -146,12 +146,12 @@ const formatARS = (amount: number) => {
     }).format(amount);
 };
 
-const getRentDebt = (booking: any) => Math.max(0, booking.price - booking.depositPaid);
+const getRentDebt = (booking: any) => { const diff = (booking.price || 0) - (booking.depositPaid || 0); return diff <= 0.50 ? 0 : diff; };
 
 const getConsumptionDebt = (booking: any) => {
     return (booking.bookingConsumptions || [])
         .filter((c: any) => !c.isPaid)
-        .reduce((sum: number, c: any) => sum + (c.totalPrice || (c.unitPrice * c.quantity)), 0);
+        .reduce((sum: number, c: any) => { const rem = Math.max(0, (c.totalPrice || (c.unitPrice * c.quantity)) - (c.depositPaid || 0)); return sum + (rem <= 0.50 ? 0 : rem); }, 0);
 };
 
 const getTotalDebt = (booking: any) => getRentDebt(booking) + getConsumptionDebt(booking);
@@ -160,7 +160,7 @@ const isFullyPaid = (booking: any) => getTotalDebt(booking) <= 0;
 
 const renderPartsSelector = (id: string, partsCount: number, selectedParts: number[], originalAmount: number, paidAmount: number, onPartsChange: (parts: number[]) => void) => {
     const partPrice = originalAmount / partsCount;
-    const paidParts = Math.floor(paidAmount / partPrice);
+    const paidParts = partPrice > 0 ? Math.floor((paidAmount + 0.50) / partPrice) : 0;
     
     return (
         <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-black/5">
@@ -761,11 +761,16 @@ const BookingsPage = () => {
                 return;
             }
 
-            await api.post('/api/consumptions/bulk-direct-sale', payload, config);
+            const bulkRes = await api.post('/api/consumptions/bulk-direct-sale', payload, config);
             if (directSaleCloverAuditId) {
-                await linkCloverAuditTransaction(directSaleCloverAuditId, {
-                    clientName: selectedCtaCteUser?.fullName || directSaleData.clientName || 'Consumidor Final'
-                });
+                try {
+                    await linkCloverAuditTransaction(directSaleCloverAuditId, {
+                        paymentGroupId: bulkRes.data?.paymentGroupId || bulkRes.data?.PaymentGroupId,
+                        clientName: selectedCtaCteUser?.fullName || directSaleData.clientName || 'Consumidor Final'
+                    });
+                } catch (linkErr) {
+                    console.error("Error vinculando auditoría Clover en venta directa:", linkErr);
+                }
             }
 
             // --- COMBO TICKET PRINT ---
@@ -2190,8 +2195,8 @@ const BookingsPage = () => {
                     await registerPayment(p2, secondPaymentMethod, rp.desc + " (Parte Mixta 2)", rp.id, rbIsSpace);
                 }
 
-                if (rbIsSpace) await api.post(`/api/spacebookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
-                else await api.post(`/api/bookings/${rp.id}/partial-pay?amount=${rp.amount}`, {}, config);
+                if (rbIsSpace) await api.post(`/api/spacebookings/${rp.id}/partial-pay?amount=${Math.round(rp.amount * 100) / 100}`, {}, config);
+                else await api.post(`/api/bookings/${rp.id}/partial-pay?amount=${Math.round(rp.amount * 100) / 100}`, {}, config);
             }
 
             // 4. Pagar Deuda Anterior (Cuenta Corriente)
@@ -2232,7 +2237,7 @@ const BookingsPage = () => {
                         await registerPayment(p2, secondPaymentMethod, gp.desc + " (Parte Mixta 2)", linkedId, isSpaceConsumption);
                     }
 
-                    if (paymentForThisRecord >= recordRemaining) {
+                    if (paymentForThisRecord >= recordRemaining - 0.50) {
                         await api.put(`/api/consumptions/${record.id}/pay`, {}, config);
                         
                         // --- COMBO TICKET PRINT ---
@@ -2244,7 +2249,7 @@ const BookingsPage = () => {
                             }, booking.user?.fullName || booking.guestName || 'Particular');
                         }
                     } else {
-                        await api.post(`/api/consumptions/${record.id}/partial-pay?amount=${paymentForThisRecord}`, {}, config);
+                        await api.post(`/api/consumptions/${record.id}/partial-pay?amount=${Math.round(paymentForThisRecord * 100) / 100}`, {}, config);
                     }
                     
                     remainingPaymentToDistribute -= paymentForThisRecord;
@@ -2253,13 +2258,17 @@ const BookingsPage = () => {
 
             // 5. Finalizar facturación electrónica del grupo
             try {
-                await api.post(`/api/transaction/finalize-payment-group/${paymentGroupId}`, {}, config);
                 if (bookingCloverAuditId) {
-                    await linkCloverAuditTransaction(bookingCloverAuditId, {
-                        paymentGroupId: paymentGroupId,
-                        clientName: (booking as any).userFullName || (booking as any).guestName || 'Consumidor Final'
-                    });
+                    try {
+                        await linkCloverAuditTransaction(bookingCloverAuditId, {
+                            paymentGroupId: paymentGroupId,
+                            clientName: (booking as any).user?.fullName || (booking as any).userFullName || (booking as any).guestName || 'Consumidor Final'
+                        });
+                    } catch (linkErr) {
+                        console.error("Error vinculando auditoría Clover:", linkErr);
+                    }
                 }
+                await api.post(`/api/transaction/finalize-payment-group/${paymentGroupId}`, {}, config);
             } catch (err) {
                 console.error("Error finalizando facturación:", err);
             }
@@ -2309,7 +2318,7 @@ const BookingsPage = () => {
             const consRemainingFinal = finalCons.filter((c: any) => !c.isPaid).reduce((acc: number, c: any) => acc + (c.totalPrice - (c.depositPaid || 0)), 0);
             const totalRemaining = rentRemainingFinal + consRemainingFinal;
 
-            if (totalRemaining <= 0) {
+            if (totalRemaining <= 0.50) {
                 setPaymentSuccessInfo({
                     isOpen: true,
                     amount: currentTransactionTotal,
@@ -3137,7 +3146,7 @@ const BookingsPage = () => {
                                                                     <div className="flex flex-col h-full relative z-10 justify-between p-2">
                                                                         {/* Cabecera: Cancelar (Top Right) */}
                                                                         <div className="absolute top-2 right-2 z-20">
-                                                                            {(isAdmin || booking.depositPaid < booking.price) && (
+                                                                            {(isAdmin || getRentDebt(booking) > 0) && (
                                                                                 <button
                                                                                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
                                                                                     className="p-1 bg-white/10 hover:bg-rose-600 rounded transition-colors border border-white/5 backdrop-blur-sm"
@@ -3282,7 +3291,7 @@ const BookingsPage = () => {
                                                                 <div className="flex flex-col h-full relative z-10 justify-between">
                                                                     {/* Cabecera: Cancelar (Top Right) */}
                                                                     <div className="absolute top-0 right-0 z-20">
-                                                                        {(isAdmin || booking.depositPaid < booking.price) && (
+                                                                        {(isAdmin || getRentDebt(booking) > 0) && (
                                                                             <button
                                                                                 onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleCancelBooking(booking); }}
                                                                                 className="p-1 bg-white/10 hover:bg-rose-600 rounded transition-colors border border-white/5 backdrop-blur-sm"

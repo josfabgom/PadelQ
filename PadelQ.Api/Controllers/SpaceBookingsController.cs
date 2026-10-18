@@ -299,9 +299,14 @@ namespace PadelQ.Api.Controllers
             var booking = await _context.SpaceBookings.FindAsync(id);
             if (booking == null) return NotFound();
             
-            booking.DepositPaid += amount;
+            booking.DepositPaid += Math.Round(amount, 2);
+            if (booking.Price - booking.DepositPaid <= 0.50m)
+            {
+                booking.DepositPaid = booking.Price;
+                booking.Status = BookingStatus.Paid;
+            }
             await _context.SaveChangesAsync();
-            return Ok(new { Message = "Pago parcial registrado", DepositPaid = booking.DepositPaid });
+            return Ok(new { Message = "Pago registrado", DepositPaid = booking.DepositPaid, Status = booking.Status });
         }
 
         [Authorize(Roles = "Admin,Staff")]

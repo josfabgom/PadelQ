@@ -117,6 +117,20 @@ namespace PadelQ.Api.Controllers
             var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == id);
             if (audit == null) return NotFound();
 
+            if (audit.Status == "PENDING" &&
+                (PadelQ.Domain.TimeZoneHelper.GetArgNow() - audit.CreatedAt).TotalSeconds >= 10)
+            {
+                try
+                {
+                    await _cloverService.VerifyPaymentWithCloverAsync(id);
+                    audit = await _context.CloverPaymentAudits.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id) ?? audit;
+                }
+                catch
+                {
+                    // Si falla la consulta REST puntual, devolvemos el estado actual sin interrumpir el polling
+                }
+            }
+
             return Ok(new
             {
                 id = audit.Id,

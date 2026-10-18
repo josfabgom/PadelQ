@@ -455,6 +455,17 @@ namespace PadelQ.Infrastructure.Services
 
                 if (!finalStateRecorded)
                 {
+                    try
+                    {
+                        using var verifyScope = _scopeFactory.CreateScope();
+                        var scopedClover = verifyScope.ServiceProvider.GetRequiredService<ICloverService>();
+                        await scopedClover.VerifyPaymentWithCloverAsync(auditId);
+                    }
+                    catch
+                    {
+                        // Ignorar error de verificación automática en segundo plano
+                    }
+
                     if (cts.Token.IsCancellationRequested)
                     {
                         await UpdateAuditRecordAsync(

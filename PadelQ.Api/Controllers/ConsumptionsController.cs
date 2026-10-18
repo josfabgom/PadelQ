@@ -340,10 +340,17 @@ namespace PadelQ.Api.Controllers
             
             if (request.IsPaid && !request.IsInternal)
             {
-                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
-                if (arcaService != null)
+                try
                 {
-                    await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+                    var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                    if (arcaService != null)
+                    {
+                        await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+                    }
+                }
+                catch (Exception arcaEx)
+                {
+                    Console.WriteLine($"Aviso facturación en BulkDirectSale: {arcaEx.Message}");
                 }
             }
 
@@ -422,10 +429,17 @@ namespace PadelQ.Api.Controllers
 
             if (directPaymentGroupId.HasValue)
             {
-                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
-                if (arcaService != null)
+                try
                 {
-                    await arcaService.RequestElectronicInvoiceAsync(directPaymentGroupId.Value);
+                    var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                    if (arcaService != null)
+                    {
+                        await arcaService.RequestElectronicInvoiceAsync(directPaymentGroupId.Value);
+                    }
+                }
+                catch (Exception arcaEx)
+                {
+                    Console.WriteLine($"Aviso facturación en DirectSale: {arcaEx.Message}");
                 }
             }
             
@@ -488,10 +502,17 @@ namespace PadelQ.Api.Controllers
 
             await _context.SaveChangesAsync();
 
-            var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
-            if (arcaService != null)
+            try
             {
-                await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                if (arcaService != null)
+                {
+                    await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+                }
+            }
+            catch (Exception arcaEx)
+            {
+                Console.WriteLine($"Aviso facturación en PayPending: {arcaEx.Message}");
             }
 
             return Ok(new { Message = "Deuda pagada", TotalPaid = totalDebt, PaymentGroupId = paymentGroupId });
@@ -537,14 +558,22 @@ namespace PadelQ.Api.Controllers
 
             // Mark as fully paid
             booking.DepositPaid = booking.Price;
+            booking.Status = BookingStatus.Paid;
             await _context.SaveChangesAsync();
 
             if (checkoutGroupId.HasValue)
             {
-                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
-                if (arcaService != null)
+                try
                 {
-                    await arcaService.RequestElectronicInvoiceAsync(checkoutGroupId.Value);
+                    var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                    if (arcaService != null)
+                    {
+                        await arcaService.RequestElectronicInvoiceAsync(checkoutGroupId.Value);
+                    }
+                }
+                catch (Exception arcaEx)
+                {
+                    Console.WriteLine($"Aviso facturación en Checkout: {arcaEx.Message}");
                 }
             }
 
@@ -572,8 +601,9 @@ namespace PadelQ.Api.Controllers
             if (consumption == null) return NotFound();
 
             consumption.DepositPaid += amount;
-            if (consumption.DepositPaid >= consumption.TotalPrice)
+            if (consumption.TotalPrice - consumption.DepositPaid <= 0.50m)
             {
+                consumption.DepositPaid = consumption.TotalPrice;
                 consumption.IsPaid = true;
             }
 

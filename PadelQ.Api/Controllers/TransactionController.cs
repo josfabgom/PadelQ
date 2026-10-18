@@ -160,10 +160,17 @@ namespace PadelQ.Api.Controllers
 
             if (shouldFinalize)
             {
-                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
-                if (arcaService != null)
+                try
                 {
-                    await arcaService.RequestElectronicInvoiceAsync(request.PaymentGroupId.Value);
+                    var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                    if (arcaService != null)
+                    {
+                        await arcaService.RequestElectronicInvoiceAsync(request.PaymentGroupId.Value);
+                    }
+                }
+                catch (Exception arcaEx)
+                {
+                    Console.WriteLine($"Aviso facturación en RecordPayment: {arcaEx.Message}");
                 }
             }
 
@@ -650,9 +657,16 @@ namespace PadelQ.Api.Controllers
         [Authorize(Roles = "Admin,Staff")]
         public async Task<IActionResult> FinalizePaymentGroup(Guid groupId, [FromServices] PadelQ.Application.Common.Interfaces.IArcaService arcaService)
         {
-            var result = await arcaService.RequestElectronicInvoiceAsync(groupId);
-            if (!result) return BadRequest("Error al generar factura electrónica");
-            return Ok(new { success = true });
+            bool invoiceIssued = false;
+            try
+            {
+                invoiceIssued = await arcaService.RequestElectronicInvoiceAsync(groupId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Aviso al facturar grupo {groupId}: {ex.Message}");
+            }
+            return Ok(new { success = true, invoiceIssued });
         }
 
         [HttpDelete("group/{groupId}")]
