@@ -131,7 +131,7 @@ namespace PadelQ.Infrastructure.Services
                 Amount = amount,
                 Status = "PENDING",
                 StatusDetail = "Esperando pago en la terminal Clover...",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow()
             };
             _context.CloverPaymentAudits.Add(audit);
             await _context.SaveChangesAsync();
@@ -148,7 +148,7 @@ namespace PadelQ.Infrastructure.Services
             {
                 audit.Status = "ERROR";
                 audit.StatusDetail = $"Error remote_pay ({alertRes.StatusCode}): {alertBody}";
-                audit.CompletedAt = DateTime.UtcNow;
+                audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 await _context.SaveChangesAsync();
                 throw new Exception($"Error inicializando conexión con Clover ({alertRes.StatusCode}): {alertBody}");
             }
@@ -162,7 +162,7 @@ namespace PadelQ.Infrastructure.Services
             {
                 audit.Status = "ERROR";
                 audit.StatusDetail = "Respuesta incompleta de Clover remote_pay.";
-                audit.CompletedAt = DateTime.UtcNow;
+                audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 await _context.SaveChangesAsync();
                 throw new Exception($"Respuesta incompleta de Clover remote_pay: {alertBody}");
             }
@@ -276,7 +276,7 @@ namespace PadelQ.Infrastructure.Services
                             string reason = payloadNode?["reason"]?.GetValue<string>() ?? payloadNode?["message"]?.GetValue<string>() ?? result ?? "Error desconocido";
                             audit.Status = "ERROR";
                             audit.StatusDetail = $"Terminal rechazó iniciar el cobro: {reason}";
-                            audit.CompletedAt = DateTime.UtcNow;
+                            audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                             await _context.SaveChangesAsync();
                             ws.Dispose();
                             throw new Exception($"La terminal Clover rechazó iniciar el cobro: {reason}");
@@ -297,7 +297,7 @@ namespace PadelQ.Infrastructure.Services
                 audit.StatusDetail = !discoveryReceived
                     ? "La terminal Clover no respondió (verifique Cloud Pay Display)."
                     : "Se agotó el tiempo de espera inicial con la terminal Clover.";
-                audit.CompletedAt = DateTime.UtcNow;
+                audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 await _context.SaveChangesAsync();
 
                 if (!discoveryReceived)
@@ -314,7 +314,7 @@ namespace PadelQ.Infrastructure.Services
                 {
                     audit.Status = "ERROR";
                     audit.StatusDetail = ex.Message;
-                    audit.CompletedAt = DateTime.UtcNow;
+                    audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                     await _context.SaveChangesAsync();
                 }
                 throw;
@@ -507,7 +507,7 @@ namespace PadelQ.Infrastructure.Services
             if (!string.IsNullOrEmpty(cardLast4)) audit.CardLast4 = cardLast4;
             if (!string.IsNullOrEmpty(authCode)) audit.AuthCode = authCode;
             if (!string.IsNullOrEmpty(entryType)) audit.EntryType = entryType;
-            audit.CompletedAt = DateTime.UtcNow;
+            audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
 
             await db.SaveChangesAsync();
         }
@@ -553,7 +553,7 @@ namespace PadelQ.Infrastructure.Services
             {
                 audit.Status = "CANCELLED";
                 audit.StatusDetail = "Cobro cancelado por el operador desde el sistema";
-                audit.CompletedAt = DateTime.UtcNow;
+                audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 await _context.SaveChangesAsync();
             }
 
@@ -632,7 +632,7 @@ namespace PadelQ.Infrastructure.Services
                 {
                     audit.Status = "APPROVED";
                     audit.StatusDetail = "Pago verificado y aprobado en los servidores de Clover";
-                    audit.CompletedAt ??= DateTime.UtcNow;
+                    audit.CompletedAt ??= PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 }
                 await _context.SaveChangesAsync();
 

@@ -35,7 +35,7 @@ namespace PadelQ.Domain.Entities
 
         public BookingStatus Status { get; set; } = BookingStatus.Pending;
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = TimeZoneHelper.GetArgNow();
 
         // Navigation Properties
         [ForeignKey("SpaceId")]

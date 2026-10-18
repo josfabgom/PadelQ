@@ -82,7 +82,7 @@ namespace PadelQ.Api.Controllers
                         PhoneNumber = request.GuestPhone,
                         Email = !string.IsNullOrEmpty(request.GuestEmail) ? request.GuestEmail : $"{request.Dni}@padelq.com",
                         Address = request.GuestAddress,
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedAt = TimeZoneHelper.GetArgNow(),
                         IsActive = true
                     };
                     _context.Users.Add(newUser);
@@ -144,7 +144,7 @@ namespace PadelQ.Api.Controllers
                 Price = finalPrice,
                 DepositPaid = request.DepositPaid,
                 Status = BookingStatus.Confirmed,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = TimeZoneHelper.GetArgNow()
             };
 
             _context.SpaceBookings.Add(booking);
@@ -234,7 +234,7 @@ namespace PadelQ.Api.Controllers
                         Type = MovementType.Adjustment,
                         Quantity = consumption.Quantity,
                         Note = $"Devolución por anulación de reserva espacio: {booking.Id}",
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = TimeZoneHelper.GetArgNow()
                     });
                 }
             }

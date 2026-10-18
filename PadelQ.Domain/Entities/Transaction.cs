@@ -26,7 +26,7 @@ namespace PadelQ.Domain.Entities
         public decimal IvaAmount { get; set; } = 0;
 
         [Required]
-        public DateTime Date { get; set; } = DateTime.UtcNow;
+        public DateTime Date { get; set; } = TimeZoneHelper.GetArgNow();
 
         // ARCA (AFIP) Billing fields
         [StringLength(50)]

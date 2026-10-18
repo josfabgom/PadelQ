@@ -39,7 +39,7 @@ namespace PadelQ.Domain.Entities
 
         public bool IsComboRedeemed { get; set; } = false;
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = TimeZoneHelper.GetArgNow();
 
         [ForeignKey("BookingId")]
         public virtual Booking? Booking { get; set; }

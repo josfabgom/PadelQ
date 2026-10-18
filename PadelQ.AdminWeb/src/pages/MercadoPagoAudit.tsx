@@ -21,12 +21,11 @@ interface LocalTransaction {
 }
 
 const MercadoPagoAudit: React.FC = () => {
+  const todayArgStr = new Date(Date.now() - 3 * 3600000).toISOString().split('T')[0];
   const [transactions, setTransactions] = useState<LocalTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState(
-    new Date().toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(todayArgStr);
+  const [endDate, setEndDate] = useState(todayArgStr);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Detalle del Pago Seleccionado

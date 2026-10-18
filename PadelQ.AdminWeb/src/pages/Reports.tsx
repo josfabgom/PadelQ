@@ -80,22 +80,25 @@ const ReportsPage = () => {
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const getArgDateStr = (daysOffset = 0) =>
+    new Date(Date.now() - 3 * 3600000 + daysOffset * 86400000).toISOString().split('T')[0];
+
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    start: getArgDateStr(-1),
+    end: getArgDateStr(0)
   });
 
   // Daily Sales states
   const [isSalesReportOpen, setIsSalesReportOpen] = useState(false);
   const [salesReport, setSalesReport] = useState<any[]>([]);
-  const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportStartDate, setReportStartDate] = useState(getArgDateStr(0));
+  const [reportEndDate, setReportEndDate] = useState(getArgDateStr(0));
 
   // Ranking states
   const [isRankingModalOpen, setIsRankingModalOpen] = useState(false);
   const [rankingData, setRankingData] = useState<any[]>([]);
-  const [rankingStartDate, setRankingStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
-  const [rankingEndDate, setRankingEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [rankingStartDate, setRankingStartDate] = useState(getArgDateStr(-30));
+  const [rankingEndDate, setRankingEndDate] = useState(getArgDateStr(0));
   const [rankingSortColumn, setRankingSortColumn] = useState<string>('totalQuantity');
   const [rankingSortDirection, setRankingSortDirection] = useState<'asc' | 'desc'>('desc');
   const [loadingRanking, setLoadingRanking] = useState(false);

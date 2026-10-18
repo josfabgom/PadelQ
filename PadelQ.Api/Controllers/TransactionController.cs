@@ -303,8 +303,8 @@ namespace PadelQ.Api.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult> GetPaymentsByMethodReport([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
-            var start = startDate ?? DateTime.UtcNow.Date.AddDays(-30);
-            var end = endDate ?? DateTime.UtcNow;
+            var start = startDate ?? GetArgNow().Date.AddDays(-30);
+            var end = endDate ?? GetArgNow();
 
             var closuresQuery = _context.CashClosures.AsQueryable();
             closuresQuery = closuresQuery.Where(c => c.OpeningDate >= start);
@@ -319,7 +319,7 @@ namespace PadelQ.Api.Controllers
             }
 
             var minDate = closures.Min(c => c.OpeningDate);
-            var maxDate = closures.Max(c => c.ClosingDate) ?? DateTime.UtcNow;
+            var maxDate = closures.Max(c => c.ClosingDate) ?? GetArgNow();
 
             var report = await _context.Transactions
                 .Where(t => (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment) && t.Date >= minDate && t.Date <= maxDate)

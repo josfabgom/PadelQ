@@ -18,7 +18,7 @@ interface KitchenOrder {
 
 const parseUtcDate = (dateString: string) => {
     if (!dateString) return new Date();
-    return new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z');
+    return new Date(dateString);
 };
 
 const KitchenOrders = () => {
@@ -26,9 +26,10 @@ const KitchenOrders = () => {
     const [historyOrders, setHistoryOrders] = useState<KitchenOrder[]>([]);
     const [historyModalOpen, setHistoryModalOpen] = useState(false);
     
-    // Default to today
-    const [historyStartDate, setHistoryStartDate] = useState(() => new Date().toISOString().split('T')[0]);
-    const [historyEndDate, setHistoryEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+    // Default to today (Hora Argentina UTC-3)
+    const todayArgStr = new Date(Date.now() - 3 * 3600000).toISOString().split('T')[0];
+    const [historyStartDate, setHistoryStartDate] = useState(todayArgStr);
+    const [historyEndDate, setHistoryEndDate] = useState(todayArgStr);
 
     const fetchHistory = async (start = historyStartDate, end = historyEndDate) => {
         try {

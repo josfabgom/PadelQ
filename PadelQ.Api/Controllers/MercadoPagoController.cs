@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using PadelQ.Application.Common.Interfaces;
@@ -24,12 +24,14 @@ namespace PadelQ.Api.Controllers
         private readonly IMercadoPagoService _mercadoPagoService;
         private readonly ApplicationDbContext _context;
         private readonly HttpClient _httpClient;
+        private readonly IArcaService _arcaService;
 
-        public MercadoPagoController(IMercadoPagoService mercadoPagoService, ApplicationDbContext context, HttpClient httpClient)
+        public MercadoPagoController(IMercadoPagoService mercadoPagoService, ApplicationDbContext context, HttpClient httpClient, IArcaService arcaService)
         {
             _mercadoPagoService = mercadoPagoService;
             _context = context;
             _httpClient = httpClient;
+            _arcaService = arcaService;
         }
 
         [HttpPost("intent")]
@@ -80,13 +82,13 @@ namespace PadelQ.Api.Controllers
                             {
                                 Key = key,
                                 Value = allocationJson,
-                                UpdatedAt = DateTime.UtcNow
+                                UpdatedAt = TimeZoneHelper.GetArgNow()
                             });
                         }
                         else
                         {
                             setting.Value = allocationJson;
-                            setting.UpdatedAt = DateTime.UtcNow;
+                            setting.UpdatedAt = TimeZoneHelper.GetArgNow();
                             _context.Entry(setting).State = EntityState.Modified;
                         }
                         await _context.SaveChangesAsync();
@@ -273,8 +275,14 @@ namespace PadelQ.Api.Controllers
                 }
             }
 
-            // Buscar el medio de pago "Pago con QR" o "Mercado Pago" de forma case-insensitive
+            // Buscar el medio de pago "Pago con QR" o "Mercado Pago" de forma case-insensitive (excluyendo Clover)
             var mpMethod = await _context.PaymentMethods.FirstOrDefaultAsync(m => 
+                            m.IsActive &&
+                            !m.Name.ToLower().Contains("clover") &&
+                            (m.Name.ToLower().Contains("qr") || 
+                             m.Name.ToLower().Contains("mercado pago") || 
+                             m.Name.ToLower().Contains("mercadopago")))
+                           ?? await _context.PaymentMethods.FirstOrDefaultAsync(m => 
                             m.Name.ToLower().Contains("qr") || 
                             m.Name.ToLower().Contains("mercado pago") || 
                             m.Name.ToLower().Contains("mercadopago"))
@@ -315,8 +323,8 @@ namespace PadelQ.Api.Controllers
                         var directSalePayload = JsonSerializer.Deserialize<BulkDirectSaleRequest>(dsProp.GetRawText(), options);
                         if (directSalePayload != null)
                         {
-                            var directSaleId = Guid.TryParse(bookingIdStr, out Guid dsGuid) ? dsGuid : Guid.NewGuid();
-                            await ProcessDirectSalePaymentAsync(directSalePayload, mpPaymentId, amount, mpMethod?.Id, processedBy, directSaleId);
+                            paymentGroupId = Guid.TryParse(bookingIdStr, out Guid dsGuid) ? dsGuid : paymentGroupId;
+                            await ProcessDirectSalePaymentAsync(directSalePayload, mpPaymentId, amount, mpMethod?.Id, processedBy, paymentGroupId);
                             allocationApplied = true;
                         }
                     }
@@ -650,6 +658,15 @@ namespace PadelQ.Api.Controllers
             
             await _context.SaveChangesAsync();
             await dbTransaction.CommitAsync();
+
+            try
+            {
+                await _arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+            }
+            catch (System.Exception arcaEx)
+            {
+                System.Console.WriteLine($"Error al facturar cobro QR Mercado Pago ({mpPaymentId}): {arcaEx.Message}");
+            }
         }
         catch
         {

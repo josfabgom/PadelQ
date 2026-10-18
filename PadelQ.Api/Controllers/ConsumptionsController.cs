@@ -349,7 +349,7 @@ namespace PadelQ.Api.Controllers
 
             await CheckAndCreateKitchenOrderAsync(consumptions, request.CustomerName);
 
-            return Ok(new { Message = "Venta bulk procesada", Total = totalAmount, ItemsCount = consumptions.Count });
+            return Ok(new { Message = "Venta bulk procesada", Total = totalAmount, ItemsCount = consumptions.Count, PaymentGroupId = paymentGroupId });
         }
 
         [HttpPost("direct-sale")]
@@ -385,6 +385,8 @@ namespace PadelQ.Api.Controllers
                 Notes = request.Notes
             };
 
+            Guid? directPaymentGroupId = null;
+
             if (request.IsInternal)
             {
                 consumption.DepositPaid = consumption.TotalPrice;
@@ -393,9 +395,9 @@ namespace PadelQ.Api.Controllers
             {
                 consumption.DepositPaid = consumption.TotalPrice;
 
-                
                 if (request.PaymentMethodId.HasValue)
                 {
+                    directPaymentGroupId = Guid.NewGuid();
                     var transaction = new Transaction
                     {
                         UserId = string.IsNullOrWhiteSpace(request.UserId) ? null : request.UserId,
@@ -404,7 +406,8 @@ namespace PadelQ.Api.Controllers
                         Type = TransactionType.Payment,
                         Description = $"Venta Directa: {product.Name} x{request.Quantity}{discountAppliedStr}",
                         PaymentMethodId = request.PaymentMethodId.Value,
-                        ProcessedBy = User.Identity?.Name ?? "Admin"
+                        ProcessedBy = User.Identity?.Name ?? "Admin",
+                        PaymentGroupId = directPaymentGroupId
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -416,6 +419,15 @@ namespace PadelQ.Api.Controllers
 
             _context.BookingConsumptions.Add(consumption);
             await _context.SaveChangesAsync();
+
+            if (directPaymentGroupId.HasValue)
+            {
+                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                if (arcaService != null)
+                {
+                    await arcaService.RequestElectronicInvoiceAsync(directPaymentGroupId.Value);
+                }
+            }
             
             await CheckAndCreateKitchenOrderAsync(new List<BookingConsumption> { consumption }, request.CustomerName);
 
@@ -432,6 +444,7 @@ namespace PadelQ.Api.Controllers
             if (!pending.Any()) return BadRequest("No hay consumos pendientes");
 
             decimal totalDebt = pending.Sum(c => c.TotalPrice - c.DepositPaid);
+            var paymentGroupId = Guid.NewGuid();
 
             if (request.SplitPayments != null && request.SplitPayments.Any())
             {
@@ -445,7 +458,8 @@ namespace PadelQ.Api.Controllers
                         Type = TransactionType.Payment,
                         Description = $"Pago de Deuda (Dividido) - Consumiciones",
                         PaymentMethodId = payment.PaymentMethodId,
-                        ProcessedBy = User.Identity?.Name ?? "Admin"
+                        ProcessedBy = User.Identity?.Name ?? "Admin",
+                        PaymentGroupId = paymentGroupId
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -460,7 +474,8 @@ namespace PadelQ.Api.Controllers
                     Type = TransactionType.Payment,
                     Description = $"Pago de Deuda - Consumiciones",
                     PaymentMethodId = request.PaymentMethodId.Value,
-                    ProcessedBy = User.Identity?.Name ?? "Admin"
+                    ProcessedBy = User.Identity?.Name ?? "Admin",
+                    PaymentGroupId = paymentGroupId
                 };
                 _context.Transactions.Add(transaction);
             }
@@ -472,7 +487,14 @@ namespace PadelQ.Api.Controllers
             }
 
             await _context.SaveChangesAsync();
-            return Ok(new { Message = "Deuda pagada", TotalPaid = totalDebt });
+
+            var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+            if (arcaService != null)
+            {
+                await arcaService.RequestElectronicInvoiceAsync(paymentGroupId);
+            }
+
+            return Ok(new { Message = "Deuda pagada", TotalPaid = totalDebt, PaymentGroupId = paymentGroupId });
         }
 
         [HttpPost("checkout/{bookingId}")]
@@ -487,6 +509,7 @@ namespace PadelQ.Api.Controllers
 
             decimal totalConsumptions = consumptions.Sum(c => c.TotalPrice);
             decimal totalToPay = (booking.Price - booking.DepositPaid) + totalConsumptions;
+            Guid? checkoutGroupId = null;
 
             if (totalToPay > 0)
             {
@@ -495,6 +518,7 @@ namespace PadelQ.Api.Controllers
 
                 if (!string.IsNullOrEmpty(booking.UserId))
                 {
+                    checkoutGroupId = Guid.NewGuid();
                     var transaction = new Transaction
                     {
                         UserId = booking.UserId,
@@ -504,7 +528,8 @@ namespace PadelQ.Api.Controllers
                         Description = description,
                         PaymentMethodId = paymentMethodId,
                         ProcessedBy = User.Identity?.Name ?? "Admin",
-                        BookingId = bookingId
+                        BookingId = bookingId,
+                        PaymentGroupId = checkoutGroupId
                     };
                     _context.Transactions.Add(transaction);
                 }
@@ -514,7 +539,16 @@ namespace PadelQ.Api.Controllers
             booking.DepositPaid = booking.Price;
             await _context.SaveChangesAsync();
 
-            return Ok(new { Message = "Checkout completado con éxito", TotalPaid = totalToPay });
+            if (checkoutGroupId.HasValue)
+            {
+                var arcaService = HttpContext.RequestServices.GetService(typeof(PadelQ.Application.Common.Interfaces.IArcaService)) as PadelQ.Application.Common.Interfaces.IArcaService;
+                if (arcaService != null)
+                {
+                    await arcaService.RequestElectronicInvoiceAsync(checkoutGroupId.Value);
+                }
+            }
+
+            return Ok(new { Message = "Checkout completado con éxito", TotalPaid = totalToPay, PaymentGroupId = checkoutGroupId });
         }
 
         [HttpPut("{id}/pay")]

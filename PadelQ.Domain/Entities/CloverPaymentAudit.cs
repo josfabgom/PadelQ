@@ -61,7 +61,7 @@ namespace PadelQ.Domain.Entities
 
         public Guid? PaymentGroupId { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = TimeZoneHelper.GetArgNow();
 
         public DateTime? CompletedAt { get; set; }
     }

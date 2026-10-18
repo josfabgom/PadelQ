@@ -43,7 +43,7 @@ namespace PadelQ.Infrastructure.Services
                 UserName = "particular@padelq.com",
                 Email = "particular@padelq.com",
                 FullName = "Consumidor Final",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                 IsActive = true
             };
             _context.Users.Add(newUser);
@@ -141,7 +141,7 @@ namespace PadelQ.Infrastructure.Services
                     UserId = userId,
                     Amount = finalPrice,
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                     Description = $"Reserva de Cancha: {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
                     BookingId = booking.Id
                 };
@@ -190,7 +190,7 @@ namespace PadelQ.Infrastructure.Services
                         FullName = guestName ?? $"Particular {dni}",
                         PhoneNumber = guestPhone,
                         Email = !string.IsNullOrEmpty(guestEmail) ? guestEmail : $"{dni}@padelq.com",
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                         IsActive = true
                     };
                     _context.Users.Add(newUser);
@@ -226,7 +226,7 @@ namespace PadelQ.Infrastructure.Services
                 decimal membershipDiscount = 0;
                 if (!string.IsNullOrEmpty(userId))
                 {
-                    var now = DateTime.UtcNow;
+                    var now = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                     membershipDiscount = await _context.UserMemberships
                         .Include(um => um.Membership)
                         .Where(um => um.UserId == userId && um.IsActive)
@@ -262,7 +262,7 @@ namespace PadelQ.Infrastructure.Services
                         UserId = userId,
                         Amount = finalPrice,
                         Type = TransactionType.Charge,
-                        Date = DateTime.UtcNow,
+                        Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                         Description = $"Reserva de Cancha (Admin): {court?.Name ?? "Cancha"}" + (membershipDiscount > 0 ? " (Descuento membresía aplicado)" : ""),
                         BookingId = booking.Id
                     };
@@ -338,7 +338,7 @@ namespace PadelQ.Infrastructure.Services
                         FullName = guestName ?? $"Particular {dni}",
                         PhoneNumber = guestPhone,
                         Email = !string.IsNullOrEmpty(guestEmail) ? guestEmail : $"{dni}@padelq.com",
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                         IsActive = true
                     };
                     _context.Users.Add(newUser);
@@ -436,7 +436,7 @@ namespace PadelQ.Infrastructure.Services
                             UserId = userId,
                             Amount = finalPrice,
                             Type = TransactionType.Charge,
-                            Date = DateTime.UtcNow,
+                            Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                             Description = $"Reserva Recurrente (Admin): {court?.Name ?? "Cancha"} el {currentStartTime:dd/MM HH:mm}",
                             BookingId = booking.Id
                         };
@@ -501,7 +501,7 @@ namespace PadelQ.Infrastructure.Services
                     UserId = effectiveUserId,
                     Amount = -booking.DepositPaid, // Restamos lo que se pagó
                     Type = TransactionType.Payment, // Tipo Payment para que reste de la caja
-                    Date = DateTime.UtcNow,
+                    Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                     Description = $"Devolución por Anulación Reserva PAGA: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}",
                     BookingId = booking.Id,
                     PaymentMethodId = lastPayment?.PaymentMethodId,
@@ -529,7 +529,7 @@ namespace PadelQ.Infrastructure.Services
                         Type = MovementType.Adjustment,
                         Quantity = consumption.Quantity,
                         Note = $"Devolución por anulación de reserva: {booking.Id}",
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow()
                     });
                 }
             }
@@ -547,7 +547,7 @@ namespace PadelQ.Infrastructure.Services
                     UserId = booking.UserId,
                     Amount = -booking.Price, // Cargo negativo para restar de la deuda sin entrar a caja
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                     Description = $"Anulación Reserva: {booking.Court?.Name ?? "Cancha"} del {booking.StartTime:dd/MM HH:mm}",
                     BookingId = booking.Id
                 };
@@ -588,7 +588,7 @@ namespace PadelQ.Infrastructure.Services
                             Type = MovementType.Adjustment,
                             Quantity = consumption.Quantity,
                             Note = $"Devolución por anulación de serie: {recurrenceGroupId}",
-                            CreatedAt = DateTime.UtcNow
+                            CreatedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow()
                         });
                     }
                 }
@@ -604,7 +604,7 @@ namespace PadelQ.Infrastructure.Services
                         UserId = b.UserId,
                         Amount = -b.Price, // Cargo negativo
                         Type = TransactionType.Charge,
-                        Date = DateTime.UtcNow,
+                        Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                         Description = $"Anulación Serie Recurrente: {b.Court?.Name ?? "Cancha"} del {b.StartTime:dd/MM HH:mm}",
                         BookingId = b.Id
                     };
@@ -671,7 +671,7 @@ namespace PadelQ.Infrastructure.Services
                 UserId = effectiveUserIdForExtension,
                 Amount = finalExtraPrice,
                 Type = TransactionType.Charge,
-                Date = DateTime.UtcNow,
+                Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                 Description = $"Extensión de Tiempo (+{extraMinutes} min): {booking.Court?.Name ?? "Cancha"}",
                 BookingId = booking.Id
             };

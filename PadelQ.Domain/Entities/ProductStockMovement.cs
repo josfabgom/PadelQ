@@ -30,6 +30,6 @@ namespace PadelQ.Domain.Entities
 
         public string? Note { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = TimeZoneHelper.GetArgNow();
     }
 }

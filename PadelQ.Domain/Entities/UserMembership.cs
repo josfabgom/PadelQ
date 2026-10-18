@@ -16,7 +16,7 @@ namespace PadelQ.Domain.Entities
         public int MembershipId { get; set; }
 
         [Required]
-        public DateTime StartDate { get; set; } = DateTime.UtcNow;
+        public DateTime StartDate { get; set; } = TimeZoneHelper.GetArgNow();
 
         public DateTime? EndDate { get; set; }
 

@@ -107,14 +107,14 @@ namespace PadelQ.Api.Controllers
             foreach (var am in activeMemberships)
             {
                 am.IsActive = false;
-                am.EndDate = DateTime.UtcNow;
+                am.EndDate = PadelQ.Domain.TimeZoneHelper.GetArgNow();
             }
 
             var userMembership = new UserMembership
             {
                 UserId = request.UserId,
                 MembershipId = request.MembershipId,
-                StartDate = DateTime.UtcNow,
+                StartDate = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                 IsActive = true
             };
 
@@ -125,7 +125,7 @@ namespace PadelQ.Api.Controllers
             {
                 UserId = request.UserId,
                 Amount = membership.MonthlyPrice,
-                Date = DateTime.UtcNow,
+                Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                 Type = TransactionType.MembershipPayment,
                 Description = $"Abono Membresía Inicial - {membership.Name}"
             };
@@ -145,7 +145,7 @@ namespace PadelQ.Api.Controllers
         [HttpGet("user/{userId}")]
         public async Task<IActionResult> GetUserMembership(string userId)
         {
-            var now = DateTime.UtcNow;
+            var now = PadelQ.Domain.TimeZoneHelper.GetArgNow();
             var userMembership = await _context.UserMemberships
                 .Include(um => um.Membership)
                 .Where(um => um.UserId == userId 
@@ -201,7 +201,7 @@ namespace PadelQ.Api.Controllers
             }
 
             var user = await _context.Users.FindAsync(userId);
-            var now = DateTime.UtcNow;
+            var now = PadelQ.Domain.TimeZoneHelper.GetArgNow();
             var membership = await _context.UserMemberships
                 .Include(um => um.Membership)
                 .Where(um => um.UserId == userId 

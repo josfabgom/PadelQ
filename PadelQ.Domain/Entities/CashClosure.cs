@@ -10,7 +10,7 @@ namespace PadelQ.Domain.Entities
         public int Id { get; set; }
 
         [Required]
-        public DateTime OpeningDate { get; set; } = DateTime.UtcNow;
+        public DateTime OpeningDate { get; set; } = TimeZoneHelper.GetArgNow();
 
         public DateTime? ClosingDate { get; set; }
 

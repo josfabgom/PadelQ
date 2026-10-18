@@ -118,7 +118,7 @@ namespace PadelQ.Api.Controllers
                 
                 if (newStatus == KitchenOrderStatus.Delivered || newStatus == KitchenOrderStatus.Cancelled)
                 {
-                    order.CompletedAt = DateTime.UtcNow;
+                    order.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 }
 
                 var audit = new KitchenOrderAudit

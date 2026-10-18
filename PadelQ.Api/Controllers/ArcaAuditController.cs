@@ -27,16 +27,17 @@ namespace PadelQ.Api.Controllers
         public async Task<IActionResult> GetInvoices()
         {
             var settings = await _context.ArcaSettings.FirstOrDefaultAsync();
-            int ptoVta = settings != null && settings.PuntoDeVenta > 0 ? settings.PuntoDeVenta : 1;
+            int ptoVta = settings != null && settings.PuntoDeVenta > 0 ? settings.PuntoDeVenta : 3;
 
             var rawTransactions = await _context.Transactions
                 .Include(t => t.User)
+                .Where(t => (t.Type == TransactionType.Payment || t.Type == TransactionType.MembershipPayment) && t.Amount > 0)
                 .OrderByDescending(t => t.Date)
                 .Take(400)
                 .ToListAsync();
 
             var grouped = rawTransactions
-                .GroupBy(t => t.PaymentGroupId)
+                .GroupBy(t => t.PaymentGroupId ?? System.Guid.NewGuid())
                 .Select(g => new
                 {
                     Id = g.First().Id,
@@ -63,6 +64,12 @@ namespace PadelQ.Api.Controllers
         {
             var refTx = await _context.Transactions.FindAsync(id);
             if (refTx == null) return NotFound();
+
+            if (!refTx.PaymentGroupId.HasValue)
+            {
+                refTx.PaymentGroupId = System.Guid.NewGuid();
+                await _context.SaveChangesAsync();
+            }
 
             var transactions = await _context.Transactions
                 .Where(t => t.PaymentGroupId == refTx.PaymentGroupId)

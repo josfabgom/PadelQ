@@ -24,7 +24,7 @@ namespace PadelQ.Domain.Entities
 
         public string? Notes { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = TimeZoneHelper.GetArgNow();
         public DateTime? CompletedAt { get; set; }
 
         public virtual ICollection<KitchenOrderItem> Items { get; set; } = new List<KitchenOrderItem>();

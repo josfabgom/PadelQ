@@ -139,7 +139,7 @@ namespace PadelQ.Infrastructure.Services
                     UserId = userId,
                     Amount = finalPrice,
                     Type = TransactionType.Charge,
-                    Date = DateTime.UtcNow,
+                    Date = PadelQ.Domain.TimeZoneHelper.GetArgNow(),
                     Description = $"Inscripción a actividad: {activity.Name} (Descuento membresía aplicado)"
                 };
                 _context.Transactions.Add(transaction);

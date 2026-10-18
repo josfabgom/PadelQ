@@ -14,6 +14,6 @@ namespace PadelQ.Domain.Entities
         
         public string ChangedBy { get; set; } = string.Empty;
         
-        public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ChangedAt { get; set; } = TimeZoneHelper.GetArgNow();
     }
 }
