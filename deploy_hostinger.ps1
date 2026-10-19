@@ -27,7 +27,7 @@ Set-Location $PSScriptRoot
 # 2. Compilar Admin Web
 Write-Host " Compilando Admin Web para produccion (Ruta Real)..." -ForegroundColor Yellow
 cd PadelQ.AdminWeb
-npm run build
+cmd /c "npm run build"
 if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilacion de Admin Web"; exit }
 cd ..
 
