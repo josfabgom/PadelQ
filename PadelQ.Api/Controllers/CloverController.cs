@@ -112,13 +112,13 @@ namespace PadelQ.Api.Controllers
         }
 
         [HttpGet("audit/{id}/status")]
-        public async Task<IActionResult> GetAuditStatus(int id)
+        public async Task<IActionResult> GetAuditStatus(int id, [FromQuery] bool forceVerify = false)
         {
             var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == id);
             if (audit == null) return NotFound();
 
             if (audit.Status == "PENDING" &&
-                (PadelQ.Domain.TimeZoneHelper.GetArgNow() - audit.CreatedAt).TotalSeconds >= 10)
+                (forceVerify || (PadelQ.Domain.TimeZoneHelper.GetArgNow() - audit.CreatedAt).TotalSeconds >= 4))
             {
                 try
                 {
@@ -152,6 +152,24 @@ namespace PadelQ.Api.Controllers
         {
             var ok = await _cloverService.CancelPaymentOnDeviceAsync(id);
             if (!ok) return NotFound();
+
+            var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == id);
+            if (audit != null && audit.Status == "APPROVED")
+            {
+                return Ok(new
+                {
+                    status = "APPROVED",
+                    approved = true,
+                    auditId = audit.Id,
+                    cloverPaymentId = audit.CloverPaymentId,
+                    externalPaymentId = audit.ExternalPaymentId,
+                    cardBrand = audit.CardBrand,
+                    cardLast4 = audit.CardLast4,
+                    authCode = audit.AuthCode,
+                    message = "El cobro ya había sido aprobado exitosamente en la terminal Clover."
+                });
+            }
+
             return Ok(new { status = "CANCELLED", message = "Cobro cancelado en la terminal Clover." });
         }
 

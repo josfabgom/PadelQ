@@ -515,6 +515,22 @@ const BookingsPage = () => {
             // 1. Registrar el pago
             const m = paymentMethods.find(p => p.id === activityChargeData.paymentMethodId);
             const isCtaCte = m?.name?.toUpperCase().includes("CTA CTE") || m?.name?.toUpperCase().includes("CUENTA CORRIENTE");
+            const isClover = !isCtaCte && m?.name?.trim().toUpperCase().includes("CLOVER");
+            let activityCloverAuditId: number | undefined;
+            if (isClover && totalAmount > 0) {
+                const cloverRes = await executeCloverTerminalPayment({
+                    amount: totalAmount,
+                    orderId: String(selectedActivityForCharge?.id || "ACT"),
+                    sourceModule: "Cobro POS",
+                    clientName: activityChargeData.instructorName || "Actividad",
+                    description: `Cobro Actividad: ${selectedActivityForCharge?.name}`
+                });
+                if (!cloverRes.approved) {
+                    alert(cloverRes.message || "El cobro en la terminal Clover fue cancelado o rechazado.");
+                    return;
+                }
+                activityCloverAuditId = cloverRes.auditId;
+            }
             
             // SI SE COBRA AL PROFESOR: Usamos el instructorId. 
             // Si el cliente está seleccionado, se le cobra al cliente. 
@@ -547,7 +563,18 @@ const BookingsPage = () => {
                     activityId: selectedActivityForCharge?.id,
                     activityDate: format(selectedDate, "yyyy-MM-dd")
                 };
-                await api.post(`/api/transaction/payment`, payload, config);
+                const txRes = await api.post(`/api/transaction/payment`, payload, config);
+                if (activityCloverAuditId) {
+                    try {
+                        await linkCloverAuditTransaction(activityCloverAuditId, {
+                            paymentGroupId: txRes.data?.paymentGroupId || txRes.data?.PaymentGroupId,
+                            clientName: activityChargeData.instructorName || "Actividad",
+                            description: desc
+                        });
+                    } catch (linkErr) {
+                        console.error("Error vinculando auditoría Clover en actividad:", linkErr);
+                    }
+                }
             }
 
             // 2. Descontar stock
@@ -850,11 +877,48 @@ const BookingsPage = () => {
                 };
                 await api.post(`/api/consumptions/pay-pending/${userId}`, payPayload, config);
             } else {
+                const totalDebt = pendingConsumptions.reduce((s, c) => s + (c.totalPrice - (c.depositPaid || 0)), 0);
+                const isClover = !directSaleData.isSplitPayment
+                    ? m?.name?.trim().toUpperCase().includes("CLOVER")
+                    : directSaleData.splitPayments.some(sp => {
+                        const sm = paymentMethods.find(pm => pm.id === sp.paymentMethodId);
+                        return sm?.name?.trim().toUpperCase().includes("CLOVER") && sp.amount > 0;
+                    });
+                const cloverAmount = !directSaleData.isSplitPayment
+                    ? totalDebt
+                    : directSaleData.splitPayments
+                        .filter(sp => paymentMethods.find(pm => pm.id === sp.paymentMethodId)?.name?.trim().toUpperCase().includes("CLOVER"))
+                        .reduce((sum, sp) => sum + (Number(sp.amount) || 0), 0);
+                let pendingCloverAuditId: number | undefined;
+                if (isClover && cloverAmount > 0) {
+                    const cloverRes = await executeCloverTerminalPayment({
+                        amount: cloverAmount,
+                        orderId: userId,
+                        sourceModule: "Venta Directa",
+                        clientName: selectedPendingUser?.fullName || "Cliente Deudor",
+                        description: "Pago Deuda Consumos Pendientes"
+                    });
+                    if (!cloverRes.approved) {
+                        alert(cloverRes.message || "El cobro en la terminal Clover fue cancelado o rechazado.");
+                        return;
+                    }
+                    pendingCloverAuditId = cloverRes.auditId;
+                }
                 const payload = {
                     paymentMethodId: directSaleData.isSplitPayment ? null : directSaleData.paymentMethodId,
                     splitPayments: directSaleData.isSplitPayment ? directSaleData.splitPayments.filter(p => p.paymentMethodId && p.amount > 0) : null
                 };
-                await api.post(`/api/consumptions/pay-pending/${userId}`, payload, config);
+                const payRes = await api.post(`/api/consumptions/pay-pending/${userId}`, payload, config);
+                if (pendingCloverAuditId) {
+                    try {
+                        await linkCloverAuditTransaction(pendingCloverAuditId, {
+                            paymentGroupId: payRes.data?.paymentGroupId || payRes.data?.PaymentGroupId,
+                            clientName: selectedPendingUser?.fullName || "Cliente Deudor"
+                        });
+                    } catch (linkErr) {
+                        console.error("Error vinculando auditoría Clover en consumos pendientes:", linkErr);
+                    }
+                }
             }
 
             alert("¡Operación realizada con éxito!");

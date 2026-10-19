@@ -3,7 +3,7 @@ import api, { getAuthConfig } from '../api/api';
 export interface CloverPaymentRequestOptions {
   amount: number;
   orderId: string;
-  sourceModule: 'Venta Directa' | 'Reserva / Turno' | 'Cuenta Corriente';
+  sourceModule: 'Venta Directa' | 'Reserva / Turno' | 'Cuenta Corriente' | 'Cobro POS';
   clientName?: string;
   description?: string;
 }
@@ -46,7 +46,7 @@ export async function executeCloverTerminalPayment(
   });
 
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:28px;max-width:420px;width:100%;padding:32px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);text-align:center;border:1px solid #f4f4f5;">
+    <div style="background:#fff;border-radius:28px;max-width:440px;width:100%;padding:32px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);text-align:center;border:1px solid #f4f4f5;">
       <div id="clover-modal-icon" style="width:68px;height:68px;border-radius:22px;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;margin:0 auto 20px auto;">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="animation:clover-pulse 1.5s infinite ease-in-out;">
           <rect x="2" y="5" width="20" height="14" rx="2"></rect>
@@ -68,12 +68,25 @@ export async function executeCloverTerminalPayment(
       <div style="font-size:28px;font-weight:900;color:#059669;margin:12px 0;">
         $${formattedAmount}
       </div>
-      <p id="clover-modal-desc" style="font-size:13px;font-weight:600;color:#71717a;line-height:1.5;margin:0 0 24px 0;">
+      <p id="clover-modal-desc" style="font-size:13px;font-weight:600;color:#71717a;line-height:1.5;margin:0 0 20px 0;">
         Enviando importe a la terminal física Clover. Aguarde un instante...
       </p>
-      <div id="clover-modal-actions">
-        <button id="clover-cancel-btn" disabled style="width:100%;padding:13px 20px;border-radius:14px;border:1px solid #e4e4e7;background:#fafafa;color:#71717a;font-size:13px;font-weight:800;cursor:not-allowed;transition:all 0.2s;">
-          Iniciando sesión en terminal...
+
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px;margin-bottom:20px;text-align:left;">
+        <div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">
+          En espera de la terminal:
+        </div>
+        <div style="font-size:12px;color:#64748b;line-height:1.4;">
+          Acerque/inserte la tarjeta o escanee con QR en la pantalla de Clover. Para anular el cobro, presione <b>Cancelar (X)</b> en la propia terminal Clover.
+        </div>
+      </div>
+
+      <div id="clover-modal-actions" style="display:flex;flex-direction:column;gap:8px;">
+        <button id="clover-verify-btn" disabled style="width:100%;padding:13px 20px;border-radius:14px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:800;cursor:not-allowed;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span id="clover-verify-text">Iniciando cobro en terminal...</span>
+        </button>
+        <button id="clover-cancel-btn" disabled style="width:100%;padding:11px 20px;border-radius:14px;border:1px solid #e4e4e7;background:#fafafa;color:#71717a;font-size:12px;font-weight:700;cursor:not-allowed;transition:all 0.2s;">
+          Cancelar / Destrabar sesión
         </button>
       </div>
     </div>
@@ -83,6 +96,8 @@ export async function executeCloverTerminalPayment(
 
   const titleEl = overlay.querySelector('#clover-modal-title') as HTMLElement;
   const descEl = overlay.querySelector('#clover-modal-desc') as HTMLElement;
+  const verifyBtn = overlay.querySelector('#clover-verify-btn') as HTMLButtonElement;
+  const verifyText = overlay.querySelector('#clover-verify-text') as HTMLElement;
   const cancelBtn = overlay.querySelector('#clover-cancel-btn') as HTMLButtonElement;
 
   const removeOverlay = () => {
@@ -92,7 +107,7 @@ export async function executeCloverTerminalPayment(
   };
 
   let auditId: number | undefined;
-  let cancelledByOperator = false;
+  let isResolving = false;
 
   try {
     const chargeRes = await api.post(
@@ -118,40 +133,97 @@ export async function executeCloverTerminalPayment(
 
     titleEl.textContent = 'Esperando pago en Terminal';
     descEl.textContent =
-      'El monto ya está en pantalla en la terminal Clover. Solicite al cliente que acerque, inserte o deslice su tarjeta.';
+      'El importe está listo en la pantalla de la terminal Clover. Esperando que el cliente complete el pago o presione Cancelar en la terminal.';
+
+    // Botón de verificación manual
+    verifyBtn.disabled = false;
+    verifyBtn.style.cursor = 'pointer';
+    verifyText.textContent = 'Verificar estado en Clover ahora';
+
+    // Botón de cancelación / destrabe seguro
     cancelBtn.disabled = false;
     cancelBtn.style.cursor = 'pointer';
-    cancelBtn.style.background = '#fff1f2';
+    cancelBtn.style.background = '#fff';
     cancelBtn.style.borderColor = '#fecdd3';
     cancelBtn.style.color = '#e11d48';
-    cancelBtn.textContent = 'Cancelar Cobro en Terminal';
+
+    verifyBtn.onclick = async () => {
+      if (!auditId || isResolving) return;
+      verifyBtn.disabled = true;
+      verifyText.textContent = 'Consultando servidores Clover...';
+      try {
+        const res = await api.get(`/api/clover/audit/${auditId}/status?forceVerify=true`, getAuthConfig());
+        if (res.data?.status === 'APPROVED') {
+          // El polling principal lo procesará inmediatamente
+          return;
+        }
+      } catch (err) {
+        console.warn('Error en verificación manual:', err);
+      } finally {
+        setTimeout(() => {
+          if (!isResolving) {
+            verifyBtn.disabled = false;
+            verifyText.textContent = 'Verificar estado en Clover ahora';
+          }
+        }, 1500);
+      }
+    };
 
     cancelBtn.onclick = async () => {
-      if (!auditId || cancelledByOperator) return;
-      cancelledByOperator = true;
+      if (!auditId || isResolving) return;
+      if (!window.confirm('¿Desea destrabar esta sesión? El sistema verificará primero en los servidores de Clover si el cobro ya fue aprobado antes de cancelar.')) {
+        return;
+      }
+      isResolving = true;
       cancelBtn.disabled = true;
-      cancelBtn.textContent = 'Cancelando en terminal...';
+      verifyBtn.disabled = true;
+      cancelBtn.textContent = 'Verificando y cancelando en Clover...';
       try {
-        await api.post(`/api/clover/audit/${auditId}/cancel`, {}, getAuthConfig());
+        const cancelRes = await api.post(`/api/clover/audit/${auditId}/cancel`, {}, getAuthConfig());
+        if (cancelRes.data?.approved && cancelRes.data?.status === 'APPROVED') {
+          titleEl.textContent = '¡Pago Aprobado!';
+          descEl.textContent = 'El pago ya había sido aprobado exitosamente en la terminal Clover.';
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          removeOverlay();
+          return {
+            approved: true,
+            auditId: auditId,
+            cloverPaymentId: cancelRes.data.cloverPaymentId,
+            externalPaymentId: cancelRes.data.externalPaymentId,
+            cardBrand: cancelRes.data.cardBrand,
+            cardLast4: cancelRes.data.cardLast4,
+            authCode: cancelRes.data.authCode
+          };
+        }
       } catch {
         // Ignorar error si ya se había cerrado
       }
     };
 
-    // Polling cada 1.5 segundos hasta recibir respuesta de la terminal (máximo 125 segundos)
-    const maxAttempts = 84;
+    // Polling cada 1.5 segundos hasta recibir respuesta de la terminal (máximo 5 minutos / 200 intentos)
+    const maxAttempts = 200;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const statusRes = await api.get(`/api/clover/audit/${auditId}/status`, getAuthConfig());
-      const data = statusRes.data;
+      let data: any = null;
+      try {
+        const statusRes = await api.get(`/api/clover/audit/${auditId}/status`, getAuthConfig());
+        data = statusRes.data;
+      } catch (pollErr) {
+        // Resiliencia ante micro-cortes de red en la PC
+        console.warn('Micro-corte o reintento de conexión con Clover status...', pollErr);
+        continue;
+      }
+
       const status: string = data?.status || 'PENDING';
 
       if (status === 'APPROVED') {
+        isResolving = true;
         titleEl.textContent = '¡Pago Aprobado!';
         descEl.textContent = data?.cardBrand
-          ? `Tarjeta ${data.cardBrand} ${data.cardLast4 ? '•••• ' + data.cardLast4 : ''} autorizada.`
+          ? `${data.cardBrand} ${data.cardLast4 ? '•••• ' + data.cardLast4 : ''} autorizada.`
           : 'El cobro fue aprobado exitosamente en la terminal Clover.';
+        verifyBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
         await new Promise((resolve) => setTimeout(resolve, 700));
         removeOverlay();
@@ -168,6 +240,7 @@ export async function executeCloverTerminalPayment(
       }
 
       if (status === 'CANCELLED') {
+        isResolving = true;
         removeOverlay();
         return {
           approved: false,
@@ -179,6 +252,7 @@ export async function executeCloverTerminalPayment(
       }
 
       if (status === 'ERROR' || status === 'TIMEOUT') {
+        isResolving = true;
         removeOverlay();
         return {
           approved: false,
@@ -190,18 +264,31 @@ export async function executeCloverTerminalPayment(
       }
     }
 
-    // Si superó el tiempo máximo en el navegador, cancelar en la terminal
+    // Si superó los 5 minutos en el navegador, verificar y cancelar
     try {
-      await api.post(`/api/clover/audit/${auditId}/cancel`, {}, getAuthConfig());
+      const timeoutRes = await api.post(`/api/clover/audit/${auditId}/cancel`, {}, getAuthConfig());
+      if (timeoutRes.data?.approved && timeoutRes.data?.status === 'APPROVED') {
+        removeOverlay();
+        return {
+          approved: true,
+          auditId: auditId,
+          cloverPaymentId: timeoutRes.data.cloverPaymentId,
+          externalPaymentId: timeoutRes.data.externalPaymentId,
+          cardBrand: timeoutRes.data.cardBrand,
+          cardLast4: timeoutRes.data.cardLast4,
+          authCode: timeoutRes.data.authCode
+        };
+      }
     } catch {
       // Ignorar
     }
+
     removeOverlay();
     return {
       approved: false,
       cancelled: false,
       auditId: auditId,
-      message: 'Se agotó el tiempo de espera aguardando el pago en la terminal Clover.'
+      message: 'Se agotó el tiempo de espera (5 min) aguardando la respuesta de la terminal Clover.'
     };
   } catch (error: any) {
     removeOverlay();

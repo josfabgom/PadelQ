@@ -163,13 +163,15 @@ const CtaCte = () => {
         cloverAuditId = cloverRes.auditId;
       }
 
+      let payRes: any = null;
       if (isMembershipPayment) {
-        await api.post(`/api/transaction/membership-payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}`, {}, getAuthConfig());
+        payRes = await api.post(`/api/transaction/membership-payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}`, {}, getAuthConfig());
       } else {
-        await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}&paymentMethodId=${selectedPaymentMethodId}`, {}, getAuthConfig());
+        payRes = await api.post(`/api/transaction/payment?userId=${selectedUser.id}&amount=${paymentAmount}&description=${paymentDesc}&paymentMethodId=${selectedPaymentMethodId}`, {}, getAuthConfig());
       }
       if (cloverAuditId) {
         await linkCloverAuditTransaction(cloverAuditId, {
+          paymentGroupId: payRes?.data?.paymentGroupId || payRes?.data?.PaymentGroupId,
           clientName: selectedUser.fullName,
           description: paymentDesc || 'Pago Cuenta Corriente'
         });

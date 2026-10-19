@@ -321,9 +321,31 @@ namespace PadelQ.Infrastructure.Services
             }
         }
 
+        private static JsonNode? UnwrapJsonNode(JsonNode? node)
+        {
+            if (node == null) return null;
+            if (node is JsonValue val && val.TryGetValue<string>(out var str) && !string.IsNullOrWhiteSpace(str))
+            {
+                var trimmed = str.Trim();
+                if ((trimmed.StartsWith("{") && trimmed.EndsWith("}")) ||
+                    (trimmed.StartsWith("[") && trimmed.EndsWith("]")))
+                {
+                    try
+                    {
+                        return JsonNode.Parse(trimmed);
+                    }
+                    catch
+                    {
+                        return node;
+                    }
+                }
+            }
+            return node;
+        }
+
         private async Task MonitorPaymentSessionAsync(ClientWebSocket ws, int auditId)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             int msgCounter = 10;
             bool finalStateRecorded = false;
 
@@ -357,7 +379,7 @@ namespace PadelQ.Infrastructure.Services
 
                     if (string.Equals(method, "CONFIRM_PAYMENT_MESSAGE", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(payloadStr))
                     {
-                        var payloadNode = JsonNode.Parse(payloadStr);
+                        var payloadNode = UnwrapJsonNode(JsonNode.Parse(payloadStr));
                         var paymentNode = payloadNode?["payment"];
                         string nextId = (++msgCounter).ToString();
                         await SendRemoteCommandAsync(ws, nextId, "PAYMENT_CONFIRMED", new
@@ -370,7 +392,7 @@ namespace PadelQ.Infrastructure.Services
                     }
                     else if (string.Equals(method, "VERIFY_SIGNATURE", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(payloadStr))
                     {
-                        var payloadNode = JsonNode.Parse(payloadStr);
+                        var payloadNode = UnwrapJsonNode(JsonNode.Parse(payloadStr));
                         var paymentNode = payloadNode?["payment"];
                         string nextId = (++msgCounter).ToString();
                         await SendRemoteCommandAsync(ws, nextId, "SIGNATURE_VERIFIED", new
@@ -382,6 +404,21 @@ namespace PadelQ.Infrastructure.Services
                             verified = true
                         }, cts.Token);
                     }
+                    else if (string.Equals(method, "TX_START_RESPONSE", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(payloadStr))
+                    {
+                        var payloadNode = UnwrapJsonNode(JsonNode.Parse(payloadStr));
+                        string? result = payloadNode?["result"]?.GetValue<string>();
+                        if (!string.IsNullOrEmpty(result) && !string.Equals(result, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string reason = payloadNode?["reason"]?.GetValue<string>() ?? payloadNode?["message"]?.GetValue<string>() ?? result;
+                            await UpdateAuditRecordAsync(
+                                auditId,
+                                "ERROR",
+                                $"La terminal Clover rechazó iniciar el cobro: {reason}");
+                            finalStateRecorded = true;
+                            break;
+                        }
+                    }
                     else if (string.Equals(method, "FINISH_OK", StringComparison.OrdinalIgnoreCase))
                     {
                         string? cloverPayId = null;
@@ -390,20 +427,36 @@ namespace PadelQ.Infrastructure.Services
                         string? cardLast4 = null;
                         string? authCode = null;
                         string? entryType = null;
+                        string? paymentResult = null;
 
                         if (!string.IsNullOrEmpty(payloadStr))
                         {
                             try
                             {
-                                var payloadNode = JsonNode.Parse(payloadStr);
-                                var paymentNode = payloadNode?["payment"];
+                                var payloadNode = UnwrapJsonNode(JsonNode.Parse(payloadStr));
+                                var paymentNode = UnwrapJsonNode(payloadNode?["payment"]);
+                                var orderNode = UnwrapJsonNode(paymentNode?["order"]);
+                                var cardTx = UnwrapJsonNode(paymentNode?["cardTransaction"]);
+                                var tenderNode = UnwrapJsonNode(paymentNode?["tender"]);
+
                                 cloverPayId = paymentNode?["id"]?.GetValue<string>();
-                                cloverOrdId = paymentNode?["order"]?["id"]?.GetValue<string>();
-                                var cardTx = paymentNode?["cardTransaction"];
+                                cloverOrdId = orderNode?["id"]?.GetValue<string>();
+                                paymentResult = paymentNode?["result"]?.GetValue<string>();
                                 cardBrand = cardTx?["cardType"]?.GetValue<string>();
                                 cardLast4 = cardTx?["last4"]?.GetValue<string>();
                                 authCode = cardTx?["authCode"]?.GetValue<string>();
                                 entryType = cardTx?["entryType"]?.GetValue<string>();
+
+                                string? tenderLabel = tenderNode?["label"]?.GetValue<string>();
+                                if (!string.IsNullOrWhiteSpace(tenderLabel) &&
+                                    tenderLabel.Contains("QR", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    cardBrand = (!string.IsNullOrWhiteSpace(cardBrand) && cardBrand != "OTHER")
+                                        ? $"QR PosNet ({cardBrand})"
+                                        : "QR PosNet";
+                                    if (string.IsNullOrWhiteSpace(entryType))
+                                        entryType = "QR_POSNET";
+                                }
                             }
                             catch
                             {
@@ -411,16 +464,43 @@ namespace PadelQ.Infrastructure.Services
                             }
                         }
 
-                        await UpdateAuditRecordAsync(
-                            auditId,
-                            "APPROVED",
-                            "Pago aprobado en la terminal Clover",
-                            cloverPayId,
-                            cloverOrdId,
-                            cardBrand,
-                            cardLast4,
-                            authCode,
-                            entryType);
+                        if (!string.IsNullOrEmpty(paymentResult) &&
+                            (string.Equals(paymentResult, "FAIL", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(paymentResult, "DECLINED", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            await UpdateAuditRecordAsync(
+                                auditId,
+                                "CANCELLED",
+                                $"Pago rechazado en la terminal Clover ({paymentResult})");
+                        }
+                        else
+                        {
+                            await UpdateAuditRecordAsync(
+                                auditId,
+                                "APPROVED",
+                                "Pago aprobado en la terminal Clover",
+                                cloverPayId,
+                                cloverOrdId,
+                                cardBrand,
+                                cardLast4,
+                                authCode,
+                                entryType);
+
+                            // Enriquecer inmediatamente con los servidores de Clover si faltan datos de cupón/tarjeta
+                            if (string.IsNullOrEmpty(cloverPayId) || string.IsNullOrEmpty(cardBrand))
+                            {
+                                try
+                                {
+                                    using var verifyScope = _scopeFactory.CreateScope();
+                                    var scopedClover = verifyScope.ServiceProvider.GetRequiredService<ICloverService>();
+                                    await scopedClover.VerifyPaymentWithCloverAsync(auditId);
+                                }
+                                catch
+                                {
+                                    // Ignorar si la API REST demora en indexar
+                                }
+                            }
+                        }
 
                         finalStateRecorded = true;
 
@@ -435,6 +515,18 @@ namespace PadelQ.Infrastructure.Services
                     }
                     else if (string.Equals(method, "FINISH_CANCEL", StringComparison.OrdinalIgnoreCase))
                     {
+                        // Verificar primero en Clover REST por si el cliente pagó con QR PosNet antes de cerrarse la pantalla
+                        try
+                        {
+                            using var verifyScope = _scopeFactory.CreateScope();
+                            var scopedClover = verifyScope.ServiceProvider.GetRequiredService<ICloverService>();
+                            await scopedClover.VerifyPaymentWithCloverAsync(auditId);
+                        }
+                        catch
+                        {
+                            // Ignorar error de consulta REST
+                        }
+
                         await UpdateAuditRecordAsync(
                             auditId,
                             "CANCELLED",
@@ -471,7 +563,7 @@ namespace PadelQ.Infrastructure.Services
                         await UpdateAuditRecordAsync(
                             auditId,
                             "TIMEOUT",
-                            "Tiempo de espera agotado (2 min) sin completar el pago en la terminal.");
+                            "Tiempo de espera agotado (5 min) sin completar el pago en la terminal.");
                     }
                 }
 
@@ -528,6 +620,26 @@ namespace PadelQ.Infrastructure.Services
             var audit = await _context.CloverPaymentAudits.FirstOrDefaultAsync(a => a.Id == auditId);
             if (audit == null) return false;
 
+            // Antes de cancelar, verificar en los servidores de Clover si el cobro ya fue aprobado (ej. QR PosNet)
+            if (audit.Status == "PENDING")
+            {
+                try
+                {
+                    await VerifyPaymentWithCloverAsync(auditId);
+                    await _context.Entry(audit).ReloadAsync();
+                }
+                catch
+                {
+                    // Continuar con cancelación si no se pudo verificar
+                }
+            }
+
+            if (audit.Status == "APPROVED")
+            {
+                // El pago ya se concretó en la terminal física; no cancelar
+                return true;
+            }
+
             if (ActiveSessions.TryRemove(auditId, out var ws))
             {
                 try
@@ -563,7 +675,7 @@ namespace PadelQ.Infrastructure.Services
             if (audit.Status == "PENDING")
             {
                 audit.Status = "CANCELLED";
-                audit.StatusDetail = "Cobro cancelado por el operador desde el sistema";
+                audit.StatusDetail = "Cobro cancelado en la terminal Clover";
                 audit.CompletedAt = PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 await _context.SaveChangesAsync();
             }
@@ -592,7 +704,7 @@ namespace PadelQ.Infrastructure.Services
             {
                 using var req = new HttpRequestMessage(
                     HttpMethod.Get,
-                    $"{baseUrl}/v3/merchants/{merchantId}/payments/{Uri.EscapeDataString(audit.CloverPaymentId)}?expand=cardTransaction");
+                    $"{baseUrl}/v3/merchants/{merchantId}/payments/{Uri.EscapeDataString(audit.CloverPaymentId)}?expand=cardTransaction,tender,order");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                 var res = await _httpClient.SendAsync(req);
                 if (res.IsSuccessStatusCode)
@@ -602,12 +714,12 @@ namespace PadelQ.Infrastructure.Services
                 }
             }
 
-            // 2. Si no teníamos CloverPaymentId, buscar por externalPaymentId en Clover
+            // 2. Si no teníamos CloverPaymentId, buscar por externalPaymentId en Clover (cubre Tarjeta Débito / Crédito)
             if (paymentNode == null && !string.IsNullOrWhiteSpace(audit.ExternalPaymentId) && !audit.ExternalPaymentId.StartsWith("HIST-"))
             {
                 using var req = new HttpRequestMessage(
                     HttpMethod.Get,
-                    $"{baseUrl}/v3/merchants/{merchantId}/payments?filter=externalPaymentId={Uri.EscapeDataString(audit.ExternalPaymentId)}&expand=cardTransaction");
+                    $"{baseUrl}/v3/merchants/{merchantId}/payments?filter=externalPaymentId={Uri.EscapeDataString(audit.ExternalPaymentId)}&expand=cardTransaction,tender,order");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                 var res = await _httpClient.SendAsync(req);
                 if (res.IsSuccessStatusCode)
@@ -622,18 +734,100 @@ namespace PadelQ.Infrastructure.Services
                 }
             }
 
+            // 3. Si no apareció por externalPaymentId, buscar en los últimos pagos del comercio por monto + ventana temporal
+            // Esto cubre pagos con "QR PosNet" (ar.com.fiserv.fiservqr.prod) en la terminal Clover, donde Fiserv sobreescribe externalPaymentId
+            if (paymentNode == null)
+            {
+                using var req = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"{baseUrl}/v3/merchants/{merchantId}/payments?limit=25&expand=cardTransaction,tender,order,device");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var res = await _httpClient.SendAsync(req);
+                if (res.IsSuccessStatusCode)
+                {
+                    var json = await res.Content.ReadAsStringAsync();
+                    var root = JsonNode.Parse(json);
+                    var elements = root?["elements"]?.AsArray();
+                    if (elements != null && elements.Count > 0)
+                    {
+                        long targetAmountCents = (long)Math.Round(audit.Amount * 100m);
+
+                        var usedPaymentIds = await _context.CloverPaymentAudits
+                            .Where(a => a.Id != audit.Id && a.CloverPaymentId != null && a.CloverPaymentId != "")
+                            .Select(a => a.CloverPaymentId!)
+                            .ToListAsync();
+
+                        var unspecifiedStart = DateTime.SpecifyKind(audit.CreatedAt, DateTimeKind.Unspecified);
+                        long startArgMs = new DateTimeOffset(unspecifiedStart, TimeSpan.FromHours(-3)).ToUnixTimeMilliseconds();
+                        long startUtcMs = new DateTimeOffset(unspecifiedStart, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+                        foreach (var el in elements)
+                        {
+                            if (el == null) continue;
+                            string? elId = el["id"]?.GetValue<string>();
+                            string? elResult = el["result"]?.GetValue<string>();
+                            long? elAmount = el["amount"]?.GetValue<long>();
+                            long? elCreatedMs = el["createdTime"]?.GetValue<long>();
+                            string? elExtId = el["externalPaymentId"]?.GetValue<string>();
+
+                            if (string.IsNullOrEmpty(elId) || usedPaymentIds.Contains(elId))
+                                continue;
+
+                            if (!string.Equals(elResult, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            if (!elAmount.HasValue || elAmount.Value != targetAmountCents)
+                                continue;
+
+                            if (!string.IsNullOrEmpty(elExtId) &&
+                                elExtId.StartsWith("PQ", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(elExtId, audit.ExternalPaymentId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            if (elCreatedMs.HasValue)
+                            {
+                                bool matchesArgWindow = elCreatedMs.Value >= (startArgMs - 25000) && elCreatedMs.Value <= (startArgMs + 360000);
+                                bool matchesUtcWindow = audit.Id <= 485 && elCreatedMs.Value >= (startUtcMs - 25000) && elCreatedMs.Value <= (startUtcMs + 360000);
+
+                                if (matchesArgWindow || matchesUtcWindow)
+                                {
+                                    paymentNode = el;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (paymentNode != null)
             {
                 string? cloverPayId = paymentNode["id"]?.GetValue<string>();
+                string? cloverOrdId = paymentNode["order"]?["id"]?.GetValue<string>();
                 string? cloverResult = paymentNode["result"]?.GetValue<string>();
                 long? amountCents = paymentNode["amount"]?.GetValue<long>();
                 var cardTx = paymentNode["cardTransaction"];
+                var tenderNode = paymentNode["tender"];
                 string? cardBrand = cardTx?["cardType"]?.GetValue<string>();
                 string? cardLast4 = cardTx?["last4"]?.GetValue<string>();
                 string? authCode = cardTx?["authCode"]?.GetValue<string>();
                 string? entryType = cardTx?["entryType"]?.GetValue<string>();
+                string? tenderLabel = tenderNode?["label"]?.GetValue<string>();
+
+                if (!string.IsNullOrWhiteSpace(tenderLabel) &&
+                    tenderLabel.Contains("QR", StringComparison.OrdinalIgnoreCase))
+                {
+                    cardBrand = (!string.IsNullOrWhiteSpace(cardBrand) && cardBrand != "OTHER")
+                        ? $"QR PosNet ({cardBrand})"
+                        : "QR PosNet";
+                    if (string.IsNullOrWhiteSpace(entryType))
+                        entryType = "QR_POSNET";
+                }
 
                 if (!string.IsNullOrEmpty(cloverPayId)) audit.CloverPaymentId = cloverPayId;
+                if (!string.IsNullOrEmpty(cloverOrdId)) audit.CloverOrderId = cloverOrdId;
                 if (!string.IsNullOrEmpty(cardBrand)) audit.CardBrand = cardBrand;
                 if (!string.IsNullOrEmpty(cardLast4)) audit.CardLast4 = cardLast4;
                 if (!string.IsNullOrEmpty(authCode)) audit.AuthCode = authCode;
@@ -642,7 +836,9 @@ namespace PadelQ.Infrastructure.Services
                 if (string.Equals(cloverResult, "SUCCESS", StringComparison.OrdinalIgnoreCase) && audit.Status != "APPROVED")
                 {
                     audit.Status = "APPROVED";
-                    audit.StatusDetail = "Pago verificado y aprobado en los servidores de Clover";
+                    audit.StatusDetail = !string.IsNullOrWhiteSpace(tenderLabel) && tenderLabel.Contains("QR", StringComparison.OrdinalIgnoreCase)
+                        ? "Pago con QR PosNet verificado y aprobado en la terminal Clover"
+                        : "Pago verificado y aprobado en los servidores de Clover";
                     audit.CompletedAt ??= PadelQ.Domain.TimeZoneHelper.GetArgNow();
                 }
                 await _context.SaveChangesAsync();
