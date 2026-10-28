@@ -529,7 +529,9 @@ const CashManagement = () => {
                                     // Initialize actualTotals with expected totals for all methods (except explicitly cash)
                                     const initialTotals: { [key: string]: number } = {};
                                     currentStatus.summary.forEach((s: any) => {
-                                        initialTotals[s.method] = s.total;
+                                        if (!s.method.toLowerCase().includes('efectivo')) {
+                                            initialTotals[s.method] = s.total;
+                                        }
                                     });
                                     setActualTotals(initialTotals);
 
@@ -919,33 +921,42 @@ const CashManagement = () => {
                         </div>
                         <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
                             {/* Grand Total Summary */}
-                            <div className="p-8 bg-black rounded-[32px] border border-black shadow-xl space-y-4">
-                                <div className="flex justify-between items-end">
-                                    <div>
-                                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Esperado</p>
-                                        <h4 className="text-3xl font-black text-white italic tracking-tighter">
-                                            {formatARS(currentStatus.activeClosure.initialCash + currentStatus.totalAmount)}
-                                        </h4>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Real</p>
-                                        <h4 className="text-3xl font-black text-emerald-400 italic tracking-tighter">
-                                            {formatARS(actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0))}
-                                        </h4>
-                                    </div>
-                                </div>
+                            {(() => {
+                                const nonCashReal = Object.entries(actualTotals)
+                                    .filter(([method]) => !method.toLowerCase().includes('efectivo'))
+                                    .reduce((s, [_, v]) => s + (v || 0), 0);
+                                const totalGenReal = actualCash + nonCashReal;
+                                const totalGenEsperado = currentStatus.activeClosure.initialCash + currentStatus.totalAmount;
+                                const totalDiff = totalGenReal - totalGenEsperado;
 
-                                {Math.abs((actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) - (currentStatus.activeClosure.initialCash + currentStatus.totalAmount)) > 1 && (
-                                    <div className={`pt-4 border-t border-white/10 flex justify-between items-center ${(actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) > (currentStatus.activeClosure.initialCash + currentStatus.totalAmount)
-                                            ? "text-emerald-400" : "text-rose-400"
-                                        }`}>
-                                        <span className="text-[10px] font-black uppercase tracking-widest italic">Diferencia Total en Caja</span>
-                                        <span className="text-xl font-black">
-                                            {formatARS((actualCash + Object.values(actualTotals).reduce((s, v) => s + (v || 0), 0)) - (currentStatus.activeClosure.initialCash + currentStatus.totalAmount))}
-                                        </span>
+                                return (
+                                    <div className="p-8 bg-black rounded-[32px] border border-black shadow-xl space-y-4">
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Esperado</p>
+                                                <h4 className="text-3xl font-black text-white italic tracking-tighter">
+                                                    {formatARS(totalGenEsperado)}
+                                                </h4>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Total General Real</p>
+                                                <h4 className="text-3xl font-black text-emerald-400 italic tracking-tighter">
+                                                    {formatARS(totalGenReal)}
+                                                </h4>
+                                            </div>
+                                        </div>
+
+                                        {Math.abs(totalDiff) > 1 && (
+                                            <div className={`pt-4 border-t border-white/10 flex justify-between items-center ${totalDiff > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                                <span className="text-[10px] font-black uppercase tracking-widest italic">Diferencia Total en Caja</span>
+                                                <span className="text-xl font-black">
+                                                    {formatARS(totalDiff)}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+                                );
+                            })()}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-5 bg-zinc-50 border border-zinc-100 rounded-[28px] space-y-1">
@@ -965,7 +976,7 @@ const CashManagement = () => {
                             <div className="p-6 bg-rose-50 border border-rose-100 rounded-[32px] space-y-2">
                                 <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Efectivo Total Esperado</p>
                                 <h4 className="text-3xl font-black text-rose-600 italic tracking-tighter">
-                                    {formatARS(currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0))}
+                                    {formatARS(currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'))?.total || 0))}
                                 </h4>
                                 <p className="text-[9px] font-bold text-rose-400 italic">Fondo inicial + Ventas en efectivo</p>
                             </div>
@@ -973,7 +984,7 @@ const CashManagement = () => {
                             <div className="space-y-4">
                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex justify-between">
                                     <span>Efectivo Real Contado ($)</span>
-                                    {actualCash !== (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)) && (
+                                    {actualCash !== (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.toLowerCase().includes('efectivo'))?.total || 0)) && (
                                         <span className={actualCash > (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)) ? "text-emerald-500" : "text-rose-500"}>
                                             Diferencia: {formatARS(actualCash - (currentStatus.activeClosure.initialCash + (currentStatus.summary.find((s: any) => s.method.includes('Efectivo'))?.total || 0)))}
                                         </span>
@@ -994,7 +1005,7 @@ const CashManagement = () => {
                             <div className="h-px bg-zinc-100 my-4"></div>
                             <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] italic">Otros Medios de Pago</h4>
 
-                            {currentStatus?.summary.filter((s: any) => !s.method.includes('Efectivo')).map((s: any) => (
+                            {currentStatus?.summary.filter((s: any) => !s.method.toLowerCase().includes('efectivo')).map((s: any) => (
                                 <div key={s.methodId} className="space-y-4">
                                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex justify-between">
                                         <span>Total Real {s.method} ($)</span>
