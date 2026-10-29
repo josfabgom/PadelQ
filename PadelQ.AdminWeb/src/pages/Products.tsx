@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api, { getAuthConfig } from '../api/api';
 import { 
     Package, Plus, Edit2, Trash2, DollarSign, ArrowLeft, Tag, Search, X, 
@@ -152,7 +152,7 @@ const ProductsPage = () => {
     try {
       const [prodRes, recRes] = await Promise.all([
         api.get('/api/products', config),
-        api.get('/api/recipes', config)
+        api.get('/api/recipes', config).catch(err => { console.error("Error al cargar recetas", err); return { data: [] }; })
       ]);
       setProducts(prodRes.data);
       setRecipesList(recRes.data);

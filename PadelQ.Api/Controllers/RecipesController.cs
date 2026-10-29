@@ -32,9 +32,10 @@ namespace PadelQ.Api.Controllers
                 .ToListAsync();
 
             var recipeIds = recipes.Select(r => r.Id).ToList();
-            var products = await _context.Products
+            var productsList = await _context.Products
                 .Where(p => p.RecipeId != null && recipeIds.Contains(p.RecipeId.Value) && p.IsActive)
-                .ToDictionaryAsync(p => p.RecipeId.Value);
+                .ToListAsync();
+            var products = productsList.GroupBy(p => p.RecipeId!.Value).ToDictionary(g => g.Key, g => g.First());
 
             foreach (var recipe in recipes)
             {
@@ -117,7 +118,14 @@ namespace PadelQ.Api.Controllers
 
         private async Task SyncRecipeProduct(Recipe recipe)
         {
-            var existingProduct = await _context.Products.FirstOrDefaultAsync(p => p.RecipeId == recipe.Id);
+            var existingProduct = await _context.Products.FirstOrDefaultAsync(p => p.RecipeId == recipe.Id && p.IsActive)
+                ?? await _context.Products.FirstOrDefaultAsync(p => p.RecipeId == recipe.Id);
+            if (existingProduct == null && recipe.CreateProductForSale && !string.IsNullOrWhiteSpace(recipe.Name))
+            {
+                var normalizedName = recipe.Name.Trim().ToLower();
+                existingProduct = await _context.Products.FirstOrDefaultAsync(p => p.IsActive && p.RecipeId == null && p.Name.Trim().ToLower() == normalizedName);
+                if (existingProduct != null) existingProduct.RecipeId = recipe.Id;
+            }
             
             if (!recipe.CreateProductForSale && existingProduct == null) 
                 return;
