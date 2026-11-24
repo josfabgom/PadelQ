@@ -242,7 +242,7 @@ namespace PadelQ.Api.Controllers
                 }
             }
             
-            bool hasDifferences = false;
+            var mpDifferences = new List<string>();
             foreach (var kvp in groupedDict)
             {
                 var mpId = kvp.Key;
@@ -251,7 +251,7 @@ namespace PadelQ.Api.Controllers
                 {
                     var paymentObj = await _mercadoPagoService.GetPaymentAsync(mpId);
                     if (paymentObj is JsonElement paymentJson)
-                        {
+                    {
                         decimal mpAmount = 0;
                         if (paymentJson.TryGetProperty("transaction_amount", out var amtProp))
                         {
@@ -261,8 +261,7 @@ namespace PadelQ.Api.Controllers
                         
                         if (Math.Abs(mpAmount - localAmount) > 0.01m)
                         {
-                            hasDifferences = true;
-                            break;
+                            mpDifferences.Add($"ID {mpId} (Sistema: ${localAmount:N2} vs MP: ${mpAmount:N2})");
                         }
                     }
                 }
@@ -272,9 +271,9 @@ namespace PadelQ.Api.Controllers
                 }
             }
             
-            if (hasDifferences)
+            if (mpDifferences.Any())
             {
-                return BadRequest("Existen diferencias en cobros de Mercado Pago. Revise la auditoría MP antes de cerrar la caja.");
+                return BadRequest($"Existen diferencias en cobros de Mercado Pago: {string.Join(", ", mpDifferences)}. Revise la auditoría MP antes de cerrar la caja.");
             }
             
             // Calcular totales por tipo de método (solo ventas/pagos)

@@ -361,22 +361,7 @@ namespace PadelQ.Api.Controllers
                         throw new Exception($"El pago de Mercado Pago ({amount}) es menor que el total asignado ({totalAllocated}). No se proceso por seguridad.");
                     }
 
-                    if (amount > totalAllocated)
-                    {
-                        var remainingAmount = amount - totalAllocated;
-                        var userId = await GetOrCreateParticularUserIdAsync();
-                        _context.Transactions.Add(new Transaction
-                        {
-                            Amount = remainingAmount,
-                            Type = TransactionType.CashIn,
-                            Date = TimeZoneHelper.GetArgNow(),
-                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Excedente no asignado",
-                            UserId = userId,
-                            PaymentMethodId = mpMethod?.Id,
-                            ProcessedBy = processedBy,
-                            PaymentGroupId = paymentGroupId
-                        });
-                    }
+                    decimal actuallyRecorded = 0;
 
                     // 1. Aplicar pagos a rentas (canchas o espacios)
                     foreach (var rentAlloc in rentAllocations)
@@ -407,6 +392,7 @@ namespace PadelQ.Api.Controllers
                                     ProcessedBy = processedBy,
                                     PaymentGroupId = paymentGroupId
                                 });
+                                actuallyRecorded += rentAlloc.Amount;
                             }
                         }
                         else if (referenceId.StartsWith("S-"))
@@ -433,6 +419,7 @@ namespace PadelQ.Api.Controllers
                                     ProcessedBy = processedBy,
                                     PaymentGroupId = paymentGroupId
                                 });
+                                actuallyRecorded += rentAlloc.Amount;
                             }
                         }
                     }
@@ -471,6 +458,7 @@ namespace PadelQ.Api.Controllers
                                 ProcessedBy = processedBy,
                                 PaymentGroupId = paymentGroupId
                             });
+                            actuallyRecorded += consAlloc.Amount;
                         }
                     }
 
@@ -491,6 +479,25 @@ namespace PadelQ.Api.Controllers
                             PaymentMethodId = mpMethod?.Id,
                             BookingId = targetBookingId,
                             SpaceBookingId = targetSpaceBookingId,
+                            ProcessedBy = processedBy,
+                            PaymentGroupId = paymentGroupId
+                        });
+                        actuallyRecorded += previousDebt;
+                    }
+
+                    // 4. Registrar cualquier remanente no imputado (ej. excedente o consumo/reserva eliminada antes de acreditarse)
+                    var remainingAmount = Math.Round(amount - actuallyRecorded, 2);
+                    if (remainingAmount >= 0.01m)
+                    {
+                        var userId = await GetOrCreateParticularUserIdAsync();
+                        _context.Transactions.Add(new Transaction
+                        {
+                            Amount = remainingAmount,
+                            Type = TransactionType.CashIn,
+                            Date = TimeZoneHelper.GetArgNow(),
+                            Description = $"Pago por QR Mercado Pago (ID: {mpPaymentId}) - Excedente no asignado",
+                            UserId = userId,
+                            PaymentMethodId = mpMethod?.Id,
                             ProcessedBy = processedBy,
                             PaymentGroupId = paymentGroupId
                         });
